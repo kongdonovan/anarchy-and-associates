@@ -4,8 +4,19 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const uri = process.env.MONGO_URI!;
+
+// Helper function to get environment variables with defaults
+export function getEnvVar(key: string, fallback?: string): string {
+  const value = process.env[key];
+  if (value !== undefined) return value;
+  if (fallback !== undefined) return fallback;
+  throw new Error(`Missing required environment variable: ${key}`);
+}
+
+const mongoTlsEnabled = getEnvVar("MONGO_TLS_ENABLED", "true").toLowerCase() === "true";
+
 const options = {
-  tls: true,
+  tls: mongoTlsEnabled,
   serverApi: {
     version: ServerApiVersion.v1,
     strict: true,
@@ -26,10 +37,3 @@ if (!global._mongoClient) {
 clientPromise = global._mongoClientPromise!;
 
 export default clientPromise;
-
-export function getEnvVar(key: string, fallback?: string): string {
-  const value = process.env[key];
-  if (value) return value;
-  if (fallback !== undefined) return fallback;
-  throw new Error(`Missing required environment variable: ${key}`);
-}
