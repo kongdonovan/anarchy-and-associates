@@ -1,9 +1,18 @@
-import { MongoClient } from "mongodb";
+import { MongoClient, ServerApiVersion } from "mongodb";
 import dotenv from "dotenv";
 
 dotenv.config();
+
 const uri = process.env.MONGO_URI!;
-const options = {};
+const options = {
+  tls: true,
+  serverApi: {
+    version: ServerApiVersion.v1,
+    strict: true,
+    deprecationErrors: true,
+  }
+};
+
 
 let client: MongoClient;
 let clientPromise: Promise<MongoClient>;
@@ -18,7 +27,6 @@ clientPromise = global._mongoClientPromise!;
 
 export default clientPromise;
 
-// Utility: Centralized config loader for environment variables
 export function getEnvVar(key: string, fallback?: string): string {
   const value = process.env[key];
   if (value) return value;
