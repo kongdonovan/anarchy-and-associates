@@ -1,83 +1,94 @@
-import { dirname, resolve } from "@discordx/importer";
-import chokidar from "chokidar";
 import { DIService, MetadataStorage } from "discordx";
-
 import { bot } from "./bot.js";
+import { config as envConfig } from "dotenv";
+import path from "node:path";
+import watch from "node-watch";
+import { fileURLToPath } from "url";
 
-// The following syntax should be used in the commonjs environment
-// const importPattern =  __dirname + "/{events,commands}/**/*.{ts,js}"
+// ESM-compatible __dirname
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// The following syntax should be used in the ECMAScript environment
-const importPattern = `${dirname(
-  import.meta.url,
-)}/{events,commands}/**/*.{ts,js}`;
+// Glob pattern for commands and events
+const importPattern = path.posix.join(
+  __dirname.replace(/\\/g, "/"),
+  "{commands,events}",
+  "**",
+  "*.ts"
+);
 
 /**
- * Import files
- *
- * (This is a work around for imports, if it is possible to delete cache from ESM, let me know.)
+ * Load all files matching the pattern
  *
  * @param src glob pattern
  */
-export async function LoadFiles(src: string): Promise<void> {
+async function loadFiles(src: string): Promise<void> {
+  const { resolve } = await import("@discordx/importer");
   const files = await resolve(src);
   await Promise.all(
-    files.map((file) => import(`${file}?version=${Date.now().toString()}`)),
+    files.map((file) => import(`${file}?version=${Date.now().toString()}`))
   );
 }
 
 /**
- * Reload commands for discordx
+ * Reload Discordx metadata and events
  */
-async function Reload() {
+async function reload() {
   console.log("> Reloading modules\n");
-
-  // Remove events
   bot.removeEvents();
-
-  // cleanup
   MetadataStorage.clear();
   DIService.engine.clearAllServices();
-
-  // reload files
-  await LoadFiles(importPattern);
-
-  // rebuild
+  await loadFiles(importPattern);
   await MetadataStorage.instance.build();
   await bot.initApplicationCommands();
   bot.initEvents();
-
   console.log("> Reload success\n");
 }
 
 /**
- * Initialize
+ * Main entrypoint
  */
 async function run() {
-  const watcher = chokidar.watch(importPattern);
-
-  // Load commands
-  await LoadFiles(importPattern);
-
-  // Let's start the bot
+  envConfig();
+  await loadFiles(importPattern);
   if (!process.env.BOT_TOKEN) {
     throw Error("Could not find BOT_TOKEN in your environment");
   }
-
-  // Log in with your bot token
   await bot.login(process.env.BOT_TOKEN);
 
-  // Hot Module reload
+  // Hot reload in development
   if (process.env.NODE_ENV !== "production") {
     console.log(
-      "> Hot-Module-Reload enabled in development. Commands will automatically reload.",
+      "> Hot-Module-Reload enabled in development. Project will rebuild and reload on changes."
     );
-
-    // Watch changed files using chikidar
-    watcher.on("add", () => void Reload());
-    watcher.on("change", () => void Reload());
-    watcher.on("unlink", () => void Reload());
+    console.log(`Watching src/ for changes...`);
+    watch(
+      "src",
+      { recursive: true },
+      async (evt, filename) => {
+        console.log(`[${evt}] ${filename}`);
+        try {
+          // Rebuild the entire project before reload
+          const { exec } = await import("child_process");
+          await new Promise((resolve, reject) => {
+            exec("npx tsc", (err, stdout, stderr) => {
+              if (err) {
+                console.error("[build error]", stderr);
+                reject(err);
+              } else {
+                if (stdout) console.log(stdout);
+                resolve(undefined);
+              }
+            });
+          });
+          await reload();
+        } catch (err) {
+          console.error(err);
+        }
+      }
+    );
   }
 }
 
 void run();
+
+// global console, process
