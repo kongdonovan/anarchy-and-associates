@@ -130,6 +130,8 @@ let CaseCommands = class CaseCommands {
                 `${notes ? `**Notes:** ${notes}` : ''}\n\n` +
                 `The case channel will be moved to the archive category.`);
             await interaction.reply({ embeds: [embed] });
+            // Update the original message containing the case overview to remove the close button
+            await this.updateCaseOverviewMessage(closedCase, interaction.guildId, interaction);
         }
         catch (error) {
             logger_1.logger.error('Error closing case:', error);
@@ -649,6 +651,8 @@ let CaseCommands = class CaseCommands {
                 `${notes ? `**Notes:** ${notes}` : ''}\n\n` +
                 `The case channel will be moved to the archive category.`);
             await interaction.reply({ embeds: [embed] });
+            // Update the original message containing the case overview to remove the close button
+            await this.updateCaseOverviewMessage(closedCase, interaction.guildId, interaction);
         }
         catch (error) {
             logger_1.logger.error('Error processing case close modal:', error);
@@ -737,6 +741,58 @@ let CaseCommands = class CaseCommands {
         }
         catch {
             return null;
+        }
+    }
+    async updateCaseOverviewMessage(closedCase, guildId, interaction) {
+        try {
+            const guild = await interaction.client.guilds.fetch(guildId);
+            const channel = await guild.channels.fetch(closedCase.channelId);
+            if (!channel) {
+                logger_1.logger.warn('Could not find case channel to update overview message', {
+                    caseId: closedCase._id,
+                    channelId: closedCase.channelId
+                });
+                return;
+            }
+            // Fetch recent messages to find the one with the close button
+            const messages = await channel.messages.fetch({ limit: 50 });
+            const caseOverviewMessage = messages.find(msg => msg.author.id === interaction.client.user?.id &&
+                msg.components.length > 0 &&
+                msg.components[0] &&
+                'components' in msg.components[0] &&
+                msg.components[0].components.some((component) => component.customId?.startsWith('case_close_')));
+            if (!caseOverviewMessage) {
+                logger_1.logger.warn('Could not find case overview message to update', {
+                    caseId: closedCase._id,
+                    channelId: closedCase.channelId
+                });
+                return;
+            }
+            // Create updated embed showing the case is closed
+            const embed = embed_utils_1.EmbedUtils.createAALegalEmbed({
+                title: `🔒 Case Closed: ${closedCase.caseNumber}`,
+                description: `**Client:** <@${closedCase.clientId}>\n` +
+                    `**Lead Attorney:** <@${closedCase.leadAttorneyId}>\n` +
+                    `**Status:** Closed\n` +
+                    `**Result:** ${closedCase.result ? closedCase.result.charAt(0).toUpperCase() + closedCase.result.slice(1) : 'Unknown'}\n` +
+                    `**Closed Date:** ${closedCase.closedAt ? new Date(closedCase.closedAt).toLocaleDateString() : 'Unknown'}\n` +
+                    `**Closed By:** <@${closedCase.closedBy}>\n\n` +
+                    `${closedCase.resultNotes ? `**Notes:** ${closedCase.resultNotes}\n\n` : ''}` +
+                    `This case has been completed and archived.`
+            });
+            // Update the message without any buttons
+            await caseOverviewMessage.edit({
+                embeds: [embed],
+                components: []
+            });
+            logger_1.logger.info('Case overview message updated successfully', {
+                caseId: closedCase._id,
+                messageId: caseOverviewMessage.id
+            });
+        }
+        catch (error) {
+            logger_1.logger.error('Error updating case overview message:', error);
+            // Don't throw error as this shouldn't block case closure
         }
     }
 };

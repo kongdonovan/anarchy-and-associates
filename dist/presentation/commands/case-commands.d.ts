@@ -23,5 +23,6 @@ export declare class CaseCommands {
     handleDeclineReason(interaction: ModalSubmitInteraction): Promise<void>;
     private archiveCaseChannel;
     private getCaseFromChannel;
+    private updateCaseOverviewMessage;
 }
 //# sourceMappingURL=case-commands.d.ts.map

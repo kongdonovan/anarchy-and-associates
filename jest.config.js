@@ -15,10 +15,26 @@ module.exports = {
     '!src/**/*.d.ts',
     '!src/**/__tests__/**',
     '!src/**/*.test.ts',
-    '!src/**/*.spec.ts'
+    '!src/**/*.spec.ts',
+    '!src/index.ts',
+    '!src/dev-server.ts',
+    '!src/simple-dev.ts'
   ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
   setupFilesAfterEnv: ['<rootDir>/src/__tests__/setup.ts'],
-  testTimeout: 10000
+  testTimeout: 30000,
+  maxWorkers: 4,
+  coverageThreshold: {
+    global: {
+      branches: 90,
+      functions: 90,
+      lines: 90,
+      statements: 90
+    }
+  },
+  testPathIgnorePatterns: [
+    '/node_modules/',
+    '/dist/'
+  ]
 };

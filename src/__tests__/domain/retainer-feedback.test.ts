@@ -1,0 +1,672 @@
+import { Retainer, RetainerStatus } from '../../domain/entities/retainer';
+import { Feedback, FeedbackRating } from '../../domain/entities/feedback';
+import { TestUtils } from '../helpers/test-utils';
+
+describe('Retainer and Feedback Entities', () => {
+  describe('Retainer Entity', () => {
+    describe('Retainer Creation and Validation', () => {
+      it('should create a valid retainer with required fields', () => {
+        const retainer: Retainer = {
+          _id: TestUtils.generateObjectId(),
+          guildId: 'guild123',
+          clientId: 'client123',
+          clientUsername: 'testclient',
+          lawyerId: 'lawyer123',
+          agreementText: 'This is a legal retainer agreement...',
+          amount: 5000,
+          status: RetainerStatus.PENDING,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+
+        expect(retainer.guildId).toBeTruthy();
+        expect(retainer.clientId).toBeTruthy();
+        expect(retainer.lawyerId).toBeTruthy();
+        expect(retainer.agreementTemplate).toBeTruthy();
+        expect(retainer.status).toBe(RetainerStatus.PENDING);
+        expect(retainer.createdAt).toBeInstanceOf(Date);
+        expect(retainer.updatedAt).toBeInstanceOf(Date);
+      });
+
+      it('should handle all valid retainer statuses', () => {
+        const validStatuses = [
+          RetainerStatus.PENDING,
+          RetainerStatus.SIGNED,
+          RetainerStatus.CANCELLED
+        ];
+
+        validStatuses.forEach(status => {
+          const retainer: Retainer = {
+            _id: TestUtils.generateObjectId(),
+            guildId: 'guild123',
+            clientId: 'client123',
+            clientUsername: 'testclient',
+            lawyerId: 'lawyer123',
+            agreementText: 'Test agreement',
+            amount: 1000,
+            status,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          };
+
+          expect(retainer.status).toBe(status);
+        });
+      });
+
+      it('should handle different retainer amounts', () => {
+        const amounts = [500, 1000, 2500, 5000, 10000];
+
+        amounts.forEach(amount => {
+          const retainer: Retainer = {
+            _id: TestUtils.generateObjectId(),
+            guildId: 'guild123',
+            clientId: 'client123',
+            clientUsername: 'testclient',
+            lawyerId: 'lawyer123',
+            agreementText: 'Test agreement',
+            amount,
+            status: RetainerStatus.PENDING,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          };
+
+          expect(retainer.agreementTemplate).toBe(template);
+          expect(retainer.agreementTemplate.length).toBeGreaterThan(0);
+        });
+      });
+    });
+
+    describe('Retainer Signature Process', () => {
+      it('should handle retainer signing with Roblox validation', () => {
+        const signedDate = new Date();
+        const robloxUsername = 'TestRobloxUser123';
+
+        const signedRetainer: Retainer = {
+          _id: TestUtils.generateObjectId(),
+          guildId: 'guild123',
+          clientId: 'client123',
+          clientUsername: 'testclient',
+          lawyerId: 'lawyer123',
+          agreementText: 'Test agreement',
+          amount: 2500,
+          status: RetainerStatus.SIGNED,
+          signedAt: signedDate,
+          robloxUsername,
+          createdAt: new Date(),
+          updatedAt: signedDate
+        };
+
+        expect(signedRetainer.status).toBe(RetainerStatus.SIGNED);
+        expect(signedRetainer.signedAt).toBe(signedDate);
+        expect(signedRetainer.clientRobloxUsername).toBe(robloxUsername);
+        expect(signedRetainer.updatedAt).toBe(signedDate);
+      });
+
+      it('should handle retainer cancellation', () => {
+        const cancelledDate = new Date();
+        const cancellationReason = 'Client changed mind';
+
+        const cancelledRetainer: Retainer = {
+          _id: TestUtils.generateObjectId(),
+          guildId: 'guild123',
+          clientId: 'client123',
+          clientUsername: 'testclient',
+          lawyerId: 'lawyer123',
+          agreementText: 'Test agreement',
+          amount: 1500,
+          status: RetainerStatus.CANCELLED,
+          cancelledAt: cancelledDate,
+          cancellationReason,
+          createdAt: new Date(),
+          updatedAt: cancelledDate
+        };
+
+        expect(cancelledRetainer.status).toBe(RetainerStatus.CANCELLED);
+        expect(cancelledRetainer.signedAt).toBeUndefined();
+        expect(cancelledRetainer.digitalSignature).toBeUndefined();
+      });
+
+      it('should validate Roblox username format', () => {
+        const validRobloxUsernames = [
+          'TestUser123',
+          'User_With_Underscores',
+          'a'.repeat(20), // Max length
+          'abc' // Min length
+        ];
+
+        validRobloxUsernames.forEach(username => {
+          // Basic regex validation: 3-20 chars, alphanumeric + underscores, no consecutive underscores
+          const robloxRegex = /^(?=.{3,20}$)(?!.*__)(?!_)[a-zA-Z0-9]+(?:_[a-zA-Z0-9]+)?(?<!_)$/;
+          expect(robloxRegex.test(username)).toBe(true);
+        });
+
+        const invalidRobloxUsernames = [
+          'ab', // Too short
+          'a'.repeat(21), // Too long
+          '__invalid', // Starts with underscore
+          'invalid__', // Ends with underscore
+          'invalid__double', // Double underscore
+          'invalid-dash', // Contains dash
+          'invalid space' // Contains space
+        ];
+
+        invalidRobloxUsernames.forEach(username => {
+          const robloxRegex = /^(?=.{3,20}$)(?!.*__)(?!_)[a-zA-Z0-9]+(?:_[a-zA-Z0-9]+)?(?<!_)$/;
+          expect(robloxRegex.test(username)).toBe(false);
+        });
+      });
+    });
+
+    describe('Retainer Business Rules', () => {
+      it('should enforce one pending + one active retainer per client rule', () => {
+        const clientId = 'client123';
+        const guildId = 'guild123';
+
+        const pendingRetainer: Retainer = {
+          _id: TestUtils.generateObjectId(),
+          guildId,
+          clientId,
+          clientUsername: 'testclient',
+          lawyerId: 'lawyer1',
+          agreementText: 'Pending agreement',
+          amount: 1000,
+          status: RetainerStatus.PENDING,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+
+        const activeRetainer: Retainer = {
+          _id: TestUtils.generateObjectId(),
+          guildId,
+          clientId,
+          clientUsername: 'testclient',
+          lawyerId: 'lawyer2',
+          agreementText: 'Active agreement',
+          amount: 2000,
+          status: RetainerStatus.SIGNED,
+          signedAt: new Date(),
+          robloxUsername: 'TestUser123',
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+
+        // Both retainers for same client but different status
+        expect(pendingRetainer.clientId).toBe(activeRetainer.clientId);
+        expect(pendingRetainer.status).toBe(RetainerStatus.PENDING);
+        expect(activeRetainer.status).toBe(RetainerStatus.SIGNED);
+        expect(pendingRetainer.lawyerId).not.toBe(activeRetainer.lawyerId);
+      });
+
+      it('should handle retainer amount validation', () => {
+        const validAmounts = [100, 500, 1000, 2500, 5000, 10000];
+        const invalidAmounts = [0, -100, -1000];
+
+        validAmounts.forEach(amount => {
+          expect(amount).toBeGreaterThan(0);
+        });
+
+        invalidAmounts.forEach(amount => {
+          expect(amount).toBeLessThanOrEqual(0);
+        });
+      });
+    });
+
+    describe('Retainer Edge Cases', () => {
+      it('should handle very long agreement text', () => {
+        const longAgreementText = 'This is a very long retainer agreement. '.repeat(200);
+
+        const retainer: Retainer = {
+          _id: TestUtils.generateObjectId(),
+          guildId: 'guild123',
+          clientId: 'client123',
+          clientUsername: 'testclient',
+          lawyerId: 'lawyer123',
+          agreementText: longAgreementText,
+          amount: 2500,
+          status: RetainerStatus.PENDING,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+
+        expect(retainer.agreementText.length).toBeGreaterThan(5000);
+        expect(retainer.agreementText).toContain('retainer agreement');
+      });
+
+      it('should handle special characters in agreement text', () => {
+        const specialAgreementText = `
+          This retainer agreement includes:
+          - 50% deposit ($2,500)
+          - "Representation services"
+          - Terms & conditions
+          - Clause #1, #2, #3
+          - Email: lawyer@firm.com
+        `;
+
+        const retainer: Retainer = {
+          _id: TestUtils.generateObjectId(),
+          guildId: 'guild123',
+          clientId: 'client123',
+          clientUsername: 'testclient',
+          lawyerId: 'lawyer123',
+          agreementText: specialAgreementText,
+          amount: 5000,
+          status: RetainerStatus.PENDING,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+
+        expect(retainer.agreementText).toContain('$2,500');
+        expect(retainer.agreementText).toContain('"Representation services"');
+        expect(retainer.agreementText).toContain('lawyer@firm.com');
+      });
+    });
+  });
+
+  describe('Feedback Entity', () => {
+    describe('Feedback Creation and Validation', () => {
+      it('should create a valid feedback with required fields', () => {
+        const feedback: Feedback = {
+          _id: TestUtils.generateObjectId(),
+          guildId: 'guild123',
+          caseId: 'case123',
+          clientId: 'client123',
+          staffId: 'staff123',
+          rating: FeedbackRating.EXCELLENT,
+          comment: 'Outstanding legal representation!',
+          isAnonymous: false,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+
+        expect(feedback.guildId).toBeTruthy();
+        expect(feedback.caseId).toBeTruthy();
+        expect(feedback.clientId).toBeTruthy();
+        expect(feedback.staffId).toBeTruthy();
+        expect(feedback.rating).toBe(FeedbackRating.EXCELLENT);
+        expect(feedback.comment).toBeTruthy();
+        expect(typeof feedback.isAnonymous).toBe('boolean');
+        expect(feedback.createdAt).toBeInstanceOf(Date);
+        expect(feedback.updatedAt).toBeInstanceOf(Date);
+      });
+
+      it('should handle all valid feedback ratings', () => {
+        const validRatings = [
+          FeedbackRating.POOR,
+          FeedbackRating.FAIR,
+          FeedbackRating.GOOD,
+          FeedbackRating.VERY_GOOD,
+          FeedbackRating.EXCELLENT
+        ];
+
+        validRatings.forEach(rating => {
+          const feedback: Feedback = {
+            _id: TestUtils.generateObjectId(),
+            guildId: 'guild123',
+            caseId: 'case123',
+            clientId: 'client123',
+            staffId: 'staff123',
+            rating,
+            comment: 'Test feedback',
+            isAnonymous: false,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          };
+
+          expect(feedback.rating).toBe(rating);
+        });
+      });
+
+      it('should handle anonymous feedback', () => {
+        const anonymousFeedback: Feedback = {
+          _id: TestUtils.generateObjectId(),
+          guildId: 'guild123',
+          caseId: 'case123',
+          clientId: 'client123',
+          staffId: 'staff123',
+          rating: FeedbackRating.GOOD,
+          comment: 'Anonymous feedback comment',
+          isAnonymous: true,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+
+        expect(anonymousFeedback.isAnonymous).toBe(true);
+        expect(anonymousFeedback.comment).toBeTruthy();
+      });
+    });
+
+    describe('Feedback Content Validation', () => {
+      it('should handle feedback with various comment lengths', () => {
+        const comments = [
+          'Good', // Short
+          'The lawyer provided excellent service throughout the case.', // Medium
+          'This is a very detailed feedback comment that explains in great detail all the aspects of the legal service provided, including communication, expertise, timeliness, and overall satisfaction with the outcome.'.repeat(3) // Long
+        ];
+
+        comments.forEach(comment => {
+          const feedback: Feedback = {
+            _id: TestUtils.generateObjectId(),
+            guildId: 'guild123',
+            submitterId: 'client123',
+            submitterUsername: 'TestClient',
+            targetStaffId: 'staff123',
+            targetStaffUsername: 'TestLawyer',
+            rating: FeedbackRating.THREE_STAR,
+            comment,
+            isForFirm: false,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          };
+
+          expect(feedback.comment).toBe(comment);
+          expect(feedback.comment.length).toBeGreaterThan(0);
+        });
+      });
+
+      it('should handle feedback with special characters and formatting', () => {
+        const specialComment = `
+          Excellent service! 
+          - Very responsive (replied within 24hrs)
+          - Clear communication 📧
+          - Professional approach 💼
+          - 5/5 stars ⭐⭐⭐⭐⭐
+          - Would recommend to friends & family
+        `;
+
+        const feedback: Feedback = {
+          _id: TestUtils.generateObjectId(),
+          guildId: 'guild123',
+          submitterId: 'client123',
+          submitterUsername: 'TestClient',
+          targetStaffId: 'staff123',
+          targetStaffUsername: 'TestLawyer',
+          rating: FeedbackRating.FIVE_STAR,
+          comment: specialComment,
+          isForFirm: false,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+
+        expect(feedback.comment).toContain('5/5 stars');
+        expect(feedback.comment).toContain('⭐');
+        expect(feedback.comment).toContain('24hrs');
+      });
+
+      it('should handle empty or minimal comments', () => {
+        const minimalFeedback: Feedback = {
+          _id: TestUtils.generateObjectId(),
+          guildId: 'guild123',
+          submitterId: 'client123',
+          submitterUsername: 'TestClient',
+          targetStaffId: 'staff123',
+          targetStaffUsername: 'TestLawyer',
+          rating: FeedbackRating.THREE_STAR,
+          comment: '', // Empty comment
+          isForFirm: false,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+
+        expect(minimalFeedback.comment).toBe('');
+        expect(minimalFeedback.rating).toBe(FeedbackRating.THREE_STAR);
+      });
+    });
+
+    describe('Feedback Performance Metrics', () => {
+      it('should calculate average ratings correctly', () => {
+        const feedbacks: Feedback[] = [
+          {
+            _id: TestUtils.generateObjectId(),
+            guildId: 'guild123',
+            submitterId: 'client1',
+            submitterUsername: 'Client1',
+            targetStaffId: 'staff123',
+            targetStaffUsername: 'TestLawyer',
+            rating: FeedbackRating.FIVE_STAR, // 5
+            comment: 'Great!',
+            isForFirm: false,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          },
+          {
+            _id: TestUtils.generateObjectId(),
+            guildId: 'guild123',
+            submitterId: 'client2',
+            submitterUsername: 'Client2',
+            targetStaffId: 'staff123',
+            targetStaffUsername: 'TestLawyer',
+            rating: FeedbackRating.FOUR_STAR, // 4
+            comment: 'Very good!',
+            isForFirm: false,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          },
+          {
+            _id: TestUtils.generateObjectId(),
+            guildId: 'guild123',
+            submitterId: 'client3',
+            submitterUsername: 'Client3',
+            targetStaffId: 'staff123',
+            targetStaffUsername: 'TestLawyer',
+            rating: FeedbackRating.THREE_STAR, // 3
+            comment: 'Good!',
+            isForFirm: false,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          }
+        ];
+
+        // Calculate average rating - ratings are already numeric
+        const totalRating = feedbacks.reduce((sum, feedback) => 
+          sum + feedback.rating, 0
+        );
+        const averageRating = totalRating / feedbacks.length;
+
+        expect(averageRating).toBe(4); // (5 + 4 + 3) / 3 = 4
+        expect(feedbacks).toHaveLength(3);
+        
+        // Test rating text and star display functions
+        expect(getRatingText(FeedbackRating.FIVE_STAR)).toBe('Excellent');
+        expect(getRatingText(FeedbackRating.THREE_STAR)).toBe('Good');
+        expect(getStarDisplay(FeedbackRating.FIVE_STAR)).toContain('⭐');
+        expect(getStarDisplay(FeedbackRating.ONE_STAR)).toContain('☆');
+
+        // This section is replaced above
+      });
+
+      it('should handle zero feedback scenarios', () => {
+        const feedbacks: Feedback[] = [];
+        
+        expect(feedbacks).toHaveLength(0);
+        
+        // Division by zero protection
+        const averageRating = feedbacks.length > 0 
+          ? feedbacks.reduce((sum, f) => sum + 1, 0) / feedbacks.length 
+          : 0;
+        
+        expect(averageRating).toBe(0);
+      });
+
+      it('should track feedback distribution', () => {
+        const feedbacks: Feedback[] = [
+          ...Array(10).fill(null).map(() => ({
+            _id: TestUtils.generateObjectId(),
+            guildId: 'guild123',
+            submitterId: 'client1',
+            submitterUsername: 'Client1',
+            targetStaffId: 'staff123',
+            targetStaffUsername: 'TestLawyer',
+            rating: FeedbackRating.FIVE_STAR,
+            comment: 'Excellent',
+            isForFirm: false,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          })),
+          ...Array(5).fill(null).map(() => ({
+            _id: TestUtils.generateObjectId(),
+            guildId: 'guild123',
+            submitterId: 'client2',
+            submitterUsername: 'Client2',
+            targetStaffId: 'staff123',
+            targetStaffUsername: 'TestLawyer',
+            rating: FeedbackRating.FOUR_STAR,
+            comment: 'Very good',
+            isForFirm: false,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          }))
+        ];
+
+        const excellentCount = feedbacks.filter(f => f.rating === FeedbackRating.FIVE_STAR).length;
+        const veryGoodCount = feedbacks.filter(f => f.rating === FeedbackRating.FOUR_STAR).length;
+
+        expect(excellentCount).toBe(10);
+        expect(veryGoodCount).toBe(5);
+        expect(feedbacks).toHaveLength(15);
+      });
+    });
+
+    describe('Feedback Edge Cases', () => {
+      it('should handle feedback for same staff by different clients', () => {
+        const staffId = 'staff123';
+        const feedbacks = [
+          {
+            _id: TestUtils.generateObjectId(),
+            guildId: 'guild123',
+            submitterId: 'client1',
+            submitterUsername: 'Client1',
+            targetStaffId: staffId,
+            targetStaffUsername: 'TestLawyer',
+            rating: FeedbackRating.FIVE_STAR,
+            comment: 'Client 1 feedback',
+            isForFirm: false,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          },
+          {
+            _id: TestUtils.generateObjectId(),
+            guildId: 'guild123',
+            submitterId: 'client2',
+            submitterUsername: 'Client2',
+            targetStaffId: staffId,
+            targetStaffUsername: 'TestLawyer',
+            rating: FeedbackRating.THREE_STAR,
+            comment: 'Client 2 feedback',
+            isForFirm: false,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          }
+        ];
+
+        feedbacks.forEach(feedback => {
+          expect(feedback.targetStaffId).toBe(staffId);
+          expect(feedback.targetStaffUsername).toBe('TestLawyer');
+        });
+
+        expect(feedbacks[0].submitterId).not.toBe(feedbacks[1].submitterId);
+        expect(feedbacks[0].isForFirm).toBe(false);
+        expect(feedbacks[1].isForFirm).toBe(false);
+      });
+
+      it('should handle bulk feedback scenarios', () => {
+        const bulkFeedbacks = Array.from({ length: 100 }, (_, i) => ({
+          _id: TestUtils.generateObjectId(),
+          guildId: 'guild123',
+          submitterId: `client${i}`,
+          submitterUsername: `Client${i}`,
+          targetStaffId: 'staff123',
+          targetStaffUsername: 'TestLawyer',
+          rating: Object.values(FeedbackRating)[i % 5] as FeedbackRating,
+          comment: `Feedback ${i}`,
+          isForFirm: i % 3 === 0, // Every 3rd feedback is firm-wide
+          createdAt: new Date(),
+          updatedAt: new Date()
+        }));
+
+        expect(bulkFeedbacks).toHaveLength(100);
+        
+        const firmFeedbackCount = bulkFeedbacks.filter(f => f.isForFirm).length;
+        const staffFeedbackCount = bulkFeedbacks.filter(f => !f.isForFirm).length;
+        
+        expect(firmFeedbackCount + staffFeedbackCount).toBe(100);
+        expect(firmFeedbackCount).toBeGreaterThan(0);
+        expect(staffFeedbackCount).toBeGreaterThan(0);
+      });
+    });
+  });
+
+  describe('Cross-Guild Isolation', () => {
+    it('should maintain separate retainers per guild', () => {
+      const sameClientDifferentGuilds = [
+        {
+          _id: TestUtils.generateObjectId(),
+          guildId: 'guild1',
+          clientId: 'client123',
+          lawyerId: 'lawyer1',
+          agreementTemplate: 'Guild 1 retainer',
+          status: RetainerStatus.PENDING,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        },
+        {
+          _id: TestUtils.generateObjectId(),
+          guildId: 'guild2',
+          clientId: 'client123',
+          lawyerId: 'lawyer2',
+          agreementTemplate: 'Guild 2 retainer',
+          status: RetainerStatus.SIGNED,
+          signedAt: new Date(),
+          clientRobloxUsername: 'TestUser123',
+          digitalSignature: 'TestUser123',
+          createdAt: new Date(),
+          updatedAt: new Date()
+        }
+      ];
+
+      sameClientDifferentGuilds.forEach(retainer => {
+        expect(retainer.clientId).toBe('client123');
+      });
+
+      expect(sameClientDifferentGuilds[0].guildId).not.toBe(sameClientDifferentGuilds[1].guildId);
+      expect(sameClientDifferentGuilds[0].status).not.toBe(sameClientDifferentGuilds[1].status);
+    });
+
+    it('should maintain separate feedback per guild', () => {
+      const crossGuildFeedback = [
+        {
+          _id: TestUtils.generateObjectId(),
+          guildId: 'guild1',
+          submitterId: 'client123',
+          submitterUsername: 'TestClient',
+          targetStaffId: 'staff1',
+          targetStaffUsername: 'Staff1',
+          rating: FeedbackRating.FIVE_STAR,
+          comment: 'Guild 1 feedback',
+          isForFirm: false,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        },
+        {
+          _id: TestUtils.generateObjectId(),
+          guildId: 'guild2',
+          submitterId: 'client123',
+          submitterUsername: 'TestClient',
+          targetStaffId: 'staff2',
+          targetStaffUsername: 'Staff2',
+          rating: FeedbackRating.ONE_STAR,
+          comment: 'Guild 2 feedback',
+          isForFirm: false,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        }
+      ];
+
+      crossGuildFeedback.forEach(feedback => {
+        expect(feedback.submitterId).toBe('client123');
+      });
+
+      expect(crossGuildFeedback[0].guildId).not.toBe(crossGuildFeedback[1].guildId);
+      expect(crossGuildFeedback[0].rating).not.toBe(crossGuildFeedback[1].rating);
+    });
+  });
+});

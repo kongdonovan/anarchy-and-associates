@@ -1,0 +1,145 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.OperationQueue = void 0;
+const logger_1 = require("../logger");
+class OperationQueue {
+    constructor() {
+        this.queue = [];
+        this.processing = false;
+        this.TIMEOUT_MS = 30000; // 30 seconds
+        this.HIGH_PRIORITY = 1;
+        this.NORMAL_PRIORITY = 2;
+    }
+    static getInstance() {
+        if (!OperationQueue.instance) {
+            OperationQueue.instance = new OperationQueue();
+        }
+        return OperationQueue.instance;
+    }
+    async enqueue(operation, userId, guildId, isGuildOwner = false) {
+        return new Promise((resolve, reject) => {
+            const queuedOperation = {
+                id: `${userId}-${Date.now()}-${Math.random()}`,
+                operation,
+                userId,
+                guildId,
+                isGuildOwner,
+                priority: isGuildOwner ? this.HIGH_PRIORITY : this.NORMAL_PRIORITY,
+                createdAt: new Date(),
+                timeout: this.TIMEOUT_MS,
+                resolve,
+                reject
+            };
+            this.queue.push(queuedOperation);
+            this.sortQueue();
+            logger_1.logger.info('Operation enqueued', {
+                operationId: queuedOperation.id,
+                userId,
+                guildId,
+                isGuildOwner,
+                queueLength: this.queue.length
+            });
+            // Set timeout for the operation
+            setTimeout(() => {
+                this.timeoutOperation(queuedOperation.id);
+            }, this.TIMEOUT_MS);
+            // Start processing if not already processing
+            if (!this.processing) {
+                this.processQueue();
+            }
+        });
+    }
+    sortQueue() {
+        this.queue.sort((a, b) => {
+            // Sort by priority first (lower number = higher priority)
+            if (a.priority !== b.priority) {
+                return a.priority - b.priority;
+            }
+            // Then by creation time (FIFO within same priority)
+            return a.createdAt.getTime() - b.createdAt.getTime();
+        });
+    }
+    async processQueue() {
+        if (this.processing || this.queue.length === 0) {
+            return;
+        }
+        this.processing = true;
+        while (this.queue.length > 0) {
+            const operation = this.queue.shift();
+            if (!operation)
+                continue;
+            try {
+                logger_1.logger.info('Processing operation', {
+                    operationId: operation.id,
+                    userId: operation.userId,
+                    guildId: operation.guildId,
+                    remainingQueue: this.queue.length
+                });
+                const result = await operation.operation();
+                operation.resolve(result);
+                logger_1.logger.info('Operation completed successfully', {
+                    operationId: operation.id,
+                    userId: operation.userId
+                });
+            }
+            catch (error) {
+                logger_1.logger.error('Operation failed', {
+                    operationId: operation.id,
+                    userId: operation.userId,
+                    error: error instanceof Error ? error.message : String(error)
+                });
+                operation.reject(error);
+            }
+        }
+        this.processing = false;
+    }
+    timeoutOperation(operationId) {
+        const operationIndex = this.queue.findIndex(op => op.id === operationId);
+        if (operationIndex >= 0) {
+            const operation = this.queue[operationIndex];
+            if (operation) {
+                this.queue.splice(operationIndex, 1);
+                logger_1.logger.warn('Operation timed out', {
+                    operationId,
+                    userId: operation.userId,
+                    guildId: operation.guildId
+                });
+                operation.reject(new Error('Operation timed out after 30 seconds'));
+            }
+        }
+    }
+    getQueueLength() {
+        return this.queue.length;
+    }
+    getQueueStatus() {
+        return {
+            queueLength: this.queue.length,
+            processing: this.processing,
+            operations: this.queue.map(op => ({
+                id: op.id,
+                userId: op.userId,
+                guildId: op.guildId,
+                priority: op.priority,
+                createdAt: op.createdAt
+            }))
+        };
+    }
+    clearQueue() {
+        const operations = [...this.queue];
+        this.queue = [];
+        // Reject all pending operations
+        operations.forEach(op => {
+            op.reject(new Error('Queue cleared'));
+        });
+        logger_1.logger.info('Queue cleared', { clearedOperations: operations.length });
+    }
+    // Test helper methods
+    isProcessing() {
+        return this.processing;
+    }
+    hasOperationsForUser(userId) {
+        return this.queue.some(op => op.userId === userId);
+    }
+}
+exports.OperationQueue = OperationQueue;
+//# sourceMappingURL=operation-queue.js.map
