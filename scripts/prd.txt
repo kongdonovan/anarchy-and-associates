@@ -1,0 +1,457 @@
+<context>
+# Overview
+Anarchy & Associates is a comprehensive Discord bot designed to manage and streamline the operations of a simulated legal firm within a Discord server environment. It provides an end-to-end workflow management system for legal services, covering everything from staff and case management to client relations and administrative oversight. The primary value of this product is its ability to centralize all firm operations within Discord, using automation and a clear, interactive interface to enhance productivity and organization for all server members, particularly legal staff and their clients.
+
+# Core Features
+The bot's functionality is organized into logical command groups, each serving a distinct purpose within the firm's operations.
+
+## Staff Management (/staff)
+DESCRIPTION: Comprehensive staff lifecycle management system for hiring, promoting, demoting, and tracking legal professionals.
+
+COMMANDS:
+
+/staff list [role]
+- View all staff members with optional role filtering
+- Displays username, role, and average star ratings from feedback
+- Shows total number of ratings received
+- Supports filtering by specific job roles
+
+/staff hire [user] [role] [roblox_username]
+- Hire new staff member
+- Validates job limits and availability
+- Automatically assigns Discord role
+- Adds user to staff database
+- Requires 'hr' permission
+- Includes audit logging
+
+/staff fire [user]
+- Remove staff member from team
+- Validates hierarchical permissions (cannot fire equal/higher role)
+- Removes all job-related Discord roles
+- Updates staff database status
+- Requires 'hr' permission
+- Includes audit logging
+
+/staff promote [user] [role] [roblox_username]
+- Promote staff to higher role
+- Validates role hierarchy and permissions
+- Removes lower-level roles, adds new role
+- Updates staff database record
+- Requires 'hr' permission
+- Includes audit logging
+
+/staff demote [user] [role]
+- Demote staff to lower role
+- Similar validation as promotion but in reverse
+- Maintains role hierarchy integrity
+- Requires 'hr' permission
+- Includes audit logging
+
+/staff info [user]
+- View detailed staff member information
+- Shows role, hiring date, promotion history
+- Displays performance metrics and feedback summary
+- Available to all authorized users
+
+BUSINESS RULES:
+- Role hierarchy enforcement prevents unauthorized promotions/demotions
+- Job limits prevent over-hiring for specific positions
+- Automatic role synchronization between Discord and database
+- Complete audit trail for all staff changes
+
+## Job Management (/job)
+DESCRIPTION: Dynamic job posting and application system with customizable application forms and automated workflow management.
+
+COMMANDS:
+
+/job list [open] [search] [page]
+- Browse available job listings
+- Paginated display with 5 jobs per page
+- Filter by open/closed status
+- Search by job title
+- Shows remaining openings for limited positions
+
+/job add [role] [description] [limit] [questions]
+- Create new job posting
+- Associates job with Discord role
+- Optional position limit enforcement
+- Custom application questions in JSON format
+- Automatic status tracking
+- Requires 'hr' permission
+
+/job edit [jobid] [title] [description] [limit] [open] [role] [questions]
+- Modify existing job
+- Update any job property
+- Change open/closed status
+- Automatically removes roles when job closes
+- Maintains application history
+- Requires 'hr' permission
+
+FEATURES:
+- Custom application questions with multiple input types (short, paragraph, number, choice)
+- Dynamic question validation and formatting
+- Role-based position limits with automatic enforcement
+- Status history tracking for compliance
+- Automatic role management when jobs open/close
+
+## Application System (/apply)
+DESCRIPTION: Streamlined application process with dynamic forms, Roblox integration, and automated review workflows.
+
+COMMANDS:
+
+/apply
+- Submit job application
+- Dynamic job selection menu
+- Custom modal forms based on job requirements
+- Roblox username validation and profile lookup
+- Automatic application ID generation
+- Prevents duplicate applications
+
+WORKFLOW FEATURES:
+- Interactive job selection dropdown
+- Dynamic modal generation based on job questions
+- Roblox API integration for profile verification
+- Automated application review channel posting
+- Accept/decline buttons with reason collection
+- Automatic role assignment upon acceptance
+- Direct message notifications to applicants
+- Staff database integration for accepted applicants
+
+BUSINESS LOGIC:
+- Prevents applications from existing staff members
+- Validates Roblox usernames against API
+- Supports both default and custom application questions
+- Maintains application status history
+- Automatic cleanup of pending applications
+
+## Case Management (/case)
+DESCRIPTION: Comprehensive legal case management system with client interaction, lawyer assignment, and case lifecycle tracking.
+
+COMMANDS:
+
+/case review [details]
+- Request case review (client-facing)
+- Creates case channel in review category
+- Generates sequential case numbers (YYYY-NNNN format)
+- Sends to staff for acceptance/rejection
+- Includes accept/decline buttons for staff interaction
+
+/case assign [user]
+- Assign lawyer to case
+- Supports multiple lawyer assignment
+- Automatic lead attorney designation
+- Only works within case channels
+- Updates case status to "open"
+- Requires 'case' permission
+
+/case reassign [user] [newchannel]
+- Move lawyer between cases
+- Transfers lawyer from current case to another
+- Updates lead attorney if necessary
+- Validates target channel is valid case
+- Prevents reassignment to same case
+
+/case unassign [user]
+- Remove lawyer from case
+- Removes lawyer from assignment list
+- Updates lead attorney if removed lawyer was lead
+- Maintains case integrity
+
+/case close [caseid] [channel] [result] [notes]
+- Close case
+- Supports closure by ID or from case channel
+- Records win/loss/other results
+- Adds closure notes
+- Moves channel to archive category
+- Requires 'case' permission
+
+/case list [user] [status] [search] [page]
+- View case listings
+- Filter by assigned lawyer, status, or search terms
+- Paginated results (5 cases per page)
+- Shows case details, assignments, and status
+
+/case info [caseid] [channel]
+- View case information
+- Interactive button interface (Overview/Documents/Notes)
+- Comprehensive case metadata display
+- Document and note management
+- Works by case ID or from case channel
+
+INTERACTIVE FEATURES:
+- Accept/Decline buttons for case review requests
+- Dynamic case information tabs (Overview/Documents/Notes)
+- Automatic channel permission management
+- Real-time case status updates
+- Client notification system
+
+CASE LIFECYCLE:
+1. Client requests review via /case review
+2. Case channel created with staff permissions
+3. Staff can accept (assigns case) or decline
+4. Assigned lawyers work within case channel
+5. Case closed with result and moved to archive
+6. Complete audit trail maintained
+
+## Administrative Commands (/admin)
+DESCRIPTION: Server administration and configuration management with comprehensive permission control and system maintenance.
+
+COMMANDS:
+
+/admin add [user] - Grant admin privileges to user
+/admin remove [user] - Revoke admin privileges from user
+/admin grantrole [role] - Grant admin privileges to role
+/admin revokerole [role] - Revoke admin privileges from role
+/admin list - Display all current admins and admin roles
+/admin debug_collection [collection] - View database collection contents
+/admin setupserver [confirm] - Complete server initialization (DANGEROUS)
+/admin debug_wipe_collections - Emergency database wipe
+/admin setpermissionrole [action] [role] - Configure action permissions
+
+PERMISSION ACTIONS SUPPORTED:
+- admin: Administrative functions
+- hr: Human resources (hiring, firing, promotions)
+- case: Case management operations
+- config: Server configuration changes
+- retainer: Retainer agreement management
+- repair: System maintenance and health checks
+
+## Configuration Management (/config)
+DESCRIPTION: Dynamic server configuration system for channels, categories, and role assignments.
+
+COMMANDS:
+
+/config set [key] [channel] - Set channel/category configuration
+/config view - Display current server configuration
+/config setclientrole [role] - Set default client role
+
+CONFIGURABLE ELEMENTS:
+- FEEDBACK_CHANNEL_ID: Feedback submission destination
+- RETAINER_CHANNEL_ID: Retainer agreement archive
+- CASE_REVIEW_CATEGORY_ID: New case review channels
+- CASE_ARCHIVE_CATEGORY_ID: Closed case storage
+- MODLOG_CHANNEL_ID: Administrative action logging
+- APPLICATION_CHANNEL_ID: Job application reviews
+- CLIENT_ROLE_ID: Default role for clients
+
+## Retainer Agreements (/retainer)
+DESCRIPTION: Digital retainer agreement system with signature workflow and client onboarding.
+
+COMMANDS:
+
+/retainer sign [user] - Send retainer agreement to user
+/retainer list - View personal active retainers
+/retainer listall - View all guild retainers
+
+WORKFLOW:
+1. Staff initiates retainer with /retainer sign
+2. Client receives DM with agreement and sign button
+3. Client clicks sign button, completes modal with details
+4. Agreement posted to retainer channel
+5. Client automatically assigned client role
+6. Retainer stored in database for future reference
+
+## Feedback System (/feedback)
+DESCRIPTION: Client and staff feedback collection with star ratings and administrative review.
+
+COMMANDS:
+
+/feedback submit [message] [stars] [ping] - Submit feedback with 1-5 star rating
+/feedback search [user] [from] [to] - Administrative feedback search
+
+FEATURES:
+- Star rating aggregation for staff performance
+- Anonymous and targeted feedback options
+- Administrative oversight and review capabilities
+- Integration with staff performance metrics
+
+## Reminder System (/reminder)
+DESCRIPTION: Time-based reminder system for case deadlines and important events.
+
+COMMANDS:
+
+/reminder set [user] [time] [message] - Set user reminder (supports 10m, 2h, 1d format)
+
+FEATURES:
+- Human-readable time format parsing
+- Automatic reminder delivery
+- Maximum 7-day reminder period
+- Channel-based notification system
+
+## System Repair (/repair)
+DESCRIPTION: Automated system maintenance and health monitoring with self-healing capabilities.
+
+COMMANDS:
+
+/repair staff-roles - Synchronize staff roles between Discord and database
+/repair job-roles - Synchronize job roles between Discord and database
+/repair channels - Ensure required channels/categories exist
+/repair config - Validate and fix configuration inconsistencies
+/repair orphaned - Find and clean orphaned database records
+/repair db-indexes - Ensure MongoDB indexes are correct
+/repair all - Execute all repair routines
+/repair dry-run - Preview changes without execution
+/repair health - Comprehensive system health check
+
+## Metrics and Statistics (/metrics, /stats)
+DESCRIPTION: Performance monitoring and statistical analysis for system health and usage patterns.
+
+COMMANDS:
+
+/metrics - Display bot/server statistics and uptime
+/stats [user] - View win/loss statistics for lawyers
+
+METRICS TRACKED:
+- Total applications submitted and processed
+- Active staff count and role distribution
+- Job posting activity and fill rates
+- Case volume and resolution statistics
+- Feedback submission and rating trends
+- Retainer agreement statistics
+- System uptime and performance data
+
+## Help System (/help, /slashes)
+DESCRIPTION: Dynamic help system with command discovery and usage instructions.
+
+COMMANDS:
+
+/help [command] - Context-sensitive help with usage instructions
+/slashes - List all available slash commands
+
+FEATURES:
+- Dynamic command discovery from Discord API
+- Context-aware help for subcommands and groups
+- User-friendly parameter descriptions
+
+# User Experience
+
+- **User Personas**
+  - **Legal Staff**: This persona includes all roles within the firm (e.g., Lawyers, HR Managers, Admins). They are power users who interact with the bot daily to manage cases, handle recruitment, and perform administrative tasks. They value efficiency, clear workflows, and having all necessary information readily accessible within Discord.
+  - **Client**: This persona represents individuals seeking legal services from the firm. They interact with the bot primarily to request case reviews, sign retainers, and submit feedback. They value a simple, guided experience that makes it easy to engage with the firm.
+  - **General Server Member**: This persona includes all other users in the Discord server who might be interested in joining the firm. Their main interaction is viewing job listings and submitting applications via the `/apply` command.
+
+- **Key User Flows**
+  1. **Job Application Flow**: A General Server Member uses `/job list` to see open positions. They find one they like and use `/apply`. The bot presents a job-specific modal. After submission, the application appears in a review channel for Legal Staff (HR), who can accept or decline, triggering automated role assignments and DM notifications.
+  2. **Case Initiation Flow**: A Client uses `/case review` to submit a new case. A private channel is created, and Legal Staff are notified. A staff member accepts the case, which officially opens it and assigns them as the lead attorney. The client is notified, and work can begin within the dedicated case channel.
+  3. **Staff Promotion Flow**: An HR Manager uses `/staff promote` on a deserving staff member. The bot validates the action against the role hierarchy, removes the old role, assigns the new one, and updates the database. A public announcement can be made, and the entire action is logged for auditing.
+
+- **UI/UX Considerations**
+  - **Interactive Components**: The bot heavily utilizes Discord's interactive features, including Buttons (Accept/Decline), Select Menus (Job selection), and Modals (Applications, Retainer signing), to create a rich and intuitive user experience that goes beyond simple text commands.
+  - **Branded Embeds**: All bot messages use a consistent, professional embed format (`createAALegalEmbed`) to reinforce the firm's brand identity and make information easy to read and digest.
+  - **Ephemeral Responses**: Sensitive information and confirmation messages are often sent as ephemeral responses, visible only to the user who invoked the command, to reduce channel noise and protect privacy.
+  - **Real-time Feedback**: The bot provides immediate feedback for actions, confirming success or clearly stating errors and permission issues, ensuring users are never left guessing about the outcome of a command.
+</context>
+<PRD>
+# Technical Architecture
+
+- **System Components (Clean Architecture)**
+  The architecture is strictly divided into four distinct, concentric layers to ensure separation of concerns, scalability, and ease of maintenance.
+  1. **Domain (Entities)**: The core of the application, containing the plain data models (`Case`, `Staff`, `Job`, etc.) and their type definitions. This layer has zero external dependencies.
+  2. **Application (Services)**: Contains the business logic and orchestrates the data flow. `StaffService`, `CaseService`, etc., define the operations that can be performed, but are decoupled from the database and the web framework. They depend only on the Domain layer.
+  3. **Infrastructure (Repositories & External Services)**: The outermost layer containing implementation details. This includes `MongoDB` repositories that implement data access interfaces defined in the Application layer, and services that interact with external APIs like Discord.js and Noblox.js. This layer depends on all other layers.
+  4. **Presentation (Discord Commands)**: The entry point for user interaction. This layer, defined in the `src/commands/` directory, uses the `discordx` library to handle slash commands. It parses user input and calls the appropriate methods in the Application (Service) layer. It is responsible for formatting data into user-friendly responses (embeds, modals).
+
+- **Data Models & Repository Pattern**
+  - **Data Models**: The database schema is defined by the interfaces in `src/types/types.d.ts`. Key models include `Application`, `Staff`, `Job`, `Case`, `GuildConfig`, `Retainer`, and `Feedback`.
+  - **Repository Pattern**: Data access is managed via a generic repository pattern to decouple the application logic from MongoDB.
+    - `BaseMongoRepository`: A generic base class (`src/mongo/repository/base.ts`) that provides standard CRUD operations (add, update, findById, findByFilters, delete). This centralizes common database logic.
+    - **Concrete Repositories**: For each data model, a specific repository (e.g., `StaffRepository`, `CaseRepository`) inherits from `BaseMongoRepository`. These concrete classes can also implement custom, model-specific queries (e.g., `getOpenCases()` in `CaseRepository`).
+    - **Decoupling**: Services in the Application layer do not interact with MongoDB directly. They call methods on the repository classes, making the application independent of the database technology and highly testable.
+
+- **APIs and Integrations**
+  - **Discord.js API**: The primary integration for all bot functionality, including sending messages, managing roles/channels, and handling interactions.
+  - **Noblox.js (Roblox API)**: Used within the application workflow to verify a user's Roblox username and fetch profile details, adding a layer of validation to the recruitment process.
+
+- **Infrastructure Requirements**
+  - **Runtime**: Node.js v16+
+  - **Database**: MongoDB server
+  - **Environment**: A Discord Bot Token with necessary permissions (Manage Roles, Manage Channels, etc.).
+  - **Deployment**: The system is designed for containerization and can be deployed using the provided `Dockerfile` and `docker-compose.yml`.
+
+# Development Roadmap
+
+- **MVP Requirements**
+  The MVP consists of the entire documented feature set, as all components are considered critical for the firm's operations. Development will follow the phased plan outlined in the following section.
+
+- **Future Enhancements**
+  - **Advanced Analytics Dashboard**: A web-based interface for visualizing metrics on staff performance, case resolution times, and recruitment trends.
+  - **Document Management**: Integration with a file storage service (e.g., S3) to allow uploading and management of actual case documents, not just links.
+  - **Client Portal**: A dedicated read-only view for clients to check the status of their active cases without needing to ask staff.
+  - **Automated Payroll/Activity System**: Track staff activity (e.g., messages sent, cases closed) to calculate virtual payments or award points.
+
+# Logical Dependency Chain
+Development will be broken down into the following phases to ensure a stable, incremental build process. Each phase delivers a testable and logically complete feature set.
+
+### Phase 1: Project Foundation & Core Architecture
+- **Goal**: Establish a scalable and maintainable codebase structure.
+- **Components**:
+  - Setup Node.js, TypeScript, Linter, and Docker environment.
+  - Implement Clean Architecture directory structure.
+  - Create core utilities: MongoDB client, Base Repository, Logger.
+- **Commands Implemented**: None.
+
+### Phase 2: Configuration & Permissions
+- **Goal**: Build the foundational system for server configuration and bot permissions.
+- **Components**: `GuildConfig` model and repository, `hasActionPermission` service.
+- **Commands Implemented**:
+  - `/admin add`, `/admin remove`
+  - `/admin grantrole`, `/admin revokerole`
+  - `/admin list`
+  - `/admin setpermissionrole`
+  - `/config set`, `/config view`, `/config setclientrole`
+
+### Phase 3: Staff & Job Management
+- **Goal**: Implement the core HR functionalities for managing staff and job postings.
+- **Components**: `Staff` & `Job` models and repositories, `StaffService`.
+- **Commands Implemented**:
+  - `/staff list`, `/staff hire`, `/staff fire`, `/staff promote`, `/staff demote`, `/staff info`
+  - `/job list`, `/job add`, `/job edit`
+
+### Phase 4: Recruitment & Client Onboarding
+- **Goal**: Create the workflows for bringing new users into the firm's ecosystem as either staff or clients.
+- **Components**: Application submission flow, Roblox API service, Retainer model and service.
+- **Commands Implemented**:
+  - `/job apply`
+  - `/retainer sign`, `/retainer list`, `/retainer listall`
+
+### Phase 5: Core Operations & Feedback
+- **Goal**: Implement the primary day-to-day legal workflow and feedback mechanisms.
+- **Components**: `Case` & `Feedback` models and repositories, case lifecycle management service.
+- **Commands Implemented**:
+  - `/case review`, `/case assign`, `/case reassign`, `/case unassign`, `/case close`, `/case list`, `/case info`
+  - `/feedback submit`, `/feedback search`
+  - `/reminder set`
+
+### Phase 6: System Utilities & Finalization
+- **Goal**: Finalize the bot with maintenance, monitoring, and help utilities.
+- **Components**: Repair services, metrics aggregation services, help command parser.
+- **Commands Implemented**:
+  - `/util repair [subcommand]` (all variants)
+  - `/util metrics`
+  - `/util stats`
+  - `/help [command]`
+  - `/slashes`
+  - `/admin debug_collection`, `/admin debug_wipe_collections`
+  - `/admin setupserver`
+
+# Risks and Mitigations
+
+- **Technical Risks**
+  - **External API Changes**: The bot relies on the Discord and Roblox APIs, which can introduce breaking changes.
+    - *Mitigation*: All external API calls are isolated within specific service modules. This creates an anti-corruption layer, so if an API changes, updates only need to be made in one place rather than throughout the codebase.
+  - **Permission Complexity**: The granular, role-based permission system can become complex to manage and debug.
+    - *Mitigation*: Permissions are centralized in the `GuildConfig` and checked via a single `hasActionPermission` utility. This provides a single source of truth. We will also maintain clear documentation for each permission action.
+
+- **Scope Risks**
+  - **MVP Scope Creep**: The MVP is large, encompassing all current features. There is a risk of delaying a usable product.
+    - *Mitigation*: The "Phased Development Plan" breaks the MVP down into phased, deliverable chunks. Each phase delivers a complete, testable feature set, allowing for incremental releases and feedback even within the defined MVP scope.
+
+- **Resource Risks**
+  - **Key Person Dependency**: If the bot is maintained by a small team or a single developer, their availability is a risk.
+    - *Mitigation*: The strict adherence to Clean Architecture and detailed documentation in this PRD are designed to significantly lower the barrier to entry for new developers, making the project easier to hand off or expand.
+
+# Appendix
+[Include any additional information:
+- Research findings
+- Technical specifications]
+</PRD>

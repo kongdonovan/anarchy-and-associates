@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: anarchy-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-password}
+      MONGO_INITDB_DATABASE: ${MONGO_DATABASE:-anarchy_associates}
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+    networks:
+      - anarchy-network
+
+  bot:
+    build: .
+    container_name: anarchy-bot
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN}
+      MONGODB_URI: ${MONGODB_URI:-mongodb://admin:password@mongodb:27017/anarchy_associates?authSource=admin}
+    depends_on:
+      - mongodb
+    networks:
+      - anarchy-network
+    volumes:
+      - ./logs:/app/logs
+
+volumes:
+  mongodb_data:
+  mongodb_config:
+
+networks:
+  anarchy-network:
+    driver: bridge

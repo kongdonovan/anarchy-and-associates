@@ -1,0 +1,811 @@
+{
+  "master": {
+    "tasks": [
+      {
+        "id": 1,
+        "title": "Setup Project Foundation & Architecture",
+        "description": "Initialize Node.js project with TypeScript, establish Clean Architecture directory structure, and configure development environment",
+        "details": "Create package.json with Node.js v16+ and TypeScript dependencies. Setup Clean Architecture with src/domain/, src/application/, src/infrastructure/, src/presentation/ directories. Configure TypeScript compiler, ESLint, Prettier. Create Dockerfile and docker-compose.yml for MongoDB. Setup environment configuration with .env template for Discord Bot Token and MongoDB connection.",
+        "testStrategy": "Verify project compiles without errors, Docker containers start successfully, and environment variables load correctly",
+        "priority": "high",
+        "dependencies": [],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Node.js/TypeScript setup with dependencies",
+            "description": "Initialize Node.js project with TypeScript and install core dependencies for the application",
+            "dependencies": [],
+            "details": "Create package.json, install TypeScript, Node.js types, and essential runtime dependencies. Configure basic TypeScript compiler options and project metadata.",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 2,
+            "title": "Clean Architecture directory structure creation",
+            "description": "Set up directory structure following Clean Architecture principles with proper layer separation",
+            "dependencies": [
+              1
+            ],
+            "details": "Create directories for entities, use cases, interface adapters, and frameworks/drivers layers. Establish clear boundaries between domain, application, and infrastructure code.",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 3,
+            "title": "Development tooling configuration (ESLint, Prettier, TypeScript)",
+            "description": "Configure code quality and formatting tools with TypeScript integration",
+            "dependencies": [
+              1
+            ],
+            "details": "Set up ESLint with TypeScript rules, Prettier for code formatting, configure TypeScript compiler options, and establish consistent code style guidelines.",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 4,
+            "title": "Docker and environment configuration setup",
+            "description": "Create Docker configuration and environment management for development and deployment",
+            "dependencies": [
+              2,
+              3
+            ],
+            "details": "Create Dockerfile, docker-compose.yml for development environment, set up environment variable management, and establish containerized development workflow.",
+            "status": "done",
+            "testStrategy": ""
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Implement Core Infrastructure Components",
+        "description": "Create MongoDB client, Base Repository pattern, Logger utility, and core type definitions",
+        "details": "Implement BaseMongoRepository class in src/mongo/repository/base.ts with generic CRUD operations (add, update, findById, findByFilters, delete). Create MongoDB connection client with proper error handling. Setup Winston logger with different log levels. Define core interfaces in src/types/types.d.ts for Application, Staff, Job, Case, GuildConfig, Retainer, Feedback models.",
+        "testStrategy": "Unit tests for BaseRepository CRUD operations, MongoDB connection tests, logger output verification",
+        "priority": "high",
+        "dependencies": [
+          1
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "MongoDB connection client with error handling",
+            "description": "Create a MongoDB connection client with comprehensive error handling, connection pooling, and retry logic",
+            "dependencies": [],
+            "details": "Implement MongoDB client with connection management, error handling for network issues, authentication failures, and connection timeouts. Include connection pooling configuration and automatic retry mechanisms for failed connections.",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 2,
+            "title": "BaseMongoRepository with generic CRUD operations",
+            "description": "Implement a generic base repository class providing standard CRUD operations for MongoDB collections",
+            "dependencies": [
+              1
+            ],
+            "details": "Create BaseMongoRepository class with generic type support for create, read, update, delete operations. Include query building, pagination support, and transaction handling. Ensure proper error propagation and type safety.",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 3,
+            "title": "Winston logger configuration and setup",
+            "description": "Configure Winston logging system with appropriate log levels, formatters, and output destinations",
+            "dependencies": [],
+            "details": "Set up Winston logger with multiple transport options (console, file, cloud). Configure log levels, custom formatters for different environments, and structured logging for better debugging and monitoring.",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 4,
+            "title": "Core type definitions and interfaces",
+            "description": "Define TypeScript interfaces and type definitions for the infrastructure layer components",
+            "dependencies": [],
+            "details": "Create comprehensive type definitions for database entities, repository interfaces, logger types, and configuration objects. Ensure proper type safety across all infrastructure components and establish contracts for dependency injection.",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 5,
+            "title": "Integration testing for all components",
+            "description": "Implement comprehensive integration tests covering all infrastructure components and their interactions",
+            "dependencies": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "details": "Create integration tests for MongoDB client connectivity, repository operations, logging functionality, and component interactions. Include test database setup, cleanup procedures, and mock configurations for isolated testing environments.",
+            "status": "done",
+            "testStrategy": ""
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Implement Configuration & Permissions System",
+        "description": "Build GuildConfig model, repository, and permission validation service with admin management commands",
+        "details": "Create GuildConfig model with configurable elements (FEEDBACK_CHANNEL_ID, RETAINER_CHANNEL_ID, etc.). Implement GuildConfigRepository extending BaseMongoRepository. Build hasActionPermission service for role-based permission validation. Implement /admin commands (add, remove, grantrole, revokerole, list, setpermissionrole) and /config commands (set, view, setclientrole) using discordx decorators.",
+        "testStrategy": "Test permission validation logic, admin role assignment/removal, configuration persistence and retrieval",
+        "priority": "high",
+        "dependencies": [
+          2
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "GuildConfig model and database schema",
+            "description": "Create the GuildConfig data model and corresponding database schema to store guild-specific configuration settings",
+            "dependencies": [],
+            "details": "Define the GuildConfig model with fields for guild ID, admin users, configuration settings, permissions, and timestamps. Create database migration scripts and establish the table structure with proper indexing and constraints.",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 2,
+            "title": "GuildConfigRepository implementation",
+            "description": "Implement the repository pattern for GuildConfig data access operations",
+            "dependencies": [
+              1
+            ],
+            "details": "Create repository class with methods for CRUD operations on guild configurations. Include methods for finding configs by guild ID, updating specific settings, and managing admin lists. Implement proper error handling and database connection management.",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 3,
+            "title": "Permission validation service logic",
+            "description": "Develop the core permission validation service to check user permissions against guild configurations",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "Create a service that validates user permissions based on Discord roles, admin status, and guild-specific settings. Include hierarchical permission checking, role precedence logic, and integration with Discord's permission system.",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 4,
+            "title": "Admin management commands (/admin add, remove, etc.)",
+            "description": "Implement Discord slash commands for managing guild administrators",
+            "dependencies": [
+              2,
+              3
+            ],
+            "details": "Create slash commands for adding/removing admins, listing current admins, and transferring admin privileges. Include proper permission checks, user validation, and feedback messages. Handle edge cases like self-removal and owner permissions.",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 5,
+            "title": "Configuration commands (/config set, view, etc.)",
+            "description": "Implement Discord slash commands for viewing and modifying guild configuration settings",
+            "dependencies": [
+              2,
+              3
+            ],
+            "details": "Create commands for setting configuration values, viewing current settings, and resetting to defaults. Include input validation, setting descriptions, and user-friendly display formatting. Implement proper permission checks for each configuration option.",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 6,
+            "title": "Role-based access control integration",
+            "description": "Integrate the permission system with Discord's role hierarchy and guild-specific role configurations",
+            "dependencies": [
+              3,
+              4,
+              5
+            ],
+            "details": "Implement role-based permission mapping, integration with Discord's role hierarchy, and guild-specific role configuration options. Include automatic role detection, permission inheritance, and override mechanisms for special cases.",
+            "status": "done",
+            "testStrategy": ""
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Implement Staff Management System",
+        "description": "Create Staff model, repository, service layer, and all staff management commands with role hierarchy validation",
+        "details": "Define Staff interface with role hierarchy, ratings, hiring dates. Create StaffRepository with custom queries for role filtering and performance metrics. Implement StaffService with business logic for hire/fire/promote/demote operations including Discord role synchronization. Build /staff commands (list, hire, fire, promote, demote, info) with proper permission checks and audit logging to MODLOG_CHANNEL_ID.",
+        "testStrategy": "Test role hierarchy validation, Discord role synchronization, staff database operations, permission enforcement",
+        "priority": "high",
+        "dependencies": [
+          3
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Staff model with role hierarchy definition",
+            "description": "Create Staff model with role hierarchy system including role definitions, permissions mapping, and hierarchical relationships between staff roles",
+            "dependencies": [],
+            "details": "Define Staff entity with fields for user identification, role assignment, permissions, hire date, and status. Implement role hierarchy enum/constants with clear permission levels (Admin, Moderator, Helper, etc.). Include role inheritance logic and permission checking methods.",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 2,
+            "title": "StaffRepository with custom queries",
+            "description": "Implement StaffRepository interface with custom database queries for staff management operations including role-based filtering and hierarchy queries",
+            "dependencies": [
+              1
+            ],
+            "details": "Create repository methods for finding staff by role, getting staff hierarchy, querying active/inactive staff, and complex filtering operations. Include pagination support and optimized queries for role-based searches.",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 3,
+            "title": "StaffService business logic layer",
+            "description": "Develop StaffService containing core business logic for staff operations including role assignments, promotions, demotions, and staff lifecycle management",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "Implement methods for staff creation, role updates, permission validation, staff status changes, and business rule enforcement. Include validation logic for role transitions and permission checks.",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 4,
+            "title": "Discord role synchronization logic",
+            "description": "Build Discord integration system to synchronize staff roles between the application and Discord server, including automatic role assignment and updates",
+            "dependencies": [
+              1,
+              3
+            ],
+            "details": "Implement Discord API integration for role management, create mapping between internal roles and Discord roles, handle role sync events, and manage Discord permission updates when staff roles change.",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 5,
+            "title": "Staff management commands implementation",
+            "description": "Create command handlers for staff management operations including promote, demote, hire, fire, and role assignment commands with proper authorization",
+            "dependencies": [
+              3,
+              4
+            ],
+            "details": "Implement Discord slash commands or bot commands for staff management. Include command validation, permission checking, confirmation prompts for destructive actions, and proper error handling with user feedback.",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 6,
+            "title": "Audit logging system",
+            "description": "Develop comprehensive audit logging system to track all staff-related actions including role changes, permissions updates, and administrative actions",
+            "dependencies": [
+              3
+            ],
+            "details": "Create audit log model and repository, implement logging for all staff operations, include timestamp, actor, target, action type, and before/after states. Add audit log querying and reporting capabilities.",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 7,
+            "title": "Permission enforcement and validation",
+            "description": "Implement permission enforcement system with validation logic to ensure proper authorization for all staff management operations and command executions",
+            "dependencies": [
+              1,
+              3,
+              6
+            ],
+            "details": "Create permission validation middleware, implement role-based access control, add authorization checks to all staff operations, and ensure proper permission inheritance through role hierarchy. Include security validation and unauthorized access prevention.",
+            "status": "done",
+            "testStrategy": ""
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Implement Job Management System",
+        "description": "Create Job model, repository, and dynamic job posting system with custom application questions",
+        "details": "Define Job interface with custom questions JSON format, position limits, status tracking. Create JobRepository with queries for open/closed filtering and search functionality. Implement /job commands (list, add, edit) with pagination (5 jobs per page). Support custom application questions with multiple input types (short, paragraph, number, choice). Implement automatic role cleanup when jobs close.",
+        "testStrategy": "Test job creation/editing, custom questions validation, pagination logic, role management automation",
+        "priority": "medium",
+        "dependencies": [
+          4
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Job model with custom questions JSON schema",
+            "description": "Create Job model with flexible custom questions schema supporting various question types (text, multiple choice, file upload, etc.) with proper validation",
+            "dependencies": [],
+            "details": "Define Job model with fields for title, description, requirements, and a JSON schema field for custom application questions. Include validation for question types, required fields, and proper JSON structure.",
+            "status": "pending",
+            "testStrategy": ""
+          },
+          {
+            "id": 2,
+            "title": "JobRepository with filtering and search",
+            "description": "Implement repository pattern for Job entities with comprehensive filtering, search, and query capabilities",
+            "dependencies": [
+              1
+            ],
+            "details": "Create JobRepository with methods for filtering by status, location, department, salary range, and full-text search across job titles and descriptions. Include proper indexing and query optimization.",
+            "status": "pending",
+            "testStrategy": ""
+          },
+          {
+            "id": 3,
+            "title": "Job management commands with pagination",
+            "description": "Build command handlers for job CRUD operations with pagination, sorting, and bulk operations support",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "Implement commands for creating, updating, deleting, and listing jobs with pagination support. Include bulk operations for managing multiple jobs and proper error handling.",
+            "status": "pending",
+            "testStrategy": ""
+          },
+          {
+            "id": 4,
+            "title": "Custom application questions system",
+            "description": "Develop dynamic form system for rendering and validating custom job application questions based on JSON schema",
+            "dependencies": [
+              1
+            ],
+            "details": "Create form builder that dynamically renders questions based on job's custom schema. Include validation logic, conditional questions, file upload handling, and response storage.",
+            "status": "pending",
+            "testStrategy": ""
+          },
+          {
+            "id": 5,
+            "title": "Automatic role cleanup automation",
+            "description": "Implement automated system for cleaning up expired job postings and managing role lifecycle",
+            "dependencies": [
+              2,
+              3
+            ],
+            "details": "Create scheduled tasks for automatically archiving expired jobs, cleaning up associated data, sending notifications to stakeholders, and maintaining role status consistency.",
+            "status": "pending",
+            "testStrategy": ""
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Implement Application System with Roblox Integration",
+        "description": "Build dynamic application workflow with Roblox API validation and automated review process",
+        "details": "Create Application model and repository. Integrate Noblox.js for Roblox username validation and profile lookup. Implement /apply command with dynamic job selection dropdown and modal generation based on job questions. Build application review workflow with accept/decline buttons, automatic role assignment, and DM notifications. Prevent duplicate applications and validate against existing staff.",
+        "testStrategy": "Test Roblox API integration, dynamic modal generation, application workflow end-to-end, duplicate prevention",
+        "priority": "high",
+        "dependencies": [
+          5
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Application model and repository",
+            "description": "Create database models and repository layer for managing job applications with proper data persistence",
+            "dependencies": [],
+            "details": "Design and implement application data models including fields for user info, job selection, answers, status, timestamps. Create repository pattern for CRUD operations with proper error handling and data validation.",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 2,
+            "title": "Noblox.js integration and Roblox API wrapper",
+            "description": "Implement Roblox API integration using noblox.js for user verification and data fetching",
+            "dependencies": [],
+            "details": "Set up noblox.js authentication, create wrapper functions for Roblox user data retrieval, implement error handling for API failures, and establish rate limiting for API calls.",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 3,
+            "title": "Dynamic job selection dropdown",
+            "description": "Create dynamic dropdown component that populates available jobs from configuration or API",
+            "dependencies": [],
+            "details": "Build reusable dropdown component with job fetching logic, implement search/filter functionality, handle loading states, and ensure proper accessibility standards.",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 4,
+            "title": "Modal generation based on job questions",
+            "description": "Implement dynamic modal system that generates forms based on job-specific question configurations",
+            "dependencies": [
+              1,
+              3
+            ],
+            "details": "Create modal component with dynamic form generation, implement question rendering logic for different field types, add form validation, and handle modal state management.",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 5,
+            "title": "Application review workflow",
+            "description": "Build administrative interface for reviewing submitted applications with filtering and status management",
+            "dependencies": [
+              1
+            ],
+            "details": "Create review dashboard with application listing, implement filtering by status/job/date, add detailed application view, and provide workflow controls for reviewers.",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 6,
+            "title": "Accept/decline button interactions",
+            "description": "Implement review actions with proper state management and user feedback systems",
+            "dependencies": [
+              5
+            ],
+            "details": "Add accept/decline buttons with confirmation dialogs, implement status update logic, provide user feedback notifications, and handle error states gracefully.",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 7,
+            "title": "DM notification system",
+            "description": "Create automated notification system for sending direct messages to applicants about status changes",
+            "dependencies": [
+              2,
+              6
+            ],
+            "details": "Implement notification service integration, create message templates for different statuses, add notification queue management, and provide delivery confirmation tracking.",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 8,
+            "title": "Duplicate prevention and validation logic",
+            "description": "Implement comprehensive validation to prevent duplicate applications and ensure data integrity",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "Create duplicate detection logic based on user ID and job combination, implement validation middleware, add rate limiting per user, and provide clear error messages for rejected submissions.",
+            "status": "done",
+            "testStrategy": ""
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Implement Retainer Agreement System",
+        "description": "Create digital retainer workflow with signature process and client onboarding automation",
+        "details": "Define Retainer model with agreement details and signature status. Create RetainerRepository and RetainerService. Implement /retainer commands (sign, list, listall) with DM-based signature workflow using Discord modals. Automate client role assignment upon signature completion. Store signed agreements in RETAINER_CHANNEL_ID with proper formatting using createAALegalEmbed utility.",
+        "testStrategy": "Test DM signature workflow, modal form validation, automatic role assignment, agreement archival",
+        "priority": "medium",
+        "dependencies": [
+          6
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Retainer model and database schema",
+            "description": "Design and implement the database schema for retainer agreements including client information, terms, payment details, and status tracking",
+            "dependencies": [],
+            "details": "Create database tables/models for retainer agreements with fields for client ID, agreement terms, payment amount, duration, status, timestamps, and any custom clauses. Include proper indexing and relationships.",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 2,
+            "title": "RetainerRepository implementation",
+            "description": "Implement repository pattern for retainer data access layer with CRUD operations and business logic methods",
+            "dependencies": [
+              1
+            ],
+            "details": "Create RetainerRepository class with methods for creating, reading, updating, and deleting retainer agreements. Include methods for querying by client, status, expiration date, and other business requirements.",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 3,
+            "title": "DM-based signature workflow",
+            "description": "Implement direct message workflow for sending retainer agreements to clients for review and digital signature",
+            "dependencies": [
+              2
+            ],
+            "details": "Create DM bot functionality that sends retainer agreements to clients, tracks response status, handles signature collection through secure methods, and manages workflow state transitions.",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 4,
+            "title": "Discord modal forms for agreements",
+            "description": "Create Discord modal forms for staff to input retainer agreement details and initiate the signature process",
+            "dependencies": [
+              2
+            ],
+            "details": "Implement Discord slash commands and modal forms that allow staff to create new retainer agreements, specify terms, select clients, and trigger the DM signature workflow with proper validation.",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 5,
+            "title": "Automatic client role assignment",
+            "description": "Implement automated Discord role assignment system that grants client roles upon successful retainer agreement completion",
+            "dependencies": [
+              3
+            ],
+            "details": "Create automated system that monitors retainer agreement status and assigns appropriate Discord roles to clients when agreements are signed and active. Include role removal for expired agreements.",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 6,
+            "title": "Agreement archival and formatting system",
+            "description": "Implement system for archiving completed agreements and formatting them for legal record-keeping",
+            "dependencies": [
+              3,
+              5
+            ],
+            "details": "Create archival system that generates properly formatted legal documents from signed agreements, stores them securely, provides retrieval mechanisms, and maintains audit trails for compliance purposes.",
+            "status": "done",
+            "testStrategy": ""
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Implement Case Management System",
+        "description": "Build comprehensive legal case workflow with channel management, lawyer assignment, and case lifecycle tracking",
+        "details": "Create Case model with sequential ID generation (YYYY-NNNN format), lawyer assignments, and status tracking. Implement CaseRepository with filtering and search capabilities. Build /case commands (review, assign, reassign, unassign, close, list, info) with automatic channel creation in CASE_REVIEW_CATEGORY_ID, permission management, and archive functionality. Implement interactive buttons for case acceptance/decline and tabbed case information display.",
+        "testStrategy": "Test case channel creation/management, lawyer assignment logic, case lifecycle automation, interactive components",
+        "priority": "high",
+        "dependencies": [
+          7
+        ],
+        "status": "in-progress",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Case model with sequential ID generation",
+            "description": "Create Case model with automatic sequential ID assignment, case properties, and database schema",
+            "dependencies": [],
+            "details": "Implement Case entity with auto-incrementing case numbers, essential case fields (title, description, priority, created date, etc.), and proper database migrations",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 2,
+            "title": "CaseRepository with advanced filtering",
+            "description": "Build repository layer with complex query capabilities for case management",
+            "dependencies": [
+              1
+            ],
+            "details": "Create CaseRepository with methods for filtering by status, lawyer, priority, date ranges, and other criteria. Include pagination and sorting capabilities",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 3,
+            "title": "Automatic channel creation and management",
+            "description": "Implement Discord channel creation automation for new cases",
+            "dependencies": [
+              1
+            ],
+            "details": "Create service to automatically generate Discord channels when cases are opened, with proper naming conventions and initial setup",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 4,
+            "title": "Lawyer assignment and reassignment logic",
+            "description": "Build system for assigning lawyers to cases with reassignment capabilities",
+            "dependencies": [
+              2
+            ],
+            "details": "Implement logic for initial lawyer assignment (manual/automatic), reassignment workflows, and tracking assignment history",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 5,
+            "title": "Case lifecycle status management",
+            "description": "Create comprehensive case status tracking and workflow management",
+            "dependencies": [
+              2
+            ],
+            "details": "Define case statuses (open, in-progress, closed, archived, etc.) with transition rules and automated status updates based on actions",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 6,
+            "title": "Interactive buttons and UI components",
+            "description": "Develop Discord interactive components for case management actions",
+            "dependencies": [
+              4,
+              5
+            ],
+            "details": "Create Discord buttons, select menus, and modals for case actions like status updates, lawyer assignments, and case modifications",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 7,
+            "title": "Channel permissions and archival",
+            "description": "Implement Discord channel permission management and archival system",
+            "dependencies": [
+              3,
+              5
+            ],
+            "details": "Set up channel permissions based on case status and participants, implement automatic archival for closed cases, and manage access control",
+            "status": "done",
+            "testStrategy": ""
+          },
+          {
+            "id": 8,
+            "title": "Tabbed information display system",
+            "description": "Create multi-tab interface for comprehensive case information presentation",
+            "dependencies": [
+              6
+            ],
+            "details": "Build tabbed display system showing case details, timeline, documents, participants, and history with navigation between tabs",
+            "status": "in-progress",
+            "testStrategy": ""
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "title": "Implement Feedback & Reminder Systems",
+        "description": "Create feedback collection with star ratings and time-based reminder functionality",
+        "details": "Define Feedback model with star ratings (1-5) and staff performance aggregation. Create FeedbackRepository with search capabilities by user and date range. Implement /feedback commands (submit, search) with integration to staff performance metrics. Build reminder system supporting human-readable time formats (10m, 2h, 1d) with maximum 7-day period. Use setTimeout for reminder delivery with proper error handling.",
+        "testStrategy": "Test feedback submission and search, star rating aggregation, reminder parsing and delivery, time format validation",
+        "priority": "medium",
+        "dependencies": [
+          8
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Feedback model with star rating system",
+            "description": "Create a feedback data model that supports star ratings and structured feedback collection",
+            "dependencies": [],
+            "details": "Design and implement a feedback model with star rating validation, feedback text storage, timestamp tracking, and user identification. Include validation for rating ranges and data serialization.",
+            "status": "pending",
+            "testStrategy": ""
+          },
+          {
+            "id": 2,
+            "title": "FeedbackRepository with search capabilities",
+            "description": "Implement repository pattern for feedback storage with advanced search and filtering",
+            "dependencies": [
+              1
+            ],
+            "details": "Create a repository class that handles feedback persistence, retrieval, and search operations. Include filtering by date ranges, rating levels, users, and text search capabilities.",
+            "status": "pending",
+            "testStrategy": ""
+          },
+          {
+            "id": 3,
+            "title": "Staff performance metrics aggregation",
+            "description": "Build system to calculate and aggregate performance metrics from feedback data",
+            "dependencies": [
+              2
+            ],
+            "details": "Implement metrics calculation including average ratings, feedback trends over time, performance scoring algorithms, and statistical analysis of staff performance based on collected feedback.",
+            "status": "pending",
+            "testStrategy": ""
+          },
+          {
+            "id": 4,
+            "title": "Reminder system with time parsing",
+            "description": "Create reminder scheduling system with natural language time parsing capabilities",
+            "dependencies": [],
+            "details": "Implement time parsing logic to handle various time formats, schedule reminders, and manage reminder state. Include support for relative times, absolute timestamps, and recurring reminders.",
+            "status": "pending",
+            "testStrategy": ""
+          },
+          {
+            "id": 5,
+            "title": "Reminder delivery and timeout management",
+            "description": "Build reminder delivery mechanism with timeout handling and memory management",
+            "dependencies": [
+              4
+            ],
+            "details": "Implement reminder delivery system with timeout management, memory cleanup for expired reminders, error handling for failed deliveries, and retry mechanisms. Include proper resource management and cleanup procedures.",
+            "status": "pending",
+            "testStrategy": ""
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "title": "Implement System Utilities & Maintenance",
+        "description": "Build comprehensive repair system, metrics tracking, and help documentation with health monitoring",
+        "details": "Implement /repair commands (staff-roles, job-roles, channels, config, orphaned, db-indexes, all, dry-run, health) with Discord-database synchronization logic. Create metrics aggregation for /metrics and /stats commands tracking application counts, staff distribution, case statistics, and system uptime. Build dynamic help system with /help and /slashes commands using Discord API introspection. Add debug commands (debug_collection, debug_wipe_collections, setupserver) with proper safety confirmations.",
+        "testStrategy": "Test all repair routines with dry-run mode, metrics calculation accuracy, help system command discovery, debug functionality safety",
+        "priority": "medium",
+        "dependencies": [
+          9
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Database repair and synchronization routines",
+            "description": "Implement database integrity checks, repair mechanisms, and synchronization routines to maintain data consistency",
+            "dependencies": [],
+            "details": "Create functions to validate database schema, check for orphaned records, repair corrupted data, and synchronize between different database components. Include transaction rollback capabilities and data validation checks.",
+            "status": "pending",
+            "testStrategy": ""
+          },
+          {
+            "id": 2,
+            "title": "Discord-database sync logic",
+            "description": "Build synchronization mechanisms between Discord API data and local database records",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement bidirectional sync between Discord server state and database, handle Discord API rate limits, manage user/role/channel synchronization, and resolve conflicts between Discord and database states.",
+            "status": "pending",
+            "testStrategy": ""
+          },
+          {
+            "id": 3,
+            "title": "Metrics aggregation and calculation",
+            "description": "Create system for collecting, aggregating, and calculating various system and user metrics",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "Build metrics collection framework, implement aggregation algorithms for user activity, system performance, and Discord interactions. Include historical data processing and real-time metric updates.",
+            "status": "pending",
+            "testStrategy": ""
+          },
+          {
+            "id": 4,
+            "title": "Dynamic help system with API introspection",
+            "description": "Develop intelligent help system that dynamically generates documentation through API introspection",
+            "dependencies": [],
+            "details": "Create system to automatically discover available commands, parameters, and features through code introspection. Generate contextual help content and maintain up-to-date documentation without manual updates.",
+            "status": "pending",
+            "testStrategy": ""
+          },
+          {
+            "id": 5,
+            "title": "Debug commands with safety confirmations",
+            "description": "Implement debug and administrative commands with built-in safety mechanisms and confirmation prompts",
+            "dependencies": [
+              1
+            ],
+            "details": "Create debug commands for system inspection and manipulation, implement multi-step confirmation for destructive operations, add user permission checks, and provide detailed operation previews before execution.",
+            "status": "pending",
+            "testStrategy": ""
+          },
+          {
+            "id": 6,
+            "title": "Health monitoring and system status",
+            "description": "Build comprehensive health monitoring system to track system status and performance",
+            "dependencies": [
+              3
+            ],
+            "details": "Implement health checks for database connectivity, Discord API status, system resources, and application components. Create status reporting dashboard and alerting mechanisms for system issues.",
+            "status": "pending",
+            "testStrategy": ""
+          },
+          {
+            "id": 7,
+            "title": "Dry-run mode implementation",
+            "description": "Create dry-run mode functionality to preview operations without executing them",
+            "dependencies": [
+              5
+            ],
+            "details": "Implement simulation mode for all administrative and potentially destructive operations. Provide detailed preview of changes, impact analysis, and rollback planning without actually modifying system state.",
+            "status": "pending",
+            "testStrategy": ""
+          }
+        ]
+      }
+    ],
+    "metadata": {
+      "created": "2025-06-23T20:21:56.717Z",
+      "updated": "2025-06-24T00:47:31.026Z",
+      "description": "Tasks for master context"
+    }
+  }
+}
