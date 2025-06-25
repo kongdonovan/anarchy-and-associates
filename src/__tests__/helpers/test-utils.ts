@@ -4,7 +4,10 @@ import { StaffRole } from '../../domain/entities/staff-role';
 import { Case, CaseStatus, CasePriority } from '../../domain/entities/case';
 import { Job } from '../../domain/entities/job';
 import { Application } from '../../domain/entities/application';
+import { Retainer, RetainerStatus } from '../../domain/entities/retainer';
+import { Reminder } from '../../domain/entities/reminder';
 import { MongoDbClient } from '../../infrastructure/database/mongo-client';
+import { Feedback, FeedbackRating } from '../../domain/entities/feedback';
 
 export class TestUtils {
   static generateObjectId(): ObjectId {
@@ -84,6 +87,59 @@ export class TestUtils {
       robloxUsername: `roblox${Date.now()}`,
       answers: [],
       status: 'pending',
+      createdAt: now,
+      updatedAt: now,
+      ...overrides
+    };
+  }
+
+  static generateMockRetainer(overrides: Partial<Retainer> = {}): Retainer {
+    const now = new Date();
+    
+    return {
+      _id: this.generateObjectId(),
+      guildId: 'test-guild-123',
+      clientId: `client-${Date.now()}`,
+      lawyerId: `lawyer-${Date.now()}`,
+      status: RetainerStatus.PENDING,
+      agreementTemplate: 'RETAINER AGREEMENT\n\nThis is a test agreement for [CLIENT_NAME].\n\nSignature: [SIGNATURE]\nDate: [DATE]\nLawyer: [LAWYER_NAME]',
+      createdAt: now,
+      updatedAt: now,
+      ...overrides
+    };
+  }
+
+  static generateMockReminder(overrides: Partial<Reminder> = {}): Reminder {
+    const now = new Date();
+    const futureTime = new Date(now.getTime() + 2 * 60 * 60 * 1000); // 2 hours from now
+    
+    return {
+      _id: this.generateObjectId(),
+      guildId: 'test-guild-123',
+      userId: `user-${Date.now()}`,
+      username: `testuser${Date.now()}`,
+      message: 'Test reminder message',
+      scheduledFor: futureTime,
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+      ...overrides
+    };
+  }
+
+  static generateMockFeedback(overrides: Partial<Feedback> = {}): Feedback {
+    const now = new Date();
+    
+    return {
+      _id: this.generateObjectId(),
+      guildId: 'test-guild-123',
+      submitterId: `client-${Date.now()}`,
+      submitterUsername: `testclient${Date.now()}`,
+      targetStaffId: `staff-${Date.now()}`,
+      targetStaffUsername: `teststaff${Date.now()}`,
+      rating: FeedbackRating.FOUR_STAR,
+      comment: 'Great service and very professional!',
+      isForFirm: false,
       createdAt: now,
       updatedAt: now,
       ...overrides
