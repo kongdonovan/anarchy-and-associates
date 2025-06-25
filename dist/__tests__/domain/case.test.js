@@ -23,7 +23,6 @@ describe('Case Entity', () => {
         it('should handle all valid case statuses', () => {
             const validStatuses = [
                 case_1.CaseStatus.PENDING,
-                case_1.CaseStatus.OPEN,
                 case_1.CaseStatus.IN_PROGRESS,
                 case_1.CaseStatus.CLOSED
             ];
@@ -145,10 +144,8 @@ describe('Case Entity', () => {
     describe('Case Status Transitions', () => {
         it('should allow valid status transitions', () => {
             const validTransitions = [
-                { from: case_1.CaseStatus.PENDING, to: case_1.CaseStatus.OPEN },
-                { from: case_1.CaseStatus.OPEN, to: case_1.CaseStatus.IN_PROGRESS },
-                { from: case_1.CaseStatus.IN_PROGRESS, to: case_1.CaseStatus.CLOSED },
-                { from: case_1.CaseStatus.OPEN, to: case_1.CaseStatus.CLOSED }, // Direct closure
+                { from: case_1.CaseStatus.PENDING, to: case_1.CaseStatus.IN_PROGRESS },
+                { from: case_1.CaseStatus.IN_PROGRESS, to: case_1.CaseStatus.CLOSED }
             ];
             validTransitions.forEach(({ from, to }) => {
                 const testCase = test_utils_1.TestUtils.generateMockCase({ status: from });
@@ -176,12 +173,12 @@ describe('Case Entity', () => {
         });
         it('should track case opening details', () => {
             const leadAttorneyId = 'lawyer456';
-            const openCase = test_utils_1.TestUtils.generateMockCase({
-                status: case_1.CaseStatus.OPEN,
+            const inProgressCase = test_utils_1.TestUtils.generateMockCase({
+                status: case_1.CaseStatus.IN_PROGRESS,
                 leadAttorneyId
             });
-            expect(openCase.status).toBe(case_1.CaseStatus.OPEN);
-            expect(openCase.leadAttorneyId).toBe(leadAttorneyId);
+            expect(inProgressCase.status).toBe(case_1.CaseStatus.IN_PROGRESS);
+            expect(inProgressCase.leadAttorneyId).toBe(leadAttorneyId);
         });
     });
     describe('Case Assignment Management', () => {
@@ -189,10 +186,10 @@ describe('Case Entity', () => {
             const leadAttorneyId = 'lawyer123';
             const testCase = test_utils_1.TestUtils.generateMockCase({
                 leadAttorneyId,
-                status: case_1.CaseStatus.OPEN
+                status: case_1.CaseStatus.IN_PROGRESS
             });
             expect(testCase.leadAttorneyId).toBe(leadAttorneyId);
-            expect(testCase.status).toBe(case_1.CaseStatus.OPEN);
+            expect(testCase.status).toBe(case_1.CaseStatus.IN_PROGRESS);
         });
         it('should handle multiple assigned lawyers', () => {
             const assignedLawyers = ['lawyer1', 'lawyer2', 'lawyer3'];

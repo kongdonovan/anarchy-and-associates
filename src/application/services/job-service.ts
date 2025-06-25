@@ -4,6 +4,7 @@ import { StaffRepository } from '../../infrastructure/repositories/staff-reposit
 import { Job, JobQuestion, DEFAULT_JOB_QUESTIONS } from '../../domain/entities/job';
 import { StaffRole, RoleUtils } from '../../domain/entities/staff-role';
 import { AuditAction } from '../../domain/entities/audit-log';
+import { PermissionService, PermissionContext } from './permission-service';
 import { logger } from '../../infrastructure/logger';
 
 export interface JobCreateRequest {
@@ -30,19 +31,31 @@ export interface JobUpdateRequest {
 export class JobService {
   private jobRepository: JobRepository;
   private auditLogRepository: AuditLogRepository;
+  private permissionService: PermissionService;
 
   constructor(
     jobRepository: JobRepository,
     auditLogRepository: AuditLogRepository,
-    _staffRepository: StaffRepository // Future use for staff validation
+    _staffRepository: StaffRepository, // Future use for staff validation
+    permissionService: PermissionService
   ) {
     this.jobRepository = jobRepository;
     this.auditLogRepository = auditLogRepository;
+    this.permissionService = permissionService;
     // _staffRepository reserved for future use
   }
 
-  public async createJob(request: JobCreateRequest): Promise<{ success: boolean; job?: Job; error?: string }> {
+  public async createJob(context: PermissionContext, request: JobCreateRequest): Promise<{ success: boolean; job?: Job; error?: string }> {
     try {
+      // Check HR permission for creating jobs
+      const hasPermission = await this.permissionService.hasHRPermissionWithContext(context);
+      if (!hasPermission) {
+        return {
+          success: false,
+          error: 'You do not have permission to create job postings',
+        };
+      }
+
       const { guildId, title, description, staffRole, roleId, customQuestions, postedBy } = request;
 
       // Validate staff role
@@ -128,14 +141,21 @@ export class JobService {
   }
 
   public async updateJob(
-    guildId: string,
+    context: PermissionContext,
     jobId: string,
-    updates: JobUpdateRequest,
-    updatedBy: string
+    updates: JobUpdateRequest
   ): Promise<{ success: boolean; job?: Job; error?: string }> {
     try {
+      // Check HR permission for updating jobs
+      const hasPermission = await this.permissionService.hasHRPermissionWithContext(context);
+      if (!hasPermission) {
+        return {
+          success: false,
+          error: 'You do not have permission to update job postings',
+        };
+      }
       const existingJob = await this.jobRepository.findById(jobId);
-      if (!existingJob || existingJob.guildId !== guildId) {
+      if (!existingJob || existingJob.guildId !== context.guildId) {
         return {
           success: false,
           error: 'Job not found',
@@ -152,7 +172,7 @@ export class JobService {
 
       // If changing staff role, check for conflicts
       if (updates.staffRole && updates.staffRole !== existingJob.staffRole) {
-        const existingJobs = await this.jobRepository.getOpenJobsForRole(guildId, updates.staffRole);
+        const existingJobs = await this.jobRepository.getOpenJobsForRole(context.guildId, updates.staffRole);
         if (existingJobs.some(job => job._id?.toHexString() !== jobId)) {
           return {
             success: false,
@@ -188,9 +208,9 @@ export class JobService {
 
       // Log the action
       await this.auditLogRepository.logAction({
-        guildId,
+        guildId: context.guildId,
         action: AuditAction.JOB_UPDATED,
-        actorId: updatedBy,
+        actorId: context.userId,
         details: {
           before: {
             staffRole: existingJob.staffRole,
@@ -207,7 +227,7 @@ export class JobService {
         timestamp: new Date(),
       });
 
-      logger.info(`Job updated: ${updatedJob.title} (${jobId}) by ${updatedBy} in guild ${guildId}`);
+      logger.info(`Job updated: ${updatedJob.title} (${jobId}) by ${context.userId} in guild ${context.guildId}`);
 
       return {
         success: true,
@@ -223,12 +243,19 @@ export class JobService {
   }
 
   public async closeJob(
-    guildId: string,
-    jobId: string,
-    closedBy: string
+    context: PermissionContext,
+    jobId: string
   ): Promise<{ success: boolean; job?: Job; error?: string }> {
     try {
-      const job = await this.jobRepository.closeJob(guildId, jobId, closedBy);
+      // Check HR permission for closing jobs
+      const hasPermission = await this.permissionService.hasHRPermissionWithContext(context);
+      if (!hasPermission) {
+        return {
+          success: false,
+          error: 'You do not have permission to close job postings',
+        };
+      }
+      const job = await this.jobRepository.closeJob(context.guildId, jobId, context.userId);
       if (!job) {
         return {
           success: false,
@@ -238,9 +265,9 @@ export class JobService {
 
       // Log the action
       await this.auditLogRepository.logAction({
-        guildId,
+        guildId: context.guildId,
         action: AuditAction.JOB_CLOSED,
-        actorId: closedBy,
+        actorId: context.userId,
         details: {
           before: { status: 'open' },
           after: { status: 'closed' },
@@ -253,7 +280,7 @@ export class JobService {
         timestamp: new Date(),
       });
 
-      logger.info(`Job closed: ${job.title} (${jobId}) by ${closedBy} in guild ${guildId}`);
+      logger.info(`Job closed: ${job.title} (${jobId}) by ${context.userId} in guild ${context.guildId}`);
 
       return {
         success: true,
@@ -269,20 +296,27 @@ export class JobService {
   }
 
   public async removeJob(
-    guildId: string,
-    jobId: string,
-    removedBy: string
+    context: PermissionContext,
+    jobId: string
   ): Promise<{ success: boolean; error?: string }> {
     try {
+      // Check HR permission for removing jobs
+      const hasPermission = await this.permissionService.hasHRPermissionWithContext(context);
+      if (!hasPermission) {
+        return {
+          success: false,
+          error: 'You do not have permission to remove job postings',
+        };
+      }
       const job = await this.jobRepository.findById(jobId);
-      if (!job || job.guildId !== guildId) {
+      if (!job || job.guildId !== context.guildId) {
         return {
           success: false,
           error: 'Job not found',
         };
       }
 
-      const deleted = await this.jobRepository.removeJob(guildId, jobId, removedBy);
+      const deleted = await this.jobRepository.removeJob(context.guildId, jobId, context.userId);
       if (!deleted) {
         return {
           success: false,
@@ -292,9 +326,9 @@ export class JobService {
 
       // Log the action
       await this.auditLogRepository.logAction({
-        guildId,
+        guildId: context.guildId,
         action: AuditAction.JOB_REMOVED,
-        actorId: removedBy,
+        actorId: context.userId,
         details: {
           before: { status: job.isOpen ? 'open' : 'closed' },
           after: { status: 'removed' },
@@ -307,7 +341,7 @@ export class JobService {
         timestamp: new Date(),
       });
 
-      logger.info(`Job removed: ${job.title} (${jobId}) by ${removedBy} in guild ${guildId}`);
+      logger.info(`Job removed: ${job.title} (${jobId}) by ${context.userId} in guild ${context.guildId}`);
 
       return {
         success: true,
@@ -322,19 +356,23 @@ export class JobService {
   }
 
   public async listJobs(
-    guildId: string,
+    context: PermissionContext,
     filters: JobSearchFilters,
-    page: number = 1,
-    requestedBy: string
+    page: number = 1
   ): Promise<JobListResult> {
     try {
-      const result = await this.jobRepository.searchJobs(guildId, filters, page, 5);
+      // Check HR permission for listing jobs
+      const hasPermission = await this.permissionService.hasHRPermissionWithContext(context);
+      if (!hasPermission) {
+        throw new Error('You do not have permission to view job listings');
+      }
+      const result = await this.jobRepository.searchJobs(context.guildId, filters, page, 5);
 
       // Log the action for audit trail
       await this.auditLogRepository.logAction({
-        guildId,
+        guildId: context.guildId,
         action: AuditAction.JOB_LIST_VIEWED,
-        actorId: requestedBy,
+        actorId: context.userId,
         details: {
           metadata: {
             filters,
@@ -352,18 +390,23 @@ export class JobService {
     }
   }
 
-  public async getJobDetails(guildId: string, jobId: string, requestedBy: string): Promise<Job | null> {
+  public async getJobDetails(context: PermissionContext, jobId: string): Promise<Job | null> {
     try {
+      // Check HR permission for viewing job details
+      const hasPermission = await this.permissionService.hasHRPermissionWithContext(context);
+      if (!hasPermission) {
+        throw new Error('You do not have permission to view job details');
+      }
       const job = await this.jobRepository.findById(jobId);
-      if (!job || job.guildId !== guildId) {
+      if (!job || job.guildId !== context.guildId) {
         return null;
       }
 
       // Log the action
       await this.auditLogRepository.logAction({
-        guildId,
+        guildId: context.guildId,
         action: AuditAction.JOB_INFO_VIEWED,
-        actorId: requestedBy,
+        actorId: context.userId,
         details: {
           metadata: {
             jobId,
@@ -380,7 +423,7 @@ export class JobService {
     }
   }
 
-  public async getJobStatistics(guildId: string): Promise<{
+  public async getJobStatistics(context: PermissionContext): Promise<{
     totalJobs: number;
     openJobs: number;
     closedJobs: number;
@@ -389,7 +432,13 @@ export class JobService {
     jobsByRole: Record<StaffRole, number>;
   }> {
     try {
-      return await this.jobRepository.getJobStatistics(guildId);
+      // Check HR permission for viewing job statistics
+      const hasPermission = await this.permissionService.hasHRPermissionWithContext(context);
+      if (!hasPermission) {
+        throw new Error('You do not have permission to view job statistics');
+      }
+
+      return await this.jobRepository.getJobStatistics(context.guildId);
     } catch (error) {
       logger.error('Error getting job statistics:', error);
       throw error;

@@ -270,7 +270,7 @@ describe('Discord Command Workflows E2E Tests', () => {
       );
 
       // 5. Verify case acceptance
-      expect(acceptedCase.status).toBe(CaseStatus.OPEN);
+      expect(acceptedCase.status).toBe(CaseStatus.IN_PROGRESS);
       expect(acceptedCase.leadAttorneyId).toBe(regularUserId);
       expect(acceptedCase.assignedLawyerIds).toContain(regularUserId);
 
@@ -361,7 +361,7 @@ describe('Discord Command Workflows E2E Tests', () => {
 
       // Verify final case state
       const finalCase = await caseService.getCaseById(caseId);
-      expect(finalCase?.status).toBe(CaseStatus.OPEN);
+      expect(finalCase?.status).toBe(CaseStatus.IN_PROGRESS);
       expect(finalCase?.leadAttorneyId).toBeTruthy();
     });
   });

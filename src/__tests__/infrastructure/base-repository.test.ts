@@ -31,6 +31,18 @@ describe('BaseMongoRepository', () => {
   });
 
   describe('constructor', () => {
+    let originalGlobalClient: MongoDbClient | undefined;
+    beforeEach(() => {
+      // Temporarily hide the global client to test the throw condition
+      originalGlobalClient = (global as any).__mongoClient;
+      (global as any).__mongoClient = undefined;
+    });
+
+    afterEach(() => {
+      // Restore the global client for other tests
+      (global as any).__mongoClient = originalGlobalClient;
+    });
+
     it('should throw when database is not connected', () => {
       expect(() => new TestRepository()).toThrow('Database not connected. Call connect() first.');
     });

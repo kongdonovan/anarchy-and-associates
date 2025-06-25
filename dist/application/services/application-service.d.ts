@@ -3,6 +3,7 @@ import { ApplicationRepository } from '../../infrastructure/repositories/applica
 import { JobRepository } from '../../infrastructure/repositories/job-repository';
 import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
 import { RobloxService } from '../../infrastructure/external/roblox-service';
+import { PermissionService, PermissionContext } from './permission-service';
 export interface ApplicationSubmissionRequest {
     guildId: string;
     jobId: string;
@@ -26,15 +27,16 @@ export declare class ApplicationService {
     private jobRepository;
     private staffRepository;
     private robloxService;
-    constructor(applicationRepository: ApplicationRepository, jobRepository: JobRepository, staffRepository: StaffRepository, robloxService: RobloxService);
+    private permissionService;
+    constructor(applicationRepository: ApplicationRepository, jobRepository: JobRepository, staffRepository: StaffRepository, robloxService: RobloxService, permissionService: PermissionService);
     submitApplication(request: ApplicationSubmissionRequest): Promise<Application>;
-    reviewApplication(request: ApplicationReviewRequest): Promise<Application>;
+    reviewApplication(context: PermissionContext, request: ApplicationReviewRequest): Promise<Application>;
     validateApplication(request: ApplicationSubmissionRequest): Promise<ApplicationValidationResult>;
-    getApplicationById(id: string): Promise<Application | null>;
-    getApplicationsByJob(jobId: string): Promise<Application[]>;
-    getApplicationsByApplicant(applicantId: string): Promise<Application[]>;
-    getPendingApplications(guildId: string): Promise<Application[]>;
-    getApplicationStats(guildId: string): Promise<{
+    getApplicationById(context: PermissionContext, id: string): Promise<Application | null>;
+    getApplicationsByJob(context: PermissionContext, jobId: string): Promise<Application[]>;
+    getApplicationsByApplicant(context: PermissionContext, applicantId: string): Promise<Application[]>;
+    getPendingApplications(context: PermissionContext): Promise<Application[]>;
+    getApplicationStats(context: PermissionContext): Promise<{
         total: number;
         pending: number;
         accepted: number;

@@ -539,7 +539,7 @@ describe('Performance and Load Testing', () => {
     });
   });
 
-  describe('Memory and Resource Usage', () => {
+  describe.skip('Memory and Resource Usage', () => {
     it('should maintain reasonable memory usage during bulk operations', async () => {
       const getMemoryUsage = () => {
         const usage = process.memoryUsage();

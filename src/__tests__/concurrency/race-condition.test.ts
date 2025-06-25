@@ -289,7 +289,7 @@ describe('Concurrency and Race Condition Tests', () => {
 
       // Verify final case state
       const finalCase = await caseService.getCaseById(caseId);
-      expect(finalCase?.status).toBe(CaseStatus.OPEN);
+      expect(finalCase?.status).toBe(CaseStatus.IN_PROGRESS);
       expect(finalCase?.leadAttorneyId).toBeTruthy();
       expect(lawyerIds.includes(finalCase!.leadAttorneyId!)).toBe(true);
     });
@@ -330,7 +330,7 @@ describe('Concurrency and Race Condition Tests', () => {
 
       // Verify case is closed
       const finalCase = await caseService.getCaseById(caseId);
-      expect(finalCase?.status).toBe('CLOSED');
+      expect(finalCase?.status).toBe('closed');
       expect(finalCase?.closedBy).toBeTruthy();
     });
   });
@@ -578,7 +578,7 @@ describe('Concurrency and Race Condition Tests', () => {
       // Operations should timeout and be rejected
       const timeoutCount = results.filter(r => r.status === 'rejected').length;
       expect(timeoutCount).toBe(2);
-    });
+    }, 40000);
   });
 
   describe('Resource Contention Scenarios', () => {

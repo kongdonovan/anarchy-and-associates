@@ -113,7 +113,7 @@ export class MetricsService {
         this.staffRepository.findByFilters({ guildId: guild.id }),
         this.staffRepository.findByFilters({ guildId: guild.id, status: 'active' }),
         this.caseRepository.findByFilters({ guildId: guild.id }),
-        this.caseRepository.findByFilters({ guildId: guild.id, status: CaseStatus.OPEN }),
+        this.caseRepository.findByFilters({ guildId: guild.id, status: CaseStatus.IN_PROGRESS }),
         this.applicationRepository.findByFilters({ guildId: guild.id }),
         this.applicationRepository.findByFilters({ guildId: guild.id, status: 'pending' }),
         this.jobRepository.findByFilters({ guildId: guild.id }),

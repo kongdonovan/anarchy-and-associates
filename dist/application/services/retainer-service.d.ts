@@ -2,18 +2,20 @@ import { Retainer, RetainerCreationRequest, RetainerSignatureRequest, FormattedR
 import { RetainerRepository } from '../../infrastructure/repositories/retainer-repository';
 import { GuildConfigRepository } from '../../infrastructure/repositories/guild-config-repository';
 import { RobloxService } from '../../infrastructure/external/roblox-service';
+import { PermissionService, PermissionContext } from './permission-service';
 export declare class RetainerService {
     private retainerRepository;
     private guildConfigRepository;
     private robloxService;
-    constructor(retainerRepository: RetainerRepository, guildConfigRepository: GuildConfigRepository, robloxService: RobloxService);
-    createRetainer(request: RetainerCreationRequest): Promise<Retainer>;
+    private permissionService;
+    constructor(retainerRepository: RetainerRepository, guildConfigRepository: GuildConfigRepository, robloxService: RobloxService, permissionService: PermissionService);
+    createRetainer(context: PermissionContext, request: RetainerCreationRequest): Promise<Retainer>;
     signRetainer(request: RetainerSignatureRequest): Promise<Retainer>;
-    cancelRetainer(retainerId: string, cancelledBy: string): Promise<Retainer>;
-    getActiveRetainers(guildId: string): Promise<Retainer[]>;
-    getPendingRetainers(guildId: string): Promise<Retainer[]>;
-    getClientRetainers(clientId: string, includeAll?: boolean): Promise<Retainer[]>;
-    getRetainerStats(guildId: string): Promise<{
+    cancelRetainer(context: PermissionContext, retainerId: string): Promise<Retainer>;
+    getActiveRetainers(context: PermissionContext): Promise<Retainer[]>;
+    getPendingRetainers(context: PermissionContext): Promise<Retainer[]>;
+    getClientRetainers(context: PermissionContext, clientId: string, includeAll?: boolean): Promise<Retainer[]>;
+    getRetainerStats(context: PermissionContext): Promise<{
         total: number;
         active: number;
         pending: number;

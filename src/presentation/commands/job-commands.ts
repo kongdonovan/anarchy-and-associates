@@ -26,6 +26,7 @@ import { GuildConfigRepository } from '../../infrastructure/repositories/guild-c
 import { PermissionService } from '../../application/services/permission-service';
 import { RobloxService } from '../../infrastructure/external/roblox-service';
 import { EmbedUtils } from '../../infrastructure/utils/embed-utils';
+import { PermissionUtils } from '../../infrastructure/utils/permission-utils';
 import { StaffRole, RoleUtils } from '../../domain/entities/staff-role';
 import { DEFAULT_JOB_QUESTIONS } from '../../domain/entities/job';
 import { Job } from '../../domain/entities/job';
@@ -122,10 +123,8 @@ import { logger } from '../../infrastructure/logger';
       
       const guildConfigRepository = new GuildConfigRepository();
       const permissionService = new PermissionService(guildConfigRepository);
-      const hasPermission = await permissionService.hasHRPermission(
-        interaction.guildId!,
-        interaction.user.id
-      );
+      const context = PermissionUtils.createPermissionContext(interaction);
+      const hasPermission = await permissionService.hasHRPermissionWithContext(context);
       
       logger.debug('HR permission check result', { 
         userId: interaction.user.id,

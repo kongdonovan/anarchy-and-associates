@@ -7,7 +7,6 @@ exports.generateChannelName = generateChannelName;
 var CaseStatus;
 (function (CaseStatus) {
     CaseStatus["PENDING"] = "pending";
-    CaseStatus["OPEN"] = "open";
     CaseStatus["IN_PROGRESS"] = "in-progress";
     CaseStatus["CLOSED"] = "closed"; // Case has been completed
 })(CaseStatus || (exports.CaseStatus = CaseStatus = {}));

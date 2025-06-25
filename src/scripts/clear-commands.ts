@@ -31,23 +31,8 @@ async function clearAllCommands(): Promise<void> {
       try {
         logger.info('Bot connected, clearing all commands...');
         
-        // Clear global commands
-        logger.info('Fetching global commands...');
-        const globalCommands = await client.application?.commands.fetch();
-        logger.info(`Found ${globalCommands?.size || 0} global commands to clear`);
-        
-        if (globalCommands && globalCommands.size > 0) {
-          globalCommands.forEach(cmd => {
-            logger.info(`- Global command: ${cmd.name}`);
-          });
-          
-          logger.info('Clearing global commands...');
-          await client.application?.commands.set([]);
-          logger.info('✅ Global commands cleared');
-        }
-        
-        // Clear guild commands for all guilds
-        logger.info(`Clearing guild commands for ${client.guilds.cache.size} guilds...`);
+        // Clear guild commands for all guilds (primary focus)
+        logger.info(`Bot is now using guild-only commands. Clearing commands for ${client.guilds.cache.size} guilds...`);
         
         for (const [guildId, guild] of client.guilds.cache) {
           try {
@@ -66,6 +51,27 @@ async function clearAllCommands(): Promise<void> {
           } catch (guildError) {
             logger.error(`Error clearing commands for guild ${guild.name}:`, guildError);
           }
+        }
+        
+        // Clear any remaining global commands (cleanup from previous global setup)
+        logger.info('Clearing any remaining global commands as cleanup...');
+        try {
+          const globalCommands = await client.application?.commands.fetch();
+          logger.info(`Found ${globalCommands?.size || 0} global commands to clear`);
+          
+          if (globalCommands && globalCommands.size > 0) {
+            globalCommands.forEach(cmd => {
+              logger.info(`- Legacy global command: ${cmd.name}`);
+            });
+            
+            logger.info('Clearing legacy global commands...');
+            await client.application?.commands.set([]);
+            logger.info('✅ Legacy global commands cleared');
+          } else {
+            logger.info('No global commands found (expected for guild-only setup)');
+          }
+        } catch (globalError) {
+          logger.warn('Could not clear global commands (this may be expected):', globalError);
         }
         
         // Final verification

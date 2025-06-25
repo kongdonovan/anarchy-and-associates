@@ -4,6 +4,8 @@ exports.TestUtils = void 0;
 const mongodb_1 = require("mongodb");
 const staff_role_1 = require("../../domain/entities/staff-role");
 const case_1 = require("../../domain/entities/case");
+const retainer_1 = require("../../domain/entities/retainer");
+const feedback_1 = require("../../domain/entities/feedback");
 class TestUtils {
     static generateObjectId() {
         return new mongodb_1.ObjectId();
@@ -75,6 +77,53 @@ class TestUtils {
             robloxUsername: `roblox${Date.now()}`,
             answers: [],
             status: 'pending',
+            createdAt: now,
+            updatedAt: now,
+            ...overrides
+        };
+    }
+    static generateMockRetainer(overrides = {}) {
+        const now = new Date();
+        return {
+            _id: this.generateObjectId(),
+            guildId: 'test-guild-123',
+            clientId: `client-${Date.now()}`,
+            lawyerId: `lawyer-${Date.now()}`,
+            status: retainer_1.RetainerStatus.PENDING,
+            agreementTemplate: 'RETAINER AGREEMENT\n\nThis is a test agreement for [CLIENT_NAME].\n\nSignature: [SIGNATURE]\nDate: [DATE]\nLawyer: [LAWYER_NAME]',
+            createdAt: now,
+            updatedAt: now,
+            ...overrides
+        };
+    }
+    static generateMockReminder(overrides = {}) {
+        const now = new Date();
+        const futureTime = new Date(now.getTime() + 2 * 60 * 60 * 1000); // 2 hours from now
+        return {
+            _id: this.generateObjectId(),
+            guildId: 'test-guild-123',
+            userId: `user-${Date.now()}`,
+            username: `testuser${Date.now()}`,
+            message: 'Test reminder message',
+            scheduledFor: futureTime,
+            isActive: true,
+            createdAt: now,
+            updatedAt: now,
+            ...overrides
+        };
+    }
+    static generateMockFeedback(overrides = {}) {
+        const now = new Date();
+        return {
+            _id: this.generateObjectId(),
+            guildId: 'test-guild-123',
+            submitterId: `client-${Date.now()}`,
+            submitterUsername: `testclient${Date.now()}`,
+            targetStaffId: `staff-${Date.now()}`,
+            targetStaffUsername: `teststaff${Date.now()}`,
+            rating: feedback_1.FeedbackRating.FOUR_STAR,
+            comment: 'Great service and very professional!',
+            isForFirm: false,
             createdAt: now,
             updatedAt: now,
             ...overrides

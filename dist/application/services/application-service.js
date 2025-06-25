@@ -4,11 +4,12 @@ exports.ApplicationService = void 0;
 const crypto_1 = require("crypto");
 const logger_1 = require("../../infrastructure/logger");
 class ApplicationService {
-    constructor(applicationRepository, jobRepository, staffRepository, robloxService) {
+    constructor(applicationRepository, jobRepository, staffRepository, robloxService, permissionService) {
         this.applicationRepository = applicationRepository;
         this.jobRepository = jobRepository;
         this.staffRepository = staffRepository;
         this.robloxService = robloxService;
+        this.permissionService = permissionService;
     }
     async submitApplication(request) {
         logger_1.logger.info('Submitting application', {
@@ -38,7 +39,12 @@ class ApplicationService {
         });
         return createdApplication;
     }
-    async reviewApplication(request) {
+    async reviewApplication(context, request) {
+        // Check HR permission for reviewing applications
+        const hasPermission = await this.permissionService.hasHRPermissionWithContext(context);
+        if (!hasPermission) {
+            throw new Error('You do not have permission to review applications');
+        }
         logger_1.logger.info('Reviewing application', {
             applicationId: request.applicationId,
             reviewerId: request.reviewerId,
@@ -107,20 +113,46 @@ class ApplicationService {
             warnings
         };
     }
-    async getApplicationById(id) {
+    async getApplicationById(context, id) {
+        // Check HR permission for viewing applications
+        const hasPermission = await this.permissionService.hasHRPermissionWithContext(context);
+        if (!hasPermission) {
+            throw new Error('You do not have permission to view applications');
+        }
         return this.applicationRepository.findById(id);
     }
-    async getApplicationsByJob(jobId) {
+    async getApplicationsByJob(context, jobId) {
+        // Check HR permission for viewing job applications
+        const hasPermission = await this.permissionService.hasHRPermissionWithContext(context);
+        if (!hasPermission) {
+            throw new Error('You do not have permission to view job applications');
+        }
         return this.applicationRepository.findByJob(jobId);
     }
-    async getApplicationsByApplicant(applicantId) {
+    async getApplicationsByApplicant(context, applicantId) {
+        // Users can view their own applications, or HR can view any applications
+        const isOwnApplications = context.userId === applicantId;
+        const hasHRPermission = await this.permissionService.hasHRPermissionWithContext(context);
+        if (!isOwnApplications && !hasHRPermission) {
+            throw new Error('You do not have permission to view these applications');
+        }
         return this.applicationRepository.findByApplicant(applicantId);
     }
-    async getPendingApplications(guildId) {
-        return this.applicationRepository.findPendingApplications(guildId);
+    async getPendingApplications(context) {
+        // Check HR permission for viewing pending applications
+        const hasPermission = await this.permissionService.hasHRPermissionWithContext(context);
+        if (!hasPermission) {
+            throw new Error('You do not have permission to view pending applications');
+        }
+        return this.applicationRepository.findPendingApplications(context.guildId);
     }
-    async getApplicationStats(guildId) {
-        const allApplications = await this.applicationRepository.findByGuild(guildId);
+    async getApplicationStats(context) {
+        // Check HR permission for viewing application statistics
+        const hasPermission = await this.permissionService.hasHRPermissionWithContext(context);
+        if (!hasPermission) {
+            throw new Error('You do not have permission to view application statistics');
+        }
+        const allApplications = await this.applicationRepository.findByGuild(context.guildId);
         return {
             total: allApplications.length,
             pending: allApplications.filter(app => app.status === 'pending').length,

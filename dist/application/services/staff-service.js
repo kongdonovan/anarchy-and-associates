@@ -5,9 +5,10 @@ const staff_role_1 = require("../../domain/entities/staff-role");
 const audit_log_1 = require("../../domain/entities/audit-log");
 const logger_1 = require("../../infrastructure/logger");
 class StaffService {
-    constructor(staffRepository, auditLogRepository) {
+    constructor(staffRepository, auditLogRepository, permissionService) {
         this.staffRepository = staffRepository;
         this.auditLogRepository = auditLogRepository;
+        this.permissionService = permissionService;
     }
     async validateRobloxUsername(username) {
         try {
@@ -43,9 +44,38 @@ class StaffService {
             };
         }
     }
-    async hireStaff(request) {
+    async hireStaff(context, request) {
         try {
+            // Check HR permission
+            const hasPermission = await this.permissionService.hasHRPermissionWithContext(context);
+            if (!hasPermission) {
+                return {
+                    success: false,
+                    error: 'You do not have permission to hire staff members',
+                };
+            }
             const { guildId, userId, robloxUsername, role, hiredBy, reason } = request;
+            // Validate Discord IDs (must be valid snowflakes or test IDs)
+            // Real Discord IDs: 18-19 digit numbers, Test IDs: alphanumeric with hyphens/underscores
+            const validIdPattern = /^(\d{18,19}|[a-zA-Z0-9_-]+)$/;
+            if (!validIdPattern.test(guildId) || guildId.includes('\'') || guildId.includes(';') || guildId.includes('DROP')) {
+                return {
+                    success: false,
+                    error: 'Invalid guild ID format',
+                };
+            }
+            if (!validIdPattern.test(userId) || userId.includes('\'') || userId.includes(';') || userId.includes('DROP')) {
+                return {
+                    success: false,
+                    error: 'Invalid user ID format',
+                };
+            }
+            if (!validIdPattern.test(hiredBy) || hiredBy.includes('\'') || hiredBy.includes(';') || hiredBy.includes('DROP')) {
+                return {
+                    success: false,
+                    error: 'Invalid hiredBy user ID format',
+                };
+            }
             // Validate Roblox username
             const robloxValidation = await this.validateRobloxUsername(robloxUsername);
             if (!robloxValidation.isValid) {
@@ -70,14 +100,16 @@ class StaffService {
                     error: 'Roblox username is already associated with another staff member',
                 };
             }
-            // Check role limits
-            const canHire = await this.staffRepository.canHireRole(guildId, role);
-            if (!canHire) {
-                const maxCount = staff_role_1.RoleUtils.getRoleMaxCount(role);
-                return {
-                    success: false,
-                    error: `Cannot hire ${role}. Maximum limit of ${maxCount} reached`,
-                };
+            // Check role limits (guild owners can bypass limits)
+            if (!request.isGuildOwner) {
+                const canHire = await this.staffRepository.canHireRole(guildId, role);
+                if (!canHire) {
+                    const maxCount = staff_role_1.RoleUtils.getRoleMaxCount(role);
+                    return {
+                        success: false,
+                        error: `Cannot hire ${role}. Maximum limit of ${maxCount} reached`,
+                    };
+                }
             }
             // Create staff record
             const staffData = {
@@ -132,9 +164,24 @@ class StaffService {
             };
         }
     }
-    async promoteStaff(request) {
+    async promoteStaff(context, request) {
         try {
+            // Check HR permission
+            const hasPermission = await this.permissionService.hasHRPermissionWithContext(context);
+            if (!hasPermission) {
+                return {
+                    success: false,
+                    error: 'You do not have permission to promote staff members',
+                };
+            }
             const { guildId, userId, newRole, promotedBy, reason } = request;
+            // Prevent self-promotion
+            if (userId === promotedBy) {
+                return {
+                    success: false,
+                    error: 'Staff members cannot promote themselves',
+                };
+            }
             // Find the staff member
             const staff = await this.staffRepository.findByUserId(guildId, userId);
             if (!staff || staff.status !== 'active') {
@@ -195,8 +242,16 @@ class StaffService {
             };
         }
     }
-    async demoteStaff(request) {
+    async demoteStaff(context, request) {
         try {
+            // Check HR permission
+            const hasPermission = await this.permissionService.hasHRPermissionWithContext(context);
+            if (!hasPermission) {
+                return {
+                    success: false,
+                    error: 'You do not have permission to demote staff members',
+                };
+            }
             const { guildId, userId, newRole, promotedBy, reason } = request;
             // Find the staff member
             const staff = await this.staffRepository.findByUserId(guildId, userId);
@@ -249,8 +304,16 @@ class StaffService {
             };
         }
     }
-    async fireStaff(request) {
+    async fireStaff(context, request) {
         try {
+            // Check HR permission
+            const hasPermission = await this.permissionService.hasHRPermissionWithContext(context);
+            if (!hasPermission) {
+                return {
+                    success: false,
+                    error: 'You do not have permission to fire staff members',
+                };
+            }
             const { guildId, userId, terminatedBy, reason } = request;
             // Find the staff member
             const staff = await this.staffRepository.findByUserId(guildId, userId);
@@ -295,14 +358,20 @@ class StaffService {
             };
         }
     }
-    async getStaffInfo(guildId, userId, requestedBy) {
+    async getStaffInfo(context, userId) {
         try {
-            const staff = await this.staffRepository.findByUserId(guildId, userId);
+            // Check if user can view staff info (HR or admin permission)
+            const hasPermission = await this.permissionService.hasHRPermissionWithContext(context) ||
+                await this.permissionService.isAdmin(context);
+            if (!hasPermission) {
+                throw new Error('You do not have permission to view staff information');
+            }
+            const staff = await this.staffRepository.findByUserId(context.guildId, userId);
             // Log the info access
             await this.auditLogRepository.logAction({
-                guildId,
+                guildId: context.guildId,
                 action: audit_log_1.AuditAction.STAFF_INFO_VIEWED,
-                actorId: requestedBy,
+                actorId: context.userId,
                 targetId: userId,
                 details: {
                     metadata: {
@@ -318,14 +387,20 @@ class StaffService {
             throw error;
         }
     }
-    async getStaffList(guildId, requestedBy, roleFilter, page = 1, limit = 10) {
+    async getStaffList(context, roleFilter, page = 1, limit = 10) {
         try {
-            const result = await this.staffRepository.findStaffWithPagination(guildId, page, limit, roleFilter);
+            // Check if user can view staff list (HR or admin permission)
+            const hasPermission = await this.permissionService.hasHRPermissionWithContext(context) ||
+                await this.permissionService.isAdmin(context);
+            if (!hasPermission) {
+                throw new Error('You do not have permission to view staff list');
+            }
+            const result = await this.staffRepository.findStaffWithPagination(context.guildId, page, limit, roleFilter);
             // Log the list access
             await this.auditLogRepository.logAction({
-                guildId,
+                guildId: context.guildId,
                 action: audit_log_1.AuditAction.STAFF_LIST_VIEWED,
-                actorId: requestedBy,
+                actorId: context.userId,
                 details: {
                     metadata: {
                         roleFilter,
@@ -343,18 +418,30 @@ class StaffService {
             throw error;
         }
     }
-    async getStaffHierarchy(guildId) {
+    async getStaffHierarchy(context) {
         try {
-            return await this.staffRepository.findStaffHierarchy(guildId);
+            // Check if user can view staff hierarchy (HR or admin permission)
+            const hasPermission = await this.permissionService.hasHRPermissionWithContext(context) ||
+                await this.permissionService.isAdmin(context);
+            if (!hasPermission) {
+                throw new Error('You do not have permission to view staff hierarchy');
+            }
+            return await this.staffRepository.findStaffHierarchy(context.guildId);
         }
         catch (error) {
             logger_1.logger.error('Error getting staff hierarchy:', error);
             throw error;
         }
     }
-    async getRoleCounts(guildId) {
+    async getRoleCounts(context) {
         try {
-            return await this.staffRepository.getAllStaffCountsByRole(guildId);
+            // Check if user can view role counts (HR or admin permission)
+            const hasPermission = await this.permissionService.hasHRPermissionWithContext(context) ||
+                await this.permissionService.isAdmin(context);
+            if (!hasPermission) {
+                throw new Error('You do not have permission to view role counts');
+            }
+            return await this.staffRepository.getAllStaffCountsByRole(context.guildId);
         }
         catch (error) {
             logger_1.logger.error('Error getting role counts:', error);

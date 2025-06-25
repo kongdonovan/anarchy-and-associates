@@ -4,12 +4,18 @@ exports.RetainerService = void 0;
 const retainer_1 = require("../../domain/entities/retainer");
 const logger_1 = require("../../infrastructure/logger");
 class RetainerService {
-    constructor(retainerRepository, guildConfigRepository, robloxService) {
+    constructor(retainerRepository, guildConfigRepository, robloxService, permissionService) {
         this.retainerRepository = retainerRepository;
         this.guildConfigRepository = guildConfigRepository;
         this.robloxService = robloxService;
+        this.permissionService = permissionService;
     }
-    async createRetainer(request) {
+    async createRetainer(context, request) {
+        // Check retainer permission
+        const hasPermission = await this.permissionService.hasRetainerPermissionWithContext(context);
+        if (!hasPermission) {
+            throw new Error('You do not have permission to create retainer agreements');
+        }
         logger_1.logger.info('Creating retainer agreement', {
             guildId: request.guildId,
             clientId: request.clientId,
@@ -83,10 +89,15 @@ class RetainerService {
         });
         return signedRetainer;
     }
-    async cancelRetainer(retainerId, cancelledBy) {
+    async cancelRetainer(context, retainerId) {
+        // Check retainer permission
+        const hasPermission = await this.permissionService.hasRetainerPermissionWithContext(context);
+        if (!hasPermission) {
+            throw new Error('You do not have permission to cancel retainer agreements');
+        }
         logger_1.logger.info('Cancelling retainer agreement', {
             retainerId,
-            cancelledBy
+            cancelledBy: context.userId
         });
         const retainer = await this.retainerRepository.findById(retainerId);
         if (!retainer) {
@@ -103,21 +114,42 @@ class RetainerService {
         }
         logger_1.logger.info('Retainer agreement cancelled', {
             retainerId,
-            cancelledBy
+            cancelledBy: context.userId
         });
         return cancelledRetainer;
     }
-    async getActiveRetainers(guildId) {
-        return this.retainerRepository.findActiveRetainers(guildId);
+    async getActiveRetainers(context) {
+        // Check retainer permission
+        const hasPermission = await this.permissionService.hasRetainerPermissionWithContext(context);
+        if (!hasPermission) {
+            throw new Error('You do not have permission to view retainer agreements');
+        }
+        return this.retainerRepository.findActiveRetainers(context.guildId);
     }
-    async getPendingRetainers(guildId) {
-        return this.retainerRepository.findPendingRetainers(guildId);
+    async getPendingRetainers(context) {
+        // Check retainer permission
+        const hasPermission = await this.permissionService.hasRetainerPermissionWithContext(context);
+        if (!hasPermission) {
+            throw new Error('You do not have permission to view pending retainer agreements');
+        }
+        return this.retainerRepository.findPendingRetainers(context.guildId);
     }
-    async getClientRetainers(clientId, includeAll = false) {
+    async getClientRetainers(context, clientId, includeAll = false) {
+        // Users can view their own retainers, or staff with retainer permission can view any
+        const isOwnRetainers = context.userId === clientId;
+        const hasRetainerPermission = await this.permissionService.hasRetainerPermissionWithContext(context);
+        if (!isOwnRetainers && !hasRetainerPermission) {
+            throw new Error('You do not have permission to view these retainer agreements');
+        }
         return this.retainerRepository.findClientRetainers(clientId, includeAll);
     }
-    async getRetainerStats(guildId) {
-        return this.retainerRepository.getRetainerStats(guildId);
+    async getRetainerStats(context) {
+        // Check retainer permission
+        const hasPermission = await this.permissionService.hasRetainerPermissionWithContext(context);
+        if (!hasPermission) {
+            throw new Error('You do not have permission to view retainer statistics');
+        }
+        return this.retainerRepository.getRetainerStats(context.guildId);
     }
     async formatRetainerAgreement(retainer, clientName, lawyerName) {
         if (retainer.status !== retainer_1.RetainerStatus.SIGNED) {

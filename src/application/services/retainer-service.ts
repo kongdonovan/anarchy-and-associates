@@ -9,16 +9,24 @@ import {
 import { RetainerRepository } from '../../infrastructure/repositories/retainer-repository';
 import { GuildConfigRepository } from '../../infrastructure/repositories/guild-config-repository';
 import { RobloxService } from '../../infrastructure/external/roblox-service';
+import { PermissionService, PermissionContext } from './permission-service';
 import { logger } from '../../infrastructure/logger';
 
 export class RetainerService {
   constructor(
     private retainerRepository: RetainerRepository,
     private guildConfigRepository: GuildConfigRepository,
-    private robloxService: RobloxService
+    private robloxService: RobloxService,
+    private permissionService: PermissionService
   ) {}
 
-  public async createRetainer(request: RetainerCreationRequest): Promise<Retainer> {
+  public async createRetainer(context: PermissionContext, request: RetainerCreationRequest): Promise<Retainer> {
+    // Check retainer permission
+    const hasPermission = await this.permissionService.hasRetainerPermissionWithContext(context);
+    if (!hasPermission) {
+      throw new Error('You do not have permission to create retainer agreements');
+    }
+
     logger.info('Creating retainer agreement', {
       guildId: request.guildId,
       clientId: request.clientId,
@@ -106,10 +114,16 @@ export class RetainerService {
     return signedRetainer;
   }
 
-  public async cancelRetainer(retainerId: string, cancelledBy: string): Promise<Retainer> {
+  public async cancelRetainer(context: PermissionContext, retainerId: string): Promise<Retainer> {
+    // Check retainer permission
+    const hasPermission = await this.permissionService.hasRetainerPermissionWithContext(context);
+    if (!hasPermission) {
+      throw new Error('You do not have permission to cancel retainer agreements');
+    }
+
     logger.info('Cancelling retainer agreement', {
       retainerId,
-      cancelledBy
+      cancelledBy: context.userId
     });
 
     const retainer = await this.retainerRepository.findById(retainerId);
@@ -131,31 +145,57 @@ export class RetainerService {
 
     logger.info('Retainer agreement cancelled', {
       retainerId,
-      cancelledBy
+      cancelledBy: context.userId
     });
 
     return cancelledRetainer;
   }
 
-  public async getActiveRetainers(guildId: string): Promise<Retainer[]> {
-    return this.retainerRepository.findActiveRetainers(guildId);
+  public async getActiveRetainers(context: PermissionContext): Promise<Retainer[]> {
+    // Check retainer permission
+    const hasPermission = await this.permissionService.hasRetainerPermissionWithContext(context);
+    if (!hasPermission) {
+      throw new Error('You do not have permission to view retainer agreements');
+    }
+
+    return this.retainerRepository.findActiveRetainers(context.guildId);
   }
 
-  public async getPendingRetainers(guildId: string): Promise<Retainer[]> {
-    return this.retainerRepository.findPendingRetainers(guildId);
+  public async getPendingRetainers(context: PermissionContext): Promise<Retainer[]> {
+    // Check retainer permission
+    const hasPermission = await this.permissionService.hasRetainerPermissionWithContext(context);
+    if (!hasPermission) {
+      throw new Error('You do not have permission to view pending retainer agreements');
+    }
+
+    return this.retainerRepository.findPendingRetainers(context.guildId);
   }
 
-  public async getClientRetainers(clientId: string, includeAll = false): Promise<Retainer[]> {
+  public async getClientRetainers(context: PermissionContext, clientId: string, includeAll = false): Promise<Retainer[]> {
+    // Users can view their own retainers, or staff with retainer permission can view any
+    const isOwnRetainers = context.userId === clientId;
+    const hasRetainerPermission = await this.permissionService.hasRetainerPermissionWithContext(context);
+    
+    if (!isOwnRetainers && !hasRetainerPermission) {
+      throw new Error('You do not have permission to view these retainer agreements');
+    }
+
     return this.retainerRepository.findClientRetainers(clientId, includeAll);
   }
 
-  public async getRetainerStats(guildId: string): Promise<{
+  public async getRetainerStats(context: PermissionContext): Promise<{
     total: number;
     active: number;
     pending: number;
     cancelled: number;
   }> {
-    return this.retainerRepository.getRetainerStats(guildId);
+    // Check retainer permission
+    const hasPermission = await this.permissionService.hasRetainerPermissionWithContext(context);
+    if (!hasPermission) {
+      throw new Error('You do not have permission to view retainer statistics');
+    }
+
+    return this.retainerRepository.getRetainerStats(context.guildId);
   }
 
   public async formatRetainerAgreement(retainer: Retainer, clientName: string, lawyerName: string): Promise<FormattedRetainerAgreement> {

@@ -4,6 +4,7 @@ import { Staff } from '../../domain/entities/staff';
 import { StaffRole, RoleUtils } from '../../domain/entities/staff-role';
 import { AuditAction } from '../../domain/entities/audit-log';
 import { logger } from '../../infrastructure/logger';
+import { PermissionService, PermissionContext } from './permission-service';
 
 export interface RobloxValidationResult {
   isValid: boolean;
@@ -18,6 +19,7 @@ export interface StaffHireRequest {
   role: StaffRole;
   hiredBy: string;
   reason?: string;
+  isGuildOwner?: boolean; // Indicates if the person hiring is the guild owner
 }
 
 export interface StaffPromotionRequest {
@@ -38,13 +40,16 @@ export interface StaffTerminationRequest {
 export class StaffService {
   private staffRepository: StaffRepository;
   private auditLogRepository: AuditLogRepository;
+  private permissionService: PermissionService;
 
   constructor(
     staffRepository: StaffRepository,
-    auditLogRepository: AuditLogRepository
+    auditLogRepository: AuditLogRepository,
+    permissionService: PermissionService
   ) {
     this.staffRepository = staffRepository;
     this.auditLogRepository = auditLogRepository;
+    this.permissionService = permissionService;
   }
 
   public async validateRobloxUsername(username: string): Promise<RobloxValidationResult> {
@@ -84,9 +89,40 @@ export class StaffService {
     }
   }
 
-  public async hireStaff(request: StaffHireRequest): Promise<{ success: boolean; staff?: Staff; error?: string }> {
+  public async hireStaff(context: PermissionContext, request: StaffHireRequest): Promise<{ success: boolean; staff?: Staff; error?: string }> {
     try {
+      // Check HR permission
+      const hasPermission = await this.permissionService.hasHRPermissionWithContext(context);
+      if (!hasPermission) {
+        return {
+          success: false,
+          error: 'You do not have permission to hire staff members',
+        };
+      }
+
       const { guildId, userId, robloxUsername, role, hiredBy, reason } = request;
+
+      // Validate Discord IDs (must be valid snowflakes or test IDs)
+      // Real Discord IDs: 18-19 digit numbers, Test IDs: alphanumeric with hyphens/underscores
+      const validIdPattern = /^(\d{18,19}|[a-zA-Z0-9_-]+)$/;
+      if (!validIdPattern.test(guildId) || guildId.includes('\'') || guildId.includes(';') || guildId.includes('DROP')) {
+        return {
+          success: false,
+          error: 'Invalid guild ID format',
+        };
+      }
+      if (!validIdPattern.test(userId) || userId.includes('\'') || userId.includes(';') || userId.includes('DROP')) {
+        return {
+          success: false,
+          error: 'Invalid user ID format',
+        };
+      }
+      if (!validIdPattern.test(hiredBy) || hiredBy.includes('\'') || hiredBy.includes(';') || hiredBy.includes('DROP')) {
+        return {
+          success: false,
+          error: 'Invalid hiredBy user ID format',
+        };
+      }
 
       // Validate Roblox username
       const robloxValidation = await this.validateRobloxUsername(robloxUsername);
@@ -115,14 +151,16 @@ export class StaffService {
         };
       }
 
-      // Check role limits
-      const canHire = await this.staffRepository.canHireRole(guildId, role);
-      if (!canHire) {
-        const maxCount = RoleUtils.getRoleMaxCount(role);
-        return {
-          success: false,
-          error: `Cannot hire ${role}. Maximum limit of ${maxCount} reached`,
-        };
+      // Check role limits (guild owners can bypass limits)
+      if (!request.isGuildOwner) {
+        const canHire = await this.staffRepository.canHireRole(guildId, role);
+        if (!canHire) {
+          const maxCount = RoleUtils.getRoleMaxCount(role);
+          return {
+            success: false,
+            error: `Cannot hire ${role}. Maximum limit of ${maxCount} reached`,
+          };
+        }
       }
 
       // Create staff record
@@ -182,9 +220,26 @@ export class StaffService {
     }
   }
 
-  public async promoteStaff(request: StaffPromotionRequest): Promise<{ success: boolean; staff?: Staff; error?: string }> {
+  public async promoteStaff(context: PermissionContext, request: StaffPromotionRequest): Promise<{ success: boolean; staff?: Staff; error?: string }> {
     try {
+      // Check HR permission
+      const hasPermission = await this.permissionService.hasHRPermissionWithContext(context);
+      if (!hasPermission) {
+        return {
+          success: false,
+          error: 'You do not have permission to promote staff members',
+        };
+      }
+
       const { guildId, userId, newRole, promotedBy, reason } = request;
+
+      // Prevent self-promotion
+      if (userId === promotedBy) {
+        return {
+          success: false,
+          error: 'Staff members cannot promote themselves',
+        };
+      }
 
       // Find the staff member
       const staff = await this.staffRepository.findByUserId(guildId, userId);
@@ -260,8 +315,17 @@ export class StaffService {
     }
   }
 
-  public async demoteStaff(request: StaffPromotionRequest): Promise<{ success: boolean; staff?: Staff; error?: string }> {
+  public async demoteStaff(context: PermissionContext, request: StaffPromotionRequest): Promise<{ success: boolean; staff?: Staff; error?: string }> {
     try {
+      // Check HR permission
+      const hasPermission = await this.permissionService.hasHRPermissionWithContext(context);
+      if (!hasPermission) {
+        return {
+          success: false,
+          error: 'You do not have permission to demote staff members',
+        };
+      }
+
       const { guildId, userId, newRole, promotedBy, reason } = request;
 
       // Find the staff member
@@ -328,8 +392,17 @@ export class StaffService {
     }
   }
 
-  public async fireStaff(request: StaffTerminationRequest): Promise<{ success: boolean; staff?: Staff; error?: string }> {
+  public async fireStaff(context: PermissionContext, request: StaffTerminationRequest): Promise<{ success: boolean; staff?: Staff; error?: string }> {
     try {
+      // Check HR permission
+      const hasPermission = await this.permissionService.hasHRPermissionWithContext(context);
+      if (!hasPermission) {
+        return {
+          success: false,
+          error: 'You do not have permission to fire staff members',
+        };
+      }
+
       const { guildId, userId, terminatedBy, reason } = request;
 
       // Find the staff member
@@ -379,15 +452,22 @@ export class StaffService {
     }
   }
 
-  public async getStaffInfo(guildId: string, userId: string, requestedBy: string): Promise<Staff | null> {
+  public async getStaffInfo(context: PermissionContext, userId: string): Promise<Staff | null> {
     try {
-      const staff = await this.staffRepository.findByUserId(guildId, userId);
+      // Check if user can view staff info (HR or admin permission)
+      const hasPermission = await this.permissionService.hasHRPermissionWithContext(context) || 
+                           await this.permissionService.isAdmin(context);
+      if (!hasPermission) {
+        throw new Error('You do not have permission to view staff information');
+      }
+
+      const staff = await this.staffRepository.findByUserId(context.guildId, userId);
       
       // Log the info access
       await this.auditLogRepository.logAction({
-        guildId,
+        guildId: context.guildId,
         action: AuditAction.STAFF_INFO_VIEWED,
-        actorId: requestedBy,
+        actorId: context.userId,
         targetId: userId,
         details: {
           metadata: {
@@ -405,20 +485,26 @@ export class StaffService {
   }
 
   public async getStaffList(
-    guildId: string,
-    requestedBy: string,
+    context: PermissionContext,
     roleFilter?: StaffRole,
     page: number = 1,
     limit: number = 10
   ): Promise<{ staff: Staff[]; total: number; totalPages: number }> {
     try {
-      const result = await this.staffRepository.findStaffWithPagination(guildId, page, limit, roleFilter);
+      // Check if user can view staff list (HR or admin permission)
+      const hasPermission = await this.permissionService.hasHRPermissionWithContext(context) || 
+                           await this.permissionService.isAdmin(context);
+      if (!hasPermission) {
+        throw new Error('You do not have permission to view staff list');
+      }
+
+      const result = await this.staffRepository.findStaffWithPagination(context.guildId, page, limit, roleFilter);
 
       // Log the list access
       await this.auditLogRepository.logAction({
-        guildId,
+        guildId: context.guildId,
         action: AuditAction.STAFF_LIST_VIEWED,
-        actorId: requestedBy,
+        actorId: context.userId,
         details: {
           metadata: {
             roleFilter,
@@ -437,18 +523,32 @@ export class StaffService {
     }
   }
 
-  public async getStaffHierarchy(guildId: string): Promise<Staff[]> {
+  public async getStaffHierarchy(context: PermissionContext): Promise<Staff[]> {
     try {
-      return await this.staffRepository.findStaffHierarchy(guildId);
+      // Check if user can view staff hierarchy (HR or admin permission)
+      const hasPermission = await this.permissionService.hasHRPermissionWithContext(context) || 
+                           await this.permissionService.isAdmin(context);
+      if (!hasPermission) {
+        throw new Error('You do not have permission to view staff hierarchy');
+      }
+
+      return await this.staffRepository.findStaffHierarchy(context.guildId);
     } catch (error) {
       logger.error('Error getting staff hierarchy:', error);
       throw error;
     }
   }
 
-  public async getRoleCounts(guildId: string): Promise<Record<StaffRole, number>> {
+  public async getRoleCounts(context: PermissionContext): Promise<Record<StaffRole, number>> {
     try {
-      return await this.staffRepository.getAllStaffCountsByRole(guildId);
+      // Check if user can view role counts (HR or admin permission)
+      const hasPermission = await this.permissionService.hasHRPermissionWithContext(context) || 
+                           await this.permissionService.isAdmin(context);
+      if (!hasPermission) {
+        throw new Error('You do not have permission to view role counts');
+      }
+
+      return await this.staffRepository.getAllStaffCountsByRole(context.guildId);
     } catch (error) {
       logger.error('Error getting role counts:', error);
       throw error;

@@ -56,8 +56,24 @@ export class Bot {
       await this.initializeCommands();
     });
 
-    this.client.on('guildCreate', (guild) => {
+    this.client.on('guildCreate', async (guild) => {
       logger.info(`Bot added to guild: ${guild.name} (${guild.id})`);
+      
+      // Register commands for the new guild
+      try {
+        logger.info(`Registering commands for new guild: ${guild.name} (${guild.id})`);
+        
+        // Update botGuilds to include all current guilds
+        const allGuildIds = Array.from(this.client.guilds.cache.keys());
+        (this.client as any).botGuilds = allGuildIds;
+        
+        // Re-register commands for all guilds (including the new one)
+        await this.client.initApplicationCommands();
+        
+        logger.info(`Successfully registered commands for new guild: ${guild.name} (${guild.id})`);
+      } catch (error) {
+        logger.error(`Failed to register commands for new guild: ${guild.name} (${guild.id})`, error);
+      }
     });
 
     this.client.on('guildDelete', (guild) => {
@@ -75,65 +91,53 @@ export class Bot {
 
   private async initializeCommands(): Promise<void> {
     try {
-      logger.info('Initializing application commands...');
+      logger.info('Initializing guild-specific application commands...');
       
-      // Smart command registration - check for existing commands first
-      let existingCommands;
-      try {
-        existingCommands = await this.client.application?.commands.fetch();
-        logger.info(`Found ${existingCommands?.size || 0} existing commands on Discord`);
-      } catch (fetchError) {
-        logger.warn('Could not fetch existing commands, proceeding with normal initialization:', fetchError);
-        existingCommands = null;
+      // Get all guilds the bot is in
+      const guilds = this.client.guilds.cache;
+      logger.info(`Bot is in ${guilds.size} guild(s), registering commands for each guild`);
+      
+      if (guilds.size === 0) {
+        logger.warn('Bot is not in any guilds, skipping command registration');
+        return;
       }
 
       // Get the commands that discordx wants to register
       const localCommands = this.client.applicationCommands;
-      logger.info(`Found ${localCommands.length} local commands to register`);
+      logger.info(`Found ${localCommands.length} local commands to register per guild`);
       
-      if (existingCommands && existingCommands.size > 0) {
-        // Check if commands are already registered and up to date
-        const needsUpdate = localCommands.some(localCmd => {
-          const existingCmd = existingCommands.find(cmd => cmd.name === localCmd.name);
-          if (!existingCmd) {
-            logger.info(`New command found: ${localCmd.name}`);
-            return true;
+      // Set botGuilds property and register commands for all guilds at once
+      const guildIds = Array.from(guilds.keys());
+      
+      // Configure client for guild-specific commands
+      (this.client as any).botGuilds = guildIds;
+      
+      logger.info(`Registering commands for guilds: ${guildIds.map(id => {
+        const guild = guilds.get(id);
+        return `${guild?.name} (${id})`;
+      }).join(', ')}`);
+      
+      // Register commands for all configured guilds
+      await this.client.initApplicationCommands();
+      
+      logger.info('✅ Guild commands initialized successfully for all guilds');
+      
+      // Debug: Verify registration for each guild
+      for (const guildId of guildIds) {
+        try {
+          const guild = guilds.get(guildId);
+          if (guild) {
+            const guildCommands = await guild.commands.fetch();
+            logger.info(`✅ Guild ${guild.name}: ${guildCommands.size} commands registered`);
           }
-          
-          // Check if command description changed
-          if (existingCmd.description !== localCmd.description) {
-            logger.info(`Command ${localCmd.name} description changed`);
-            return true;
-          }
-          
-          return false;
-        });
-        
-        // Check for orphaned commands
-        const orphanedCommands = existingCommands.filter(discordCmd => 
-          !localCommands.some(localCmd => localCmd.name === discordCmd.name)
-        );
-        
-        if (orphanedCommands.size > 0) {
-          logger.info(`Found ${orphanedCommands.size} orphaned commands that will be removed`);
+        } catch (verifyError) {
+          const guild = guilds.get(guildId);
+          logger.warn(`Could not verify commands for guild: ${guild?.name} (${guildId})`, verifyError);
         }
-        
-        if (!needsUpdate && orphanedCommands.size === 0) {
-          logger.info('All commands are already up to date, skipping registration');
-        } else {
-          logger.info('Command differences detected, updating commands...');
-          await this.client.initApplicationCommands();
-          logger.info('Slash commands updated successfully');
-        }
-      } else {
-        // No existing commands or couldn't fetch them, proceed with normal registration
-        logger.info('No existing commands found, registering all commands...');
-        await this.client.initApplicationCommands();
-        logger.info('Slash commands initialized successfully');
       }
       
     } catch (error) {
-      logger.error('Error initializing commands:', error);
+      logger.error('Error initializing guild commands:', error);
       // Don't throw - continue with bot startup even if commands fail
     }
   }
@@ -169,12 +173,44 @@ export class Bot {
   // Clear all commands (useful for development)
   public async clearAllCommands(): Promise<void> {
     try {
-      logger.info('Clearing all application commands...');
+      logger.info('Clearing all guild application commands...');
       
-      // Clear global commands
-      await this.client.clearApplicationCommands();
+      // Get all guilds the bot is in
+      const guilds = this.client.guilds.cache;
+      logger.info(`Clearing commands for ${guilds.size} guild(s)`);
       
-      logger.info('All commands cleared successfully');
+      let successfulClears = 0;
+      let failedClears = 0;
+
+      // Set botGuilds and clear commands for all guilds
+      const guildIds = Array.from(guilds.keys());
+      (this.client as any).botGuilds = guildIds;
+      
+      try {
+        logger.info('Clearing commands for all guilds...');
+        await this.client.clearApplicationCommands();
+        logger.info('✅ Successfully cleared commands for all guilds');
+        successfulClears = guilds.size;
+      } catch (guildError) {
+        logger.error('Failed to clear guild commands:', guildError);
+        failedClears = guilds.size;
+      }
+      
+      // Also clear any potential global commands (cleanup)
+      try {
+        logger.info('Clearing any remaining global commands...');
+        // Temporarily clear botGuilds to target global commands
+        const savedBotGuilds = (this.client as any).botGuilds;
+        (this.client as any).botGuilds = undefined;
+        await this.client.clearApplicationCommands();
+        // Restore botGuilds
+        (this.client as any).botGuilds = savedBotGuilds;
+        logger.info('Global commands cleared');
+      } catch (globalError) {
+        logger.warn('Failed to clear global commands (this is expected if none exist):', globalError);
+      }
+      
+      logger.info(`Command clearing completed: ${successfulClears} successful, ${failedClears} failed`);
     } catch (error) {
       logger.error('Error clearing commands:', error);
       throw error;
@@ -207,9 +243,12 @@ export class Bot {
   // Force clear all commands (useful for development reset)
   public async forceResetCommands(): Promise<void> {
     try {
-      logger.info('Force clearing all commands...');
-      await this.client.clearApplicationCommands();
-      logger.info('All commands cleared. Next startup will re-register all commands.');
+      logger.info('Force clearing all guild commands...');
+      
+      // Use the existing clearAllCommands method
+      await this.clearAllCommands();
+      
+      logger.info('All guild commands cleared. Next startup will re-register all commands for each guild.');
     } catch (error) {
       logger.error('Error force clearing commands:', error);
       throw error;

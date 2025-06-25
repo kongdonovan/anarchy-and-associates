@@ -163,12 +163,12 @@ describe('CaseService Integration Tests', () => {
             const lawyerId = 'lawyer-123';
             const caseId = testCase._id.toString();
             const acceptedCase = await caseService.acceptCase(caseId, lawyerId);
-            expect(acceptedCase.status).toBe(case_1.CaseStatus.OPEN);
+            expect(acceptedCase.status).toBe(case_1.CaseStatus.IN_PROGRESS);
             expect(acceptedCase.leadAttorneyId).toBe(lawyerId);
             expect(acceptedCase.assignedLawyerIds).toContain(lawyerId);
             // Verify case is retrievable by ID
             const retrievedCase = await caseService.getCaseById(caseId);
-            expect(retrievedCase?.status).toBe(case_1.CaseStatus.OPEN);
+            expect(retrievedCase?.status).toBe(case_1.CaseStatus.IN_PROGRESS);
             expect(retrievedCase?.leadAttorneyId).toBe(lawyerId);
         });
         it('should assign additional lawyers to open case', async () => {
@@ -294,15 +294,12 @@ describe('CaseService Integration Tests', () => {
                 result: case_1.CaseResult.WIN,
                 closedBy
             });
-            // Try to close again - should either succeed or return existing closure
-            const secondResult = await caseService.closeCase({
+            // Try to close again - should expect an error
+            await expect(caseService.closeCase({
                 caseId,
                 result: case_1.CaseResult.LOSS,
                 closedBy
-            });
-            // Service handles double closure gracefully
-            expect(secondResult).toBeDefined();
-            expect(secondResult.status).toBe(case_1.CaseStatus.CLOSED);
+            })).rejects.toThrow('Case cannot be closed - current status: closed');
         });
     });
     describe('Case Querying and Search', () => {

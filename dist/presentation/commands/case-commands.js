@@ -21,6 +21,7 @@ const case_repository_1 = require("../../infrastructure/repositories/case-reposi
 const case_counter_repository_1 = require("../../infrastructure/repositories/case-counter-repository");
 const guild_config_repository_1 = require("../../infrastructure/repositories/guild-config-repository");
 const embed_utils_1 = require("../../infrastructure/utils/embed-utils");
+const permission_utils_1 = require("../../infrastructure/utils/permission-utils");
 const case_1 = require("../../domain/entities/case");
 const logger_1 = require("../../infrastructure/logger");
 let CaseCommands = class CaseCommands {
@@ -30,6 +31,12 @@ let CaseCommands = class CaseCommands {
         const guildConfigRepository = new guild_config_repository_1.GuildConfigRepository();
         this.caseService = new case_service_1.CaseService(caseRepository, caseCounterRepository, guildConfigRepository);
         this.caseRepository = caseRepository;
+    }
+    getCaseServiceWithClient(client) {
+        const caseRepository = new case_repository_1.CaseRepository();
+        const caseCounterRepository = new case_counter_repository_1.CaseCounterRepository();
+        const guildConfigRepository = new guild_config_repository_1.GuildConfigRepository();
+        return new case_service_1.CaseService(caseRepository, caseCounterRepository, guildConfigRepository, client);
     }
     async reviewCase(details, interaction) {
         try {
@@ -171,7 +178,7 @@ let CaseCommands = class CaseCommands {
                 const caseList = cases.map(c => {
                     const statusEmoji = {
                         [case_1.CaseStatus.PENDING]: '⏳',
-                        [case_1.CaseStatus.OPEN]: '🟢',
+                        // [CaseStatus.OPEN]: '🟢', // Legacy - removed status
                         [case_1.CaseStatus.IN_PROGRESS]: '🔄',
                         [case_1.CaseStatus.CLOSED]: '✅'
                     }[c.status];
@@ -196,6 +203,98 @@ let CaseCommands = class CaseCommands {
         catch (error) {
             logger_1.logger.error('Error listing cases:', error);
             const embed = embed_utils_1.EmbedUtils.createErrorEmbed('List Failed', 'An error occurred while retrieving the case list.');
+            await interaction.reply({ embeds: [embed], ephemeral: true });
+        }
+    }
+    async reassignStaff(staff, newCaseChannel, interaction) {
+        try {
+            // Validate the new case channel
+            if (newCaseChannel.type !== discord_js_1.ChannelType.GuildText) {
+                const embed = embed_utils_1.EmbedUtils.createErrorEmbed('Invalid Channel Type', 'The new case channel must be a text channel.');
+                await interaction.reply({ embeds: [embed], ephemeral: true });
+                return;
+            }
+            // Get the case from the new channel
+            const newCase = await this.getCaseFromChannel(newCaseChannel.id);
+            if (!newCase) {
+                const embed = embed_utils_1.EmbedUtils.createErrorEmbed('Invalid Case Channel', 'The specified channel is not associated with a case.');
+                await interaction.reply({ embeds: [embed], ephemeral: true });
+                return;
+            }
+            // Find the staff member's current case assignment using repository method
+            const assignedCases = await this.caseRepository.findByLawyer(staff.id);
+            const activeCases = assignedCases.filter(c => c.guildId === interaction.guildId &&
+                c.status === case_1.CaseStatus.IN_PROGRESS);
+            if (activeCases.length === 0) {
+                const embed = embed_utils_1.EmbedUtils.createErrorEmbed('No Current Assignment', `${staff.displayName} is not currently assigned to any active cases.`);
+                await interaction.reply({ embeds: [embed], ephemeral: true });
+                return;
+            }
+            // If staff is assigned to multiple cases, we'll reassign from the first active one
+            const currentCase = activeCases[0];
+            if (!currentCase) {
+                const embed = embed_utils_1.EmbedUtils.createErrorEmbed('No Current Assignment', `${staff.displayName} is not currently assigned to any active cases.`);
+                await interaction.reply({ embeds: [embed], ephemeral: true });
+                return;
+            }
+            // Check if they're already assigned to the target case
+            if (newCase.assignedLawyerIds.includes(staff.id)) {
+                const embed = embed_utils_1.EmbedUtils.createErrorEmbed('Already Assigned', `${staff.displayName} is already assigned to case ${newCase.caseNumber}.`);
+                await interaction.reply({ embeds: [embed], ephemeral: true });
+                return;
+            }
+            // Use the existing reassignLawyer method from the service
+            await this.caseService.reassignLawyer(currentCase._id.toString(), newCase._id.toString(), staff.id);
+            // Get updated case data
+            const updatedNewCase = await this.caseService.getCaseById(newCase._id.toString());
+            const embed = embed_utils_1.EmbedUtils.createSuccessEmbed('Staff Reassigned', `${staff.displayName} has been reassigned from case **${currentCase.caseNumber}** to case **${newCase.caseNumber}**.\n\n` +
+                `**New Case:** ${newCase.title}\n` +
+                `**New Case Channel:** <#${newCaseChannel.id}>\n` +
+                `${updatedNewCase?.leadAttorneyId === staff.id ? '**Lead Attorney:** Yes' : '**Lead Attorney:** No'}\n` +
+                `**Total Assigned Lawyers:** ${updatedNewCase?.assignedLawyerIds.length || 0}`);
+            await interaction.reply({ embeds: [embed] });
+        }
+        catch (error) {
+            logger_1.logger.error('Error reassigning staff member:', error);
+            const embed = embed_utils_1.EmbedUtils.createErrorEmbed('Reassignment Failed', error instanceof Error ? error.message : 'Failed to reassign staff member.');
+            await interaction.reply({ embeds: [embed], ephemeral: true });
+        }
+    }
+    async unassignStaff(staff, interaction) {
+        try {
+            // Find all cases where this staff member is assigned using repository method
+            const allAssignedCases = await this.caseRepository.findByLawyer(staff.id);
+            const assignedCases = allAssignedCases.filter(c => c.guildId === interaction.guildId &&
+                c.status === case_1.CaseStatus.IN_PROGRESS);
+            if (assignedCases.length === 0) {
+                const embed = embed_utils_1.EmbedUtils.createErrorEmbed('No Current Assignment', `${staff.displayName} is not currently assigned to any active cases.`);
+                await interaction.reply({ embeds: [embed], ephemeral: true });
+                return;
+            }
+            // Unassign from all active cases
+            const unassignedCases = [];
+            for (const caseData of assignedCases) {
+                try {
+                    await this.caseService.unassignLawyer(caseData._id.toString(), staff.id);
+                    unassignedCases.push(caseData.caseNumber);
+                }
+                catch (error) {
+                    logger_1.logger.error(`Failed to unassign from case ${caseData.caseNumber}:`, error);
+                }
+            }
+            if (unassignedCases.length === 0) {
+                const embed = embed_utils_1.EmbedUtils.createErrorEmbed('Unassignment Failed', 'Failed to unassign staff member from any cases.');
+                await interaction.reply({ embeds: [embed], ephemeral: true });
+                return;
+            }
+            const embed = embed_utils_1.EmbedUtils.createSuccessEmbed('Staff Unassigned', `${staff.displayName} has been unassigned from the following case${unassignedCases.length > 1 ? 's' : ''}:\n\n` +
+                `**Cases:** ${unassignedCases.map(cn => `\`${cn}\``).join(', ')}\n\n` +
+                `${unassignedCases.length > 1 ? 'These cases' : 'This case'} ${unassignedCases.length > 1 ? 'are' : 'is'} now available for reassignment.`);
+            await interaction.reply({ embeds: [embed] });
+        }
+        catch (error) {
+            logger_1.logger.error('Error unassigning staff member:', error);
+            const embed = embed_utils_1.EmbedUtils.createErrorEmbed('Unassignment Failed', error instanceof Error ? error.message : 'Failed to unassign staff member.');
             await interaction.reply({ embeds: [embed], ephemeral: true });
         }
     }
@@ -280,7 +379,7 @@ let CaseCommands = class CaseCommands {
     buildOverviewTab(embed, caseData) {
         const statusEmoji = {
             [case_1.CaseStatus.PENDING]: '⏳',
-            [case_1.CaseStatus.OPEN]: '🟢',
+            // [CaseStatus.OPEN]: '🟢', // Legacy - removed status
             [case_1.CaseStatus.IN_PROGRESS]: '🔄',
             [case_1.CaseStatus.CLOSED]: '✅'
         }[caseData.status];
@@ -525,7 +624,8 @@ let CaseCommands = class CaseCommands {
         try {
             const caseId = interaction.customId.replace('case_accept_', '');
             // Accept the case and assign the accepting user as lead attorney
-            const acceptedCase = await this.caseService.acceptCase(caseId, interaction.user.id);
+            const caseServiceWithClient = this.getCaseServiceWithClient(interaction.client);
+            const acceptedCase = await caseServiceWithClient.acceptCase(caseId, interaction.user.id);
             // Update the original message
             const embed = embed_utils_1.EmbedUtils.createSuccessEmbed('✅ Case Accepted', `This case has been accepted by ${interaction.user.displayName}.\n\n` +
                 `**Case Number:** ${acceptedCase.caseNumber}\n` +
@@ -795,6 +895,55 @@ let CaseCommands = class CaseCommands {
             // Don't throw error as this shouldn't block case closure
         }
     }
+    async setLeadAttorney(attorney, interaction) {
+        try {
+            // This command works within case channels or requires case permission
+            const caseData = await this.getCaseFromChannel(interaction.channelId);
+            if (!caseData) {
+                const embed = embed_utils_1.EmbedUtils.createErrorEmbed('Invalid Channel', 'This command can only be used within case channels.');
+                await interaction.reply({ embeds: [embed], ephemeral: true });
+                return;
+            }
+            // Check permissions: only current lead attorney or users with case permissions
+            const guildConfigRepository = new guild_config_repository_1.GuildConfigRepository();
+            const permissionService = new permission_service_1.PermissionService(guildConfigRepository);
+            const context = permission_utils_1.PermissionUtils.createPermissionContext(interaction);
+            const hasPermission = await permissionService.hasActionPermission(context, 'case');
+            const isCurrentLeadAttorney = caseData.leadAttorneyId === interaction.user.id;
+            if (!hasPermission && !isCurrentLeadAttorney) {
+                const embed = embed_utils_1.EmbedUtils.createErrorEmbed('Permission Denied', 'You must have case management permissions or be the current lead attorney to change the lead attorney.');
+                await interaction.reply({ embeds: [embed], ephemeral: true });
+                return;
+            }
+            await interaction.deferReply();
+            const caseServiceWithClient = this.getCaseServiceWithClient(interaction.client);
+            const updatedCase = await caseServiceWithClient.setLeadAttorney(caseData._id.toHexString(), attorney.id, interaction.user.id);
+            const embed = embed_utils_1.EmbedUtils.createSuccessEmbed('Lead Attorney Updated', `**Case:** ${updatedCase.caseNumber}\n` +
+                `**New Lead Attorney:** <@${attorney.id}>\n` +
+                `**Previous Lead Attorney:** ${caseData.leadAttorneyId ? `<@${caseData.leadAttorneyId}>` : 'None'}\n\n` +
+                `The lead attorney has been successfully updated. Channel permissions have been updated accordingly.`);
+            await interaction.editReply({ embeds: [embed] });
+            // Log the action
+            logger_1.logger.info('Lead attorney updated via command', {
+                caseId: updatedCase._id,
+                caseNumber: updatedCase.caseNumber,
+                newLeadAttorney: attorney.id,
+                previousLeadAttorney: caseData.leadAttorneyId,
+                changedBy: interaction.user.id,
+                guildId: interaction.guildId
+            });
+        }
+        catch (error) {
+            logger_1.logger.error('Error setting lead attorney:', error);
+            const embed = embed_utils_1.EmbedUtils.createErrorEmbed('Error', error instanceof Error ? error.message : 'Failed to set lead attorney');
+            if (interaction.deferred) {
+                await interaction.editReply({ embeds: [embed] });
+            }
+            else {
+                await interaction.reply({ embeds: [embed], ephemeral: true });
+            }
+        }
+    }
 };
 exports.CaseCommands = CaseCommands;
 __decorate([
@@ -820,12 +969,8 @@ __decorate([
     (0, discordx_1.Guard)(async (interaction, _client, next) => {
         const guildConfigRepository = new guild_config_repository_1.GuildConfigRepository();
         const permissionService = new permission_service_1.PermissionService(guildConfigRepository);
-        const hasPermission = await permissionService.hasActionPermission({
-            guildId: interaction.guildId,
-            userId: interaction.user.id,
-            userRoles: [], // Should be populated with actual roles
-            isGuildOwner: false
-        }, 'case');
+        const context = permission_utils_1.PermissionUtils.createPermissionContext(interaction);
+        const hasPermission = await permissionService.hasActionPermission(context, 'case');
         if (!hasPermission) {
             await interaction.reply({
                 content: '❌ You do not have permission to manage cases. Case permission required.',
@@ -902,6 +1047,71 @@ __decorate([
 ], CaseCommands.prototype, "listCases", null);
 __decorate([
     (0, discordx_1.Slash)({
+        description: 'Reassign a staff member from their current case to a new case',
+        name: 'reassign'
+    }),
+    (0, discordx_1.Guard)(async (interaction, _client, next) => {
+        const guildConfigRepository = new guild_config_repository_1.GuildConfigRepository();
+        const permissionService = new permission_service_1.PermissionService(guildConfigRepository);
+        const context = permission_utils_1.PermissionUtils.createPermissionContext(interaction);
+        const hasPermission = await permissionService.hasActionPermission(context, 'case');
+        if (!hasPermission) {
+            await interaction.reply({
+                content: '❌ You do not have permission to manage cases. Case permission required.',
+                ephemeral: true,
+            });
+            return;
+        }
+        await next();
+    }),
+    __param(0, (0, discordx_1.SlashOption)({
+        description: 'The staff member to reassign',
+        name: 'staff',
+        type: discord_js_1.ApplicationCommandOptionType.User,
+        required: true
+    })),
+    __param(1, (0, discordx_1.SlashOption)({
+        description: 'The new case channel to assign them to',
+        name: 'newcasechannel',
+        type: discord_js_1.ApplicationCommandOptionType.Channel,
+        required: true
+    })),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [discord_js_1.User, Object, discord_js_1.CommandInteraction]),
+    __metadata("design:returntype", Promise)
+], CaseCommands.prototype, "reassignStaff", null);
+__decorate([
+    (0, discordx_1.Slash)({
+        description: 'Unassign a staff member from their current case',
+        name: 'unassign'
+    }),
+    (0, discordx_1.Guard)(async (interaction, _client, next) => {
+        const guildConfigRepository = new guild_config_repository_1.GuildConfigRepository();
+        const permissionService = new permission_service_1.PermissionService(guildConfigRepository);
+        const context = permission_utils_1.PermissionUtils.createPermissionContext(interaction);
+        const hasPermission = await permissionService.hasActionPermission(context, 'case');
+        if (!hasPermission) {
+            await interaction.reply({
+                content: '❌ You do not have permission to manage cases. Case permission required.',
+                ephemeral: true,
+            });
+            return;
+        }
+        await next();
+    }),
+    __param(0, (0, discordx_1.SlashOption)({
+        description: 'The staff member to unassign',
+        name: 'staff',
+        type: discord_js_1.ApplicationCommandOptionType.User,
+        required: true
+    })),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [discord_js_1.User,
+        discord_js_1.CommandInteraction]),
+    __metadata("design:returntype", Promise)
+], CaseCommands.prototype, "unassignStaff", null);
+__decorate([
+    (0, discordx_1.Slash)({
         description: 'View detailed case information with tabbed interface',
         name: 'info'
     }),
@@ -951,6 +1161,22 @@ __decorate([
     __metadata("design:paramtypes", [discord_js_1.ModalSubmitInteraction]),
     __metadata("design:returntype", Promise)
 ], CaseCommands.prototype, "handleDeclineReason", null);
+__decorate([
+    (0, discordx_1.Slash)({
+        description: 'Set the lead attorney for a case',
+        name: 'set-lead-attorney'
+    }),
+    __param(0, (0, discordx_1.SlashOption)({
+        description: 'The new lead attorney',
+        name: 'attorney',
+        type: discord_js_1.ApplicationCommandOptionType.User,
+        required: true
+    })),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [discord_js_1.User,
+        discord_js_1.CommandInteraction]),
+    __metadata("design:returntype", Promise)
+], CaseCommands.prototype, "setLeadAttorney", null);
 exports.CaseCommands = CaseCommands = __decorate([
     (0, discordx_1.Discord)(),
     (0, discordx_1.SlashGroup)({ description: 'Case management commands', name: 'case' }),

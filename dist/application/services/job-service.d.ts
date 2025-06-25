@@ -3,6 +3,7 @@ import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-
 import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
 import { Job, JobQuestion } from '../../domain/entities/job';
 import { StaffRole } from '../../domain/entities/staff-role';
+import { PermissionService, PermissionContext } from './permission-service';
 export interface JobCreateRequest {
     guildId: string;
     title: string;
@@ -25,29 +26,31 @@ export interface JobUpdateRequest {
 export declare class JobService {
     private jobRepository;
     private auditLogRepository;
-    constructor(jobRepository: JobRepository, auditLogRepository: AuditLogRepository, _staffRepository: StaffRepository);
-    createJob(request: JobCreateRequest): Promise<{
+    private permissionService;
+    constructor(jobRepository: JobRepository, auditLogRepository: AuditLogRepository, _staffRepository: StaffRepository, // Future use for staff validation
+    permissionService: PermissionService);
+    createJob(context: PermissionContext, request: JobCreateRequest): Promise<{
         success: boolean;
         job?: Job;
         error?: string;
     }>;
-    updateJob(guildId: string, jobId: string, updates: JobUpdateRequest, updatedBy: string): Promise<{
+    updateJob(context: PermissionContext, jobId: string, updates: JobUpdateRequest): Promise<{
         success: boolean;
         job?: Job;
         error?: string;
     }>;
-    closeJob(guildId: string, jobId: string, closedBy: string): Promise<{
+    closeJob(context: PermissionContext, jobId: string): Promise<{
         success: boolean;
         job?: Job;
         error?: string;
     }>;
-    removeJob(guildId: string, jobId: string, removedBy: string): Promise<{
+    removeJob(context: PermissionContext, jobId: string): Promise<{
         success: boolean;
         error?: string;
     }>;
-    listJobs(guildId: string, filters: JobSearchFilters, page: number | undefined, requestedBy: string): Promise<JobListResult>;
-    getJobDetails(guildId: string, jobId: string, requestedBy: string): Promise<Job | null>;
-    getJobStatistics(guildId: string): Promise<{
+    listJobs(context: PermissionContext, filters: JobSearchFilters, page?: number): Promise<JobListResult>;
+    getJobDetails(context: PermissionContext, jobId: string): Promise<Job | null>;
+    getJobStatistics(context: PermissionContext): Promise<{
         totalJobs: number;
         openJobs: number;
         closedJobs: number;

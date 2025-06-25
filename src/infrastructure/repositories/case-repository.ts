@@ -132,8 +132,8 @@ export class CaseRepository extends BaseMongoRepository<Case> {
   public async getActiveCases(guildId: string): Promise<Case[]> {
     return this.findByFilters({ 
       guildId, 
-      status: { $in: [CaseStatus.OPEN, CaseStatus.IN_PROGRESS] } 
-    } as any);
+      status: CaseStatus.IN_PROGRESS
+    });
   }
 
   public async getPendingCases(guildId: string): Promise<Case[]> {
@@ -159,7 +159,7 @@ export class CaseRepository extends BaseMongoRepository<Case> {
     return {
       total: allCases.length,
       pending: allCases.filter(c => c.status === CaseStatus.PENDING).length,
-      open: allCases.filter(c => c.status === CaseStatus.OPEN).length,
+      open: 0, // OPEN status removed
       inProgress: allCases.filter(c => c.status === CaseStatus.IN_PROGRESS).length,
       closed: allCases.filter(c => c.status === CaseStatus.CLOSED).length,
       wins: allCases.filter(c => c.result === CaseResult.WIN).length,

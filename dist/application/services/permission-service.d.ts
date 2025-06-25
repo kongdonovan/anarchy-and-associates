@@ -15,7 +15,15 @@ export declare class PermissionService {
     canManageAdmins(context: PermissionContext): Promise<boolean>;
     canManageConfig(context: PermissionContext): Promise<boolean>;
     hasHRPermission(guildId: string, userId: string): Promise<boolean>;
+    /**
+     * Check HR permission with proper context (preferred method)
+     */
+    hasHRPermissionWithContext(context: PermissionContext): Promise<boolean>;
     hasRetainerPermission(guildId: string, userId: string): Promise<boolean>;
+    /**
+     * Check retainer permission with proper context (preferred method)
+     */
+    hasRetainerPermissionWithContext(context: PermissionContext): Promise<boolean>;
     getPermissionSummary(context: PermissionContext): Promise<{
         isAdmin: boolean;
         isGuildOwner: boolean;

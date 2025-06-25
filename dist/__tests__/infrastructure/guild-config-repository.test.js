@@ -15,6 +15,16 @@ describe('GuildConfigRepository', () => {
         }
     });
     describe('constructor', () => {
+        let originalGlobalClient;
+        beforeEach(() => {
+            // Temporarily hide the global client to test the throw condition
+            originalGlobalClient = global.__mongoClient;
+            global.__mongoClient = undefined;
+        });
+        afterEach(() => {
+            // Restore the global client for other tests
+            global.__mongoClient = originalGlobalClient;
+        });
         it('should throw when database is not connected', () => {
             expect(() => new guild_config_repository_1.GuildConfigRepository()).toThrow('Database not connected. Call connect() first.');
         });

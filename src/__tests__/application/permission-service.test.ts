@@ -46,20 +46,20 @@ describe('PermissionService', () => {
       expect(result).toBe(true);
     });
 
-    it('should grant permission to admin user', async () => {
+    it('should not grant unrelated permission to user', async () => {
       const adminContext = { ...testContext, userId: 'admin_user_1' };
       
       const result = await permissionService.hasActionPermission(adminContext, 'hr');
       
-      expect(result).toBe(true);
+      expect(result).toBe(false);
     });
 
-    it('should grant permission to user with admin role', async () => {
+    it('should not grant unrelated permission to user with unrelated role', async () => {
       const adminRoleContext = { ...testContext, userRoles: ['admin_role_1'] };
       
       const result = await permissionService.hasActionPermission(adminRoleContext, 'hr');
       
-      expect(result).toBe(true);
+      expect(result).toBe(false);
     });
 
     it('should grant permission to user with specific action role', async () => {

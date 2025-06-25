@@ -11,5 +11,6 @@ export interface IRepository<T extends BaseEntity> {
   findById(id: string): Promise<T | null>;
   findByFilters(filters: Partial<T>): Promise<T[]>;
   update(id: string, updates: Partial<T>): Promise<T | null>;
+  conditionalUpdate(id: string, conditions: Partial<T>, updates: Partial<T>): Promise<T | null>;
   delete(id: string): Promise<boolean>;
 }

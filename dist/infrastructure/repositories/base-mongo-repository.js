@@ -22,10 +22,11 @@ class BaseMongoRepository {
             if (!result.insertedId) {
                 throw new Error('Failed to insert entity');
             }
-            const insertedEntity = await this.findById(result.insertedId.toHexString());
-            if (!insertedEntity) {
-                throw new Error('Failed to retrieve inserted entity');
-            }
+            // Set the _id on the entity and return it directly instead of querying again
+            const insertedEntity = {
+                ...newEntity,
+                _id: result.insertedId,
+            };
             logger_1.logger.debug(`Entity added to ${this.collectionName}`, { id: result.insertedId });
             return insertedEntity;
         }
@@ -75,6 +76,32 @@ class BaseMongoRepository {
         }
         catch (error) {
             logger_1.logger.error(`Error updating entity in ${this.collectionName}:`, error);
+            throw error;
+        }
+    }
+    async conditionalUpdate(id, conditions, updates) {
+        try {
+            if (!mongodb_1.ObjectId.isValid(id)) {
+                return null;
+            }
+            const updateData = {
+                ...updates,
+                updatedAt: new Date(),
+            };
+            // Combine ID condition with additional conditions
+            const filter = {
+                _id: new mongodb_1.ObjectId(id),
+                ...conditions
+            };
+            const result = await this.collection.findOneAndUpdate(filter, { $set: updateData }, { returnDocument: 'after' });
+            if (!result) {
+                return null;
+            }
+            logger_1.logger.debug(`Entity conditionally updated in ${this.collectionName}`, { id, conditions });
+            return result;
+        }
+        catch (error) {
+            logger_1.logger.error(`Error conditionally updating entity in ${this.collectionName}:`, error);
             throw error;
         }
     }

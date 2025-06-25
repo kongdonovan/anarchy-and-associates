@@ -22,8 +22,7 @@ export interface Case extends BaseEntity {
 
 export enum CaseStatus {
   PENDING = 'pending', // Initial state when case review is requested
-  OPEN = 'open', // Case has been accepted and is active
-  IN_PROGRESS = 'in-progress', // Case is actively being worked on
+  IN_PROGRESS = 'in-progress', // Case has been accepted and is actively being worked on
   CLOSED = 'closed' // Case has been completed
 }
 

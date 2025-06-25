@@ -18,6 +18,7 @@ import { RetainerRepository } from '../../infrastructure/repositories/retainer-r
 import { GuildConfigRepository } from '../../infrastructure/repositories/guild-config-repository';
 import { RobloxService } from '../../infrastructure/external/roblox-service';
 import { EmbedUtils } from '../../infrastructure/utils/embed-utils';
+import { PermissionUtils } from '../../infrastructure/utils/permission-utils';
 import { Retainer, RetainerCreationRequest, RetainerSignatureRequest } from '../../domain/entities/retainer';
 import { logger } from '../../infrastructure/logger';
 
@@ -28,10 +29,8 @@ import { logger } from '../../infrastructure/logger';
   async (interaction: CommandInteraction, _client, next) => {
     const guildConfigRepository = new GuildConfigRepository();
     const permissionService = new PermissionService(guildConfigRepository);
-    const hasPermission = await permissionService.hasRetainerPermission(
-      interaction.guildId!,
-      interaction.user.id
-    );
+    const context = PermissionUtils.createPermissionContext(interaction);
+    const hasPermission = await permissionService.hasRetainerPermissionWithContext(context);
     
     if (!hasPermission) {
       await interaction.reply({

@@ -24,7 +24,6 @@ describe('Case Entity', () => {
     it('should handle all valid case statuses', () => {
       const validStatuses = [
         CaseStatus.PENDING,
-        CaseStatus.OPEN,
         CaseStatus.IN_PROGRESS,
         CaseStatus.CLOSED
       ];
@@ -172,10 +171,8 @@ describe('Case Entity', () => {
   describe('Case Status Transitions', () => {
     it('should allow valid status transitions', () => {
       const validTransitions = [
-        { from: CaseStatus.PENDING, to: CaseStatus.OPEN },
-        { from: CaseStatus.OPEN, to: CaseStatus.IN_PROGRESS },
-        { from: CaseStatus.IN_PROGRESS, to: CaseStatus.CLOSED },
-        { from: CaseStatus.OPEN, to: CaseStatus.CLOSED }, // Direct closure
+        { from: CaseStatus.PENDING, to: CaseStatus.IN_PROGRESS },
+        { from: CaseStatus.IN_PROGRESS, to: CaseStatus.CLOSED }
       ];
       
       validTransitions.forEach(({ from, to }) => {
@@ -209,13 +206,13 @@ describe('Case Entity', () => {
     it('should track case opening details', () => {
       const leadAttorneyId = 'lawyer456';
       
-      const openCase = TestUtils.generateMockCase({
-        status: CaseStatus.OPEN,
+      const inProgressCase = TestUtils.generateMockCase({
+        status: CaseStatus.IN_PROGRESS,
         leadAttorneyId
       });
       
-      expect(openCase.status).toBe(CaseStatus.OPEN);
-      expect(openCase.leadAttorneyId).toBe(leadAttorneyId);
+      expect(inProgressCase.status).toBe(CaseStatus.IN_PROGRESS);
+      expect(inProgressCase.leadAttorneyId).toBe(leadAttorneyId);
     });
   });
 
@@ -224,11 +221,11 @@ describe('Case Entity', () => {
       const leadAttorneyId = 'lawyer123';
       const testCase = TestUtils.generateMockCase({
         leadAttorneyId,
-        status: CaseStatus.OPEN
+        status: CaseStatus.IN_PROGRESS
       });
       
       expect(testCase.leadAttorneyId).toBe(leadAttorneyId);
-      expect(testCase.status).toBe(CaseStatus.OPEN);
+      expect(testCase.status).toBe(CaseStatus.IN_PROGRESS);
     });
 
     it('should handle multiple assigned lawyers', () => {

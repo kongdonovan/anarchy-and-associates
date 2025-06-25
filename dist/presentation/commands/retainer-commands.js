@@ -21,6 +21,7 @@ const retainer_repository_1 = require("../../infrastructure/repositories/retaine
 const guild_config_repository_1 = require("../../infrastructure/repositories/guild-config-repository");
 const roblox_service_1 = require("../../infrastructure/external/roblox-service");
 const embed_utils_1 = require("../../infrastructure/utils/embed-utils");
+const permission_utils_1 = require("../../infrastructure/utils/permission-utils");
 const logger_1 = require("../../infrastructure/logger");
 let RetainerCommands = class RetainerCommands {
     constructor() {
@@ -383,7 +384,8 @@ exports.RetainerCommands = RetainerCommands = __decorate([
     (0, discordx_1.Guard)(async (interaction, _client, next) => {
         const guildConfigRepository = new guild_config_repository_1.GuildConfigRepository();
         const permissionService = new permission_service_1.PermissionService(guildConfigRepository);
-        const hasPermission = await permissionService.hasRetainerPermission(interaction.guildId, interaction.user.id);
+        const context = permission_utils_1.PermissionUtils.createPermissionContext(interaction);
+        const hasPermission = await permissionService.hasRetainerPermissionWithContext(context);
         if (!hasPermission) {
             await interaction.reply({
                 content: '❌ You do not have permission to manage retainer agreements. Retainer permission required.',

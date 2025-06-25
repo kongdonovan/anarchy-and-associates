@@ -4,6 +4,7 @@ import { ApplicationRepository } from '../../infrastructure/repositories/applica
 import { JobRepository } from '../../infrastructure/repositories/job-repository';
 import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
 import { RobloxService } from '../../infrastructure/external/roblox-service';
+import { PermissionService, PermissionContext } from './permission-service';
 import { logger } from '../../infrastructure/logger';
 
 export interface ApplicationSubmissionRequest {
@@ -32,7 +33,8 @@ export class ApplicationService {
     private applicationRepository: ApplicationRepository,
     private jobRepository: JobRepository,
     private staffRepository: StaffRepository,
-    private robloxService: RobloxService
+    private robloxService: RobloxService,
+    private permissionService: PermissionService
   ) {}
 
   public async submitApplication(request: ApplicationSubmissionRequest): Promise<Application> {
@@ -69,7 +71,13 @@ export class ApplicationService {
     return createdApplication;
   }
 
-  public async reviewApplication(request: ApplicationReviewRequest): Promise<Application> {
+  public async reviewApplication(context: PermissionContext, request: ApplicationReviewRequest): Promise<Application> {
+    // Check HR permission for reviewing applications
+    const hasPermission = await this.permissionService.hasHRPermissionWithContext(context);
+    if (!hasPermission) {
+      throw new Error('You do not have permission to review applications');
+    }
+
     logger.info('Reviewing application', { 
       applicationId: request.applicationId, 
       reviewerId: request.reviewerId,
@@ -149,29 +157,61 @@ export class ApplicationService {
     };
   }
 
-  public async getApplicationById(id: string): Promise<Application | null> {
+  public async getApplicationById(context: PermissionContext, id: string): Promise<Application | null> {
+    // Check HR permission for viewing applications
+    const hasPermission = await this.permissionService.hasHRPermissionWithContext(context);
+    if (!hasPermission) {
+      throw new Error('You do not have permission to view applications');
+    }
+
     return this.applicationRepository.findById(id);
   }
 
-  public async getApplicationsByJob(jobId: string): Promise<Application[]> {
+  public async getApplicationsByJob(context: PermissionContext, jobId: string): Promise<Application[]> {
+    // Check HR permission for viewing job applications
+    const hasPermission = await this.permissionService.hasHRPermissionWithContext(context);
+    if (!hasPermission) {
+      throw new Error('You do not have permission to view job applications');
+    }
+
     return this.applicationRepository.findByJob(jobId);
   }
 
-  public async getApplicationsByApplicant(applicantId: string): Promise<Application[]> {
+  public async getApplicationsByApplicant(context: PermissionContext, applicantId: string): Promise<Application[]> {
+    // Users can view their own applications, or HR can view any applications
+    const isOwnApplications = context.userId === applicantId;
+    const hasHRPermission = await this.permissionService.hasHRPermissionWithContext(context);
+    
+    if (!isOwnApplications && !hasHRPermission) {
+      throw new Error('You do not have permission to view these applications');
+    }
+
     return this.applicationRepository.findByApplicant(applicantId);
   }
 
-  public async getPendingApplications(guildId: string): Promise<Application[]> {
-    return this.applicationRepository.findPendingApplications(guildId);
+  public async getPendingApplications(context: PermissionContext): Promise<Application[]> {
+    // Check HR permission for viewing pending applications
+    const hasPermission = await this.permissionService.hasHRPermissionWithContext(context);
+    if (!hasPermission) {
+      throw new Error('You do not have permission to view pending applications');
+    }
+
+    return this.applicationRepository.findPendingApplications(context.guildId);
   }
 
-  public async getApplicationStats(guildId: string): Promise<{
+  public async getApplicationStats(context: PermissionContext): Promise<{
     total: number;
     pending: number;
     accepted: number;
     rejected: number;
   }> {
-    const allApplications = await this.applicationRepository.findByGuild(guildId);
+    // Check HR permission for viewing application statistics
+    const hasPermission = await this.permissionService.hasHRPermissionWithContext(context);
+    if (!hasPermission) {
+      throw new Error('You do not have permission to view application statistics');
+    }
+
+    const allApplications = await this.applicationRepository.findByGuild(context.guildId);
     
     return {
       total: allApplications.length,

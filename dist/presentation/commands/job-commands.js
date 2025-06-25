@@ -27,6 +27,7 @@ const guild_config_repository_1 = require("../../infrastructure/repositories/gui
 const permission_service_1 = require("../../application/services/permission-service");
 const roblox_service_1 = require("../../infrastructure/external/roblox-service");
 const embed_utils_1 = require("../../infrastructure/utils/embed-utils");
+const permission_utils_1 = require("../../infrastructure/utils/permission-utils");
 const staff_role_1 = require("../../domain/entities/staff-role");
 const job_1 = require("../../domain/entities/job");
 const logger_1 = require("../../infrastructure/logger");
@@ -1454,7 +1455,8 @@ exports.JobsCommands = JobsCommands = __decorate([
             });
             const guildConfigRepository = new guild_config_repository_1.GuildConfigRepository();
             const permissionService = new permission_service_1.PermissionService(guildConfigRepository);
-            const hasPermission = await permissionService.hasHRPermission(interaction.guildId, interaction.user.id);
+            const context = permission_utils_1.PermissionUtils.createPermissionContext(interaction);
+            const hasPermission = await permissionService.hasHRPermissionWithContext(context);
             logger_1.logger.debug('HR permission check result', {
                 userId: interaction.user.id,
                 hasPermission

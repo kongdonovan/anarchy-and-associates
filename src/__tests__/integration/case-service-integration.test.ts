@@ -201,13 +201,13 @@ describe('CaseService Integration Tests', () => {
 
       const acceptedCase = await caseService.acceptCase(caseId, lawyerId);
 
-      expect(acceptedCase.status).toBe(CaseStatus.OPEN);
+      expect(acceptedCase.status).toBe(CaseStatus.IN_PROGRESS);
       expect(acceptedCase.leadAttorneyId).toBe(lawyerId);
       expect(acceptedCase.assignedLawyerIds).toContain(lawyerId);
 
       // Verify case is retrievable by ID
       const retrievedCase = await caseService.getCaseById(caseId);
-      expect(retrievedCase?.status).toBe(CaseStatus.OPEN);
+      expect(retrievedCase?.status).toBe(CaseStatus.IN_PROGRESS);
       expect(retrievedCase?.leadAttorneyId).toBe(lawyerId);
     });
 
@@ -360,16 +360,12 @@ describe('CaseService Integration Tests', () => {
         closedBy
       });
 
-      // Try to close again - should either succeed or return existing closure
-      const secondResult = await caseService.closeCase({
+      // Try to close again - should expect an error
+      await expect(caseService.closeCase({
         caseId,
         result: CaseResult.LOSS,
         closedBy
-      });
-      
-      // Service handles double closure gracefully
-      expect(secondResult).toBeDefined();
-      expect(secondResult.status).toBe(CaseStatus.CLOSED);
+      })).rejects.toThrow('Case cannot be closed - current status: closed');
     });
   });
 

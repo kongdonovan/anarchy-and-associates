@@ -19,6 +19,16 @@ describe('MongoDbClient', () => {
         });
     });
     describe('connection management', () => {
+        let originalGlobalClient;
+        beforeEach(() => {
+            // Temporarily hide the global client to test the throw condition
+            originalGlobalClient = global.__mongoClient;
+            global.__mongoClient = undefined;
+        });
+        afterEach(() => {
+            // Restore the global client for other tests
+            global.__mongoClient = originalGlobalClient;
+        });
         it('should initially not be connected', () => {
             expect(mongoClient.isConnected()).toBe(false);
         });

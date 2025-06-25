@@ -28,10 +28,11 @@ export abstract class BaseMongoRepository<T extends BaseEntity> implements IRepo
         throw new Error('Failed to insert entity');
       }
 
-      const insertedEntity = await this.findById(result.insertedId.toHexString());
-      if (!insertedEntity) {
-        throw new Error('Failed to retrieve inserted entity');
-      }
+      // Set the _id on the entity and return it directly instead of querying again
+      const insertedEntity = {
+        ...newEntity,
+        _id: result.insertedId,
+      } as T;
 
       logger.debug(`Entity added to ${this.collectionName}`, { id: result.insertedId });
       return insertedEntity;
@@ -90,6 +91,41 @@ export abstract class BaseMongoRepository<T extends BaseEntity> implements IRepo
       return result as T;
     } catch (error) {
       logger.error(`Error updating entity in ${this.collectionName}:`, error);
+      throw error;
+    }
+  }
+
+  public async conditionalUpdate(id: string, conditions: Partial<T>, updates: Partial<T>): Promise<T | null> {
+    try {
+      if (!ObjectId.isValid(id)) {
+        return null;
+      }
+
+      const updateData = {
+        ...updates,
+        updatedAt: new Date(),
+      };
+
+      // Combine ID condition with additional conditions
+      const filter = {
+        _id: new ObjectId(id),
+        ...conditions
+      } as Filter<T>;
+
+      const result = await this.collection.findOneAndUpdate(
+        filter,
+        { $set: updateData } as UpdateFilter<T>,
+        { returnDocument: 'after' }
+      );
+
+      if (!result) {
+        return null;
+      }
+
+      logger.debug(`Entity conditionally updated in ${this.collectionName}`, { id, conditions });
+      return result as T;
+    } catch (error) {
+      logger.error(`Error conditionally updating entity in ${this.collectionName}:`, error);
       throw error;
     }
   }

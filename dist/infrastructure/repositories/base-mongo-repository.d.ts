@@ -8,6 +8,7 @@ export declare abstract class BaseMongoRepository<T extends BaseEntity> implemen
     findById(id: string): Promise<T | null>;
     findByFilters(filters: Partial<T>): Promise<T[]>;
     update(id: string, updates: Partial<T>): Promise<T | null>;
+    conditionalUpdate(id: string, conditions: Partial<T>, updates: Partial<T>): Promise<T | null>;
     delete(id: string): Promise<boolean>;
     findOne(filters: Partial<T>): Promise<T | null>;
     findMany(filters: Partial<T>, limit?: number, skip?: number): Promise<T[]>;
