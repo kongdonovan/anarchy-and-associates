@@ -84,10 +84,8 @@ async function start(): Promise<void> {
         GatewayIntentBits.MessageContent,
       ],
       silent: false,
-      // Register commands for specific guild(s) in development for faster updates
-      botGuilds: process.env.NODE_ENV !== 'production' ? 
-        (process.env.DEV_GUILD_ID ? [process.env.DEV_GUILD_ID] : undefined) : 
-        undefined
+      // Use guild commands for faster updates and to avoid global command conflicts
+      // Will be set dynamically after client is ready
     });
 
     // Setup ready event
@@ -126,30 +124,33 @@ async function start(): Promise<void> {
         guildCount: client.guilds.cache.size
       });
       
-      // Initialize slash commands with timeout
+      // Initialize slash commands as guild commands for all guilds
       try {
-        logger.info('Initializing application commands...');
+        logger.info('Initializing guild-specific commands...');
         
-        // Add timeout wrapper for initApplicationCommands
-        const initWithTimeout = Promise.race([
-          client.initApplicationCommands(),
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('initApplicationCommands timed out after 30 seconds')), 30000)
-          )
-        ]);
+        // Get all guild IDs where the bot is present
+        const guildIds = Array.from(client.guilds.cache.keys());
+        logger.info(`Registering commands for ${guildIds.length} guilds`);
         
-        await initWithTimeout;
-        logger.info('Slash commands initialized successfully');
+        // Set botGuilds dynamically and initialize commands
+        (client as any).botGuilds = guildIds;
         
-        // Debug: Check what commands were actually registered on Discord
-        try {
-          const registeredCommands = await client.application?.commands.fetch();
-          logger.info(`Registered ${registeredCommands?.size || 0} commands on Discord:`);
-          registeredCommands?.forEach(cmd => {
-            logger.info(`- ${cmd.name}: ${cmd.description}`);
-          });
-        } catch (fetchError) {
-          logger.warn('Could not fetch registered commands for verification:', fetchError);
+        // Initialize commands (will use the botGuilds we just set)
+        await client.initApplicationCommands();
+        
+        logger.info('✅ Guild commands initialized successfully');
+        
+        // Debug: Check registered commands per guild
+        for (const guildId of guildIds) {
+          try {
+            const guild = client.guilds.cache.get(guildId);
+            if (guild) {
+              const guildCommands = await guild.commands.fetch();
+              logger.info(`Guild ${guild.name}: ${guildCommands.size} commands registered`);
+            }
+          } catch (guildError) {
+            logger.warn(`Could not fetch commands for guild ${guildId}:`, guildError);
+          }
         }
         
       } catch (error) {

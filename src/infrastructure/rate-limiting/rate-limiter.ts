@@ -12,12 +12,15 @@ export class RateLimiter {
   private readonly COMMAND_INTERVAL_MS = 1000; // 1 second between commands
   private readonly WINDOW_SIZE_MS = 60000; // 1 minute window
   private readonly MAX_COMMANDS_PER_WINDOW = 30; // Max 30 commands per minute
+  private cleanupInterval?: NodeJS.Timeout;
 
   private constructor() {
-    // Clean up old entries every 5 minutes
-    setInterval(() => {
-      this.cleanupOldEntries();
-    }, 5 * 60 * 1000);
+    // Clean up old entries every 5 minutes (only in production)
+    if (process.env.NODE_ENV !== 'test') {
+      this.cleanupInterval = setInterval(() => {
+        this.cleanupOldEntries();
+      }, 5 * 60 * 1000);
+    }
   }
 
   public static getInstance(): RateLimiter {
@@ -174,5 +177,25 @@ export class RateLimiter {
       activeUsers,
       entries
     };
+  }
+
+  // Test helper methods - only for testing purposes
+  public clearUserLimitsForTesting(): void {
+    if (process.env.NODE_ENV === 'test') {
+      this.userLimits.clear();
+    }
+  }
+
+  public manualCleanupForTesting(): void {
+    if (process.env.NODE_ENV === 'test') {
+      this.cleanupOldEntries();
+    }
+  }
+
+  public destroy(): void {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = undefined;
+    }
   }
 }

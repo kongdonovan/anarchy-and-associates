@@ -43,6 +43,72 @@ async function initializeDatabase(): Promise<void> {
 }
 
 /**
+ * Initialize commands safely, checking for duplicates
+ */
+async function initializeCommandsSafely(client: any): Promise<void> {
+  try {
+    logger.info('Initializing application commands...');
+    
+    // Check for existing commands first
+    let existingCommands;
+    try {
+      existingCommands = await client.application?.commands.fetch();
+      logger.info(`Found ${existingCommands?.size || 0} existing commands on Discord`);
+    } catch (fetchError) {
+      logger.warn('Could not fetch existing commands, proceeding with normal initialization:', fetchError);
+      existingCommands = null;
+    }
+
+    // Get the commands that discordx wants to register
+    const localCommands = client.applicationCommands;
+    logger.info(`Found ${localCommands.length} local commands to register`);
+    
+    if (existingCommands && existingCommands.size > 0) {
+      // Check if commands are already registered and up to date
+      const needsUpdate = localCommands.some((localCmd: any) => {
+        const existingCmd = existingCommands.find((cmd: any) => cmd.name === localCmd.name);
+        if (!existingCmd) {
+          logger.info(`New command found: ${localCmd.name}`);
+          return true;
+        }
+        
+        // Check if command description changed
+        if (existingCmd.description !== localCmd.description) {
+          logger.info(`Command ${localCmd.name} description changed`);
+          return true;
+        }
+        
+        return false;
+      });
+      
+      // Check for orphaned commands
+      const orphanedCommands = existingCommands.filter((discordCmd: any) => 
+        !localCommands.some((localCmd: any) => localCmd.name === discordCmd.name)
+      );
+      
+      if (orphanedCommands.size > 0) {
+        logger.info(`Found ${orphanedCommands.size} orphaned commands that will be removed`);
+      }
+      
+      if (!needsUpdate && orphanedCommands.size === 0) {
+        logger.info('All commands are already up to date, skipping registration');
+      } else {
+        logger.info('Command differences detected, updating commands...');
+        await client.initApplicationCommands();
+        logger.info('Slash commands updated successfully');
+      }
+    } else {
+      // No existing commands or couldn't fetch them, proceed with normal registration
+      logger.info('No existing commands found, registering all commands...');
+      await client.initApplicationCommands();
+      logger.info('Slash commands initialized successfully');
+    }
+  } catch (error) {
+    logger.error('Error initializing commands:', error);
+  }
+}
+
+/**
  * Initialize the Discord client
  */
 async function initializeClient(): Promise<void> {
@@ -68,14 +134,8 @@ async function initializeClient(): Promise<void> {
     
     logger.info(`Bot logged in as ${client.user.tag}`);
     
-    // Initialize slash commands
-    try {
-      logger.info('Initializing application commands...');
-      await client.initApplicationCommands();
-      logger.info('Slash commands initialized successfully');
-    } catch (error) {
-      logger.error('Error initializing commands:', error);
-    }
+    // Initialize slash commands with smart duplicate prevention
+    await initializeCommandsSafely(client);
   });
 
   client.on('interactionCreate', async (interaction: any) => {
@@ -115,8 +175,8 @@ async function reload(): Promise<void> {
       // Rebuild metadata
       await MetadataStorage.instance.build();
       
-      // Re-initialize commands
-      await client.initApplicationCommands();
+      // Re-initialize commands safely (checking for duplicates)
+      await initializeCommandsSafely(client);
       
       logger.info("> Reload success");
     }

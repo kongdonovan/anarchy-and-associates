@@ -7,6 +7,7 @@ export interface QueuedOperation {
     priority: number;
     createdAt: Date;
     timeout: number;
+    timeoutId?: NodeJS.Timeout;
     resolve: (value: any) => void;
     reject: (error: any) => void;
 }
@@ -14,9 +15,10 @@ export declare class OperationQueue {
     private static instance;
     private queue;
     private processing;
-    private readonly TIMEOUT_MS;
+    private TIMEOUT_MS;
     private readonly HIGH_PRIORITY;
     private readonly NORMAL_PRIORITY;
+    private runningOperations;
     private constructor();
     static getInstance(): OperationQueue;
     enqueue<T>(operation: () => Promise<T>, userId: string, guildId: string, isGuildOwner?: boolean): Promise<T>;
@@ -37,6 +39,7 @@ export declare class OperationQueue {
     };
     clearQueue(): void;
     isProcessing(): boolean;
+    setTimeoutMs(timeoutMs: number): void;
     hasOperationsForUser(userId: string): boolean;
 }
 //# sourceMappingURL=operation-queue.d.ts.map

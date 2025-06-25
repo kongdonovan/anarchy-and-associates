@@ -95,7 +95,12 @@ export class TestUtils {
       throw new Error('clearTestDatabase can only be called in test environment');
     }
 
-    const mongoClient = MongoDbClient.getInstance();
+    // Use the global shared connection
+    const mongoClient = (global as any).__mongoClient as MongoDbClient;
+    if (!mongoClient) {
+      throw new Error('Global MongoDB client not initialized. Check globalSetup.');
+    }
+    
     const db = mongoClient.getDatabase();
     const collections = await db.listCollections().toArray();
     
@@ -105,9 +110,10 @@ export class TestUtils {
   }
 
   static async ensureTestDatabaseConnection(): Promise<void> {
-    const mongoClient = MongoDbClient.getInstance();
-    if (!mongoClient.isConnected()) {
-      await mongoClient.connect();
+    // Connection is managed globally, just verify it exists
+    const mongoClient = (global as any).__mongoClient as MongoDbClient;
+    if (!mongoClient || !mongoClient.isConnected()) {
+      throw new Error('Global MongoDB connection not available. Check globalSetup.');
     }
   }
 

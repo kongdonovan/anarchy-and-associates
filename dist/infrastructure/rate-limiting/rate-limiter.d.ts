@@ -4,6 +4,7 @@ export declare class RateLimiter {
     private readonly COMMAND_INTERVAL_MS;
     private readonly WINDOW_SIZE_MS;
     private readonly MAX_COMMANDS_PER_WINDOW;
+    private cleanupInterval?;
     private constructor();
     static getInstance(): RateLimiter;
     checkRateLimit(userId: string): {
@@ -29,5 +30,8 @@ export declare class RateLimiter {
             windowStart: Date;
         }>;
     };
+    clearUserLimitsForTesting(): void;
+    manualCleanupForTesting(): void;
+    destroy(): void;
 }
 //# sourceMappingURL=rate-limiter.d.ts.map

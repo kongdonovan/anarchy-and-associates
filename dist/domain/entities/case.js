@@ -44,6 +44,8 @@ function parseCaseNumber(caseNumber) {
 }
 // Helper function to generate channel name from case number
 function generateChannelName(caseNumber) {
-    return `case-${caseNumber}`.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+    const channelName = `case-${caseNumber}`.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+    // Discord channel names have a 100 character limit
+    return channelName.length > 100 ? channelName.substring(0, 100) : channelName;
 }
 //# sourceMappingURL=case.js.map

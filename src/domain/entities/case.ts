@@ -116,5 +116,7 @@ export function parseCaseNumber(caseNumber: string): { year: number; count: numb
 
 // Helper function to generate channel name from case number
 export function generateChannelName(caseNumber: string): string {
-  return `case-${caseNumber}`.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  const channelName = `case-${caseNumber}`.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  // Discord channel names have a 100 character limit
+  return channelName.length > 100 ? channelName.substring(0, 100) : channelName;
 }

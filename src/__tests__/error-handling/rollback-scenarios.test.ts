@@ -37,7 +37,6 @@ describe('Error Handling and Rollback Scenario Tests', () => {
 
   beforeAll(async () => {
     await DatabaseTestHelpers.setupTestDatabase();
-    await DatabaseTestHelpers.createIndexes();
   });
 
   beforeEach(async () => {

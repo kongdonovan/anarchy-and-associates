@@ -120,20 +120,16 @@ describe('Case Entity', () => {
     });
     describe('Channel Name Generation', () => {
         it('should generate valid Discord channel names', () => {
-            const testCase = test_utils_1.TestUtils.generateMockCase({
-                caseNumber: '2024-0123-testclient'
-            });
-            const channelName = (0, case_1.generateChannelName)(testCase);
+            const caseNumber = '2024-0123-testclient';
+            const channelName = (0, case_1.generateChannelName)(caseNumber);
             expect(channelName).toMatch(/^[a-z0-9-]+$/); // Discord channel name format
             expect(channelName).toContain('2024');
             expect(channelName).toContain('0123');
             expect(channelName).toContain('testclient');
         });
         it('should handle case numbers with special characters', () => {
-            const testCase = test_utils_1.TestUtils.generateMockCase({
-                caseNumber: '2024-0123-Client_With.Special-Chars'
-            });
-            const channelName = (0, case_1.generateChannelName)(testCase);
+            const caseNumber = '2024-0123-Client_With.Special-Chars';
+            const channelName = (0, case_1.generateChannelName)(caseNumber);
             // Should convert to lowercase and replace invalid characters with hyphens
             expect(channelName).toMatch(/^[a-z0-9-]+$/);
             expect(channelName).not.toContain('_');
@@ -142,10 +138,7 @@ describe('Case Entity', () => {
         });
         it('should truncate long channel names', () => {
             const longCaseNumber = '2024-0123-' + 'a'.repeat(100);
-            const testCase = test_utils_1.TestUtils.generateMockCase({
-                caseNumber: longCaseNumber
-            });
-            const channelName = (0, case_1.generateChannelName)(testCase);
+            const channelName = (0, case_1.generateChannelName)(longCaseNumber);
             expect(channelName.length).toBeLessThanOrEqual(100); // Discord limit
         });
     });
@@ -182,16 +175,13 @@ describe('Case Entity', () => {
             expect(closedCase.closedBy).toBe(closedBy);
         });
         it('should track case opening details', () => {
-            const openDate = new Date();
             const leadAttorneyId = 'lawyer456';
             const openCase = test_utils_1.TestUtils.generateMockCase({
                 status: case_1.CaseStatus.OPEN,
-                leadAttorneyId,
-                acceptedAt: openDate
+                leadAttorneyId
             });
             expect(openCase.status).toBe(case_1.CaseStatus.OPEN);
             expect(openCase.leadAttorneyId).toBe(leadAttorneyId);
-            expect(openCase.acceptedAt).toBe(openDate);
         });
     });
     describe('Case Assignment Management', () => {
@@ -233,11 +223,10 @@ describe('Case Entity', () => {
         it('should handle document attachments', () => {
             const document = {
                 id: 'doc123',
-                filename: 'contract.pdf',
-                url: 'https://example.com/doc123',
-                uploadedBy: 'lawyer123',
-                uploadedAt: new Date(),
-                isClientVisible: true
+                title: 'contract.pdf',
+                content: 'https://example.com/doc123',
+                createdBy: 'lawyer123',
+                createdAt: new Date()
             };
             const testCase = test_utils_1.TestUtils.generateMockCase({
                 documents: [document]
@@ -245,48 +234,42 @@ describe('Case Entity', () => {
             expect(testCase.documents).toHaveLength(1);
             expect(testCase.documents[0]).toEqual(document);
         });
-        it('should handle multiple documents with visibility settings', () => {
+        it('should handle multiple documents', () => {
             const documents = [
                 {
                     id: 'doc1',
-                    filename: 'client_contract.pdf',
-                    url: 'https://example.com/doc1',
-                    uploadedBy: 'lawyer1',
-                    uploadedAt: new Date(),
-                    isClientVisible: true
+                    title: 'client_contract.pdf',
+                    content: 'https://example.com/doc1',
+                    createdBy: 'lawyer1',
+                    createdAt: new Date()
                 },
                 {
                     id: 'doc2',
-                    filename: 'internal_notes.txt',
-                    url: 'https://example.com/doc2',
-                    uploadedBy: 'lawyer2',
-                    uploadedAt: new Date(),
-                    isClientVisible: false
+                    title: 'internal_notes.txt',
+                    content: 'https://example.com/doc2',
+                    createdBy: 'lawyer2',
+                    createdAt: new Date()
                 }
             ];
             const testCase = test_utils_1.TestUtils.generateMockCase({ documents });
             expect(testCase.documents).toHaveLength(2);
-            expect(testCase.documents[0].isClientVisible).toBe(true);
-            expect(testCase.documents[1].isClientVisible).toBe(false);
+            expect(testCase.documents[0]?.title).toBe('client_contract.pdf');
+            expect(testCase.documents[1]?.title).toBe('internal_notes.txt');
         });
-        it('should handle documents with metadata', () => {
-            const documentWithMetadata = {
+        it('should handle documents with content', () => {
+            const documentWithContent = {
                 id: 'doc123',
-                filename: 'evidence.jpg',
-                url: 'https://example.com/evidence.jpg',
-                uploadedBy: 'lawyer123',
-                uploadedAt: new Date(),
-                isClientVisible: true,
-                description: 'Photo evidence from scene',
-                size: 1024576, // 1MB
-                mimeType: 'image/jpeg'
+                title: 'evidence.jpg',
+                content: 'https://example.com/evidence.jpg - Photo evidence from scene',
+                createdBy: 'lawyer123',
+                createdAt: new Date()
             };
             const testCase = test_utils_1.TestUtils.generateMockCase({
-                documents: [documentWithMetadata]
+                documents: [documentWithContent]
             });
-            expect(testCase.documents[0].description).toBe('Photo evidence from scene');
-            expect(testCase.documents[0].size).toBe(1024576);
-            expect(testCase.documents[0].mimeType).toBe('image/jpeg');
+            expect(testCase.documents[0]?.content).toContain('Photo evidence from scene');
+            expect(testCase.documents[0]?.title).toBe('evidence.jpg');
+            expect(testCase.documents[0]?.createdBy).toBe('lawyer123');
         });
     });
     describe('Case Notes Management', () => {
@@ -294,9 +277,9 @@ describe('Case Entity', () => {
             const note = {
                 id: 'note123',
                 content: 'Client meeting scheduled for tomorrow',
-                addedBy: 'lawyer123',
-                addedAt: new Date(),
-                isClientVisible: true
+                createdBy: 'lawyer123',
+                createdAt: new Date(),
+                isInternal: false
             };
             const testCase = test_utils_1.TestUtils.generateMockCase({
                 notes: [note]
@@ -309,22 +292,22 @@ describe('Case Entity', () => {
                 {
                     id: 'note1',
                     content: 'Client consultation completed',
-                    addedBy: 'lawyer1',
-                    addedAt: new Date(),
-                    isClientVisible: true
+                    createdBy: 'lawyer1',
+                    createdAt: new Date(),
+                    isInternal: false
                 },
                 {
                     id: 'note2',
                     content: 'Internal strategy discussion',
-                    addedBy: 'lawyer2',
-                    addedAt: new Date(),
-                    isClientVisible: false
+                    createdBy: 'lawyer2',
+                    createdAt: new Date(),
+                    isInternal: true
                 }
             ];
             const testCase = test_utils_1.TestUtils.generateMockCase({ notes });
             expect(testCase.notes).toHaveLength(2);
-            expect(testCase.notes[0].isClientVisible).toBe(true);
-            expect(testCase.notes[1].isClientVisible).toBe(false);
+            expect(testCase.notes[0]?.isInternal).toBe(false);
+            expect(testCase.notes[1]?.isInternal).toBe(true);
         });
         it('should handle chronological note ordering', () => {
             const baseDate = new Date('2024-01-01');
@@ -332,21 +315,21 @@ describe('Case Entity', () => {
                 {
                     id: 'note1',
                     content: 'First note',
-                    addedBy: 'lawyer1',
-                    addedAt: baseDate,
-                    isClientVisible: true
+                    createdBy: 'lawyer1',
+                    createdAt: baseDate,
+                    isInternal: false
                 },
                 {
                     id: 'note2',
                     content: 'Second note',
-                    addedBy: 'lawyer1',
-                    addedAt: new Date(baseDate.getTime() + 24 * 60 * 60 * 1000), // Next day
-                    isClientVisible: true
+                    createdBy: 'lawyer1',
+                    createdAt: new Date(baseDate.getTime() + 24 * 60 * 60 * 1000), // Next day
+                    isInternal: false
                 }
             ];
             const testCase = test_utils_1.TestUtils.generateMockCase({ notes });
-            expect(testCase.notes[0].addedAt.getTime())
-                .toBeLessThan(testCase.notes[1].addedAt.getTime());
+            expect(testCase.notes[0]?.createdAt.getTime())
+                .toBeLessThan(testCase.notes[1]?.createdAt.getTime() ?? 0);
         });
     });
     describe('Case Channel Integration', () => {
@@ -396,7 +379,6 @@ describe('Case Entity', () => {
         it('should handle cases with null/undefined optional fields', () => {
             const testCase = test_utils_1.TestUtils.generateMockCase({
                 leadAttorneyId: undefined,
-                acceptedAt: undefined,
                 result: undefined,
                 resultNotes: undefined,
                 closedAt: undefined,
@@ -404,7 +386,6 @@ describe('Case Entity', () => {
                 channelId: undefined
             });
             expect(testCase.leadAttorneyId).toBeUndefined();
-            expect(testCase.acceptedAt).toBeUndefined();
             expect(testCase.result).toBeUndefined();
             expect(testCase.resultNotes).toBeUndefined();
             expect(testCase.closedAt).toBeUndefined();
@@ -442,8 +423,8 @@ describe('Case Entity', () => {
                 expect(testCase.clientId).toBe('client123');
                 expect(testCase.guildId).toBeTruthy();
             });
-            expect(sameClientDifferentGuilds[0].guildId)
-                .not.toBe(sameClientDifferentGuilds[1].guildId);
+            expect(sameClientDifferentGuilds[0]?.guildId)
+                .not.toBe(sameClientDifferentGuilds[1]?.guildId);
         });
     });
 });

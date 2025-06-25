@@ -9,6 +9,7 @@ export interface QueuedOperation {
   priority: number;
   createdAt: Date;
   timeout: number;
+  timeoutId?: NodeJS.Timeout;
   resolve: (value: any) => void;
   reject: (error: any) => void;
 }
@@ -17,9 +18,10 @@ export class OperationQueue {
   private static instance: OperationQueue;
   private queue: QueuedOperation[] = [];
   private processing = false;
-  private readonly TIMEOUT_MS = 30000; // 30 seconds
+  private TIMEOUT_MS = 30000; // 30 seconds
   private readonly HIGH_PRIORITY = 1;
   private readonly NORMAL_PRIORITY = 2;
+  private runningOperations = new Map<string, QueuedOperation>();
 
   private constructor() {}
 
@@ -62,7 +64,7 @@ export class OperationQueue {
       });
 
       // Set timeout for the operation
-      setTimeout(() => {
+      queuedOperation.timeoutId = setTimeout(() => {
         this.timeoutOperation(queuedOperation.id);
       }, this.TIMEOUT_MS);
 
@@ -96,6 +98,9 @@ export class OperationQueue {
       const operation = this.queue.shift();
       if (!operation) continue;
       
+      // Move to running operations map
+      this.runningOperations.set(operation.id, operation);
+      
       try {
         logger.info('Processing operation', {
           operationId: operation.id,
@@ -105,6 +110,13 @@ export class OperationQueue {
         });
 
         const result = await operation.operation();
+        
+        // Remove from running operations and clear timeout
+        this.runningOperations.delete(operation.id);
+        if (operation.timeoutId) {
+          clearTimeout(operation.timeoutId);
+        }
+        
         operation.resolve(result);
         
         logger.info('Operation completed successfully', {
@@ -113,6 +125,12 @@ export class OperationQueue {
         });
         
       } catch (error) {
+        // Remove from running operations and clear timeout
+        this.runningOperations.delete(operation.id);
+        if (operation.timeoutId) {
+          clearTimeout(operation.timeoutId);
+        }
+        
         logger.error('Operation failed', {
           operationId: operation.id,
           userId: operation.userId,
@@ -127,6 +145,7 @@ export class OperationQueue {
   }
 
   private timeoutOperation(operationId: string): void {
+    // Check if operation is still in queue
     const operationIndex = this.queue.findIndex(op => op.id === operationId);
     
     if (operationIndex >= 0) {
@@ -134,7 +153,7 @@ export class OperationQueue {
       if (operation) {
         this.queue.splice(operationIndex, 1);
         
-        logger.warn('Operation timed out', {
+        logger.warn('Operation timed out in queue', {
           operationId,
           userId: operation.userId,
           guildId: operation.guildId
@@ -142,6 +161,21 @@ export class OperationQueue {
         
         operation.reject(new Error('Operation timed out after 30 seconds'));
       }
+      return;
+    }
+    
+    // Check if operation is currently running
+    const runningOperation = this.runningOperations.get(operationId);
+    if (runningOperation) {
+      this.runningOperations.delete(operationId);
+      
+      logger.warn('Running operation timed out', {
+        operationId,
+        userId: runningOperation.userId,
+        guildId: runningOperation.guildId
+      });
+      
+      runningOperation.reject(new Error('Operation timed out after 30 seconds'));
     }
   }
 
@@ -174,20 +208,32 @@ export class OperationQueue {
   }
 
   public clearQueue(): void {
-    const operations = [...this.queue];
-    this.queue = [];
+    const queuedOperations = [...this.queue];
+    const runningOperationsArray = Array.from(this.runningOperations.values());
     
-    // Reject all pending operations
-    operations.forEach(op => {
+    this.queue = [];
+    this.runningOperations.clear();
+    
+    // Clear timeouts and reject all pending operations
+    [...queuedOperations, ...runningOperationsArray].forEach(op => {
+      if (op.timeoutId) {
+        clearTimeout(op.timeoutId);
+      }
       op.reject(new Error('Queue cleared'));
     });
     
-    logger.info('Queue cleared', { clearedOperations: operations.length });
+    logger.info('Queue cleared', { 
+      clearedOperations: queuedOperations.length + runningOperationsArray.length 
+    });
   }
 
   // Test helper methods
   public isProcessing(): boolean {
     return this.processing;
+  }
+
+  public setTimeoutMs(timeoutMs: number): void {
+    this.TIMEOUT_MS = timeoutMs;
   }
 
   public hasOperationsForUser(userId: string): boolean {

@@ -77,7 +77,7 @@ describe('ApplicationErrorHandler', () => {
       const result = errorHandler.handleError(genericError);
 
       expect(result.embed).toBeDefined();
-      expect(result.ephemeral).toBe(true);
+      expect(result.ephemeral).toBe(false); // System errors should not be ephemeral
     });
   });
 

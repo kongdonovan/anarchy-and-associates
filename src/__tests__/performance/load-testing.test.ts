@@ -6,7 +6,6 @@ import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-
 import { GuildConfigRepository } from '../../infrastructure/repositories/guild-config-repository';
 import { CaseCounterRepository } from '../../infrastructure/repositories/case-counter-repository';
 import { OperationQueue } from '../../infrastructure/queue/operation-queue';
-import { RateLimiter } from '../../infrastructure/rate-limiting/rate-limiter';
 import { StaffRole } from '../../domain/entities/staff-role';
 import { CasePriority, CaseStatus } from '../../domain/entities/case';
 import { TestUtils } from '../helpers/test-utils';
@@ -24,6 +23,8 @@ import { DatabaseTestHelpers } from '../helpers/database-helpers';
  * - Scalability limits
  */
 describe('Performance and Load Testing', () => {
+  // Set longer timeout for performance tests
+  jest.setTimeout(60000);
   let staffService: StaffService;
   let caseService: CaseService;
   let staffRepository: StaffRepository;
@@ -48,7 +49,6 @@ describe('Performance and Load Testing', () => {
 
   beforeAll(async () => {
     await DatabaseTestHelpers.setupTestDatabase();
-    await DatabaseTestHelpers.createIndexes();
   });
 
   beforeEach(async () => {

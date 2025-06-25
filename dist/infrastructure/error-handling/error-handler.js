@@ -53,24 +53,28 @@ class ApplicationErrorHandler {
         };
     }
     normalizeError(error) {
+        if (!error) {
+            return this.createError(ErrorType.SYSTEM_ERROR, 'Unknown error occurred', 'An unexpected error occurred. Please try again later.', undefined, new Error('Null or undefined error'));
+        }
         if (this.isApplicationError(error)) {
             return error;
         }
         // Convert generic errors to application errors
-        if (error.message.includes('Permission')) {
-            return this.createError(ErrorType.PERMISSION_DENIED, error.message, 'You do not have permission to perform this action.', undefined, error);
+        const message = error.message || 'Unknown error';
+        if (message.includes('Permission')) {
+            return this.createError(ErrorType.PERMISSION_DENIED, message, 'You do not have permission to perform this action.', undefined, error);
         }
-        if (error.message.includes('not found') || error.message.includes('Not Found')) {
-            return this.createError(ErrorType.RESOURCE_NOT_FOUND, error.message, 'The requested resource could not be found.', undefined, error);
+        if (message.includes('not found') || message.includes('Not Found')) {
+            return this.createError(ErrorType.RESOURCE_NOT_FOUND, message, 'The requested resource could not be found.', undefined, error);
         }
-        if (error.message.includes('validation') || error.message.includes('invalid')) {
-            return this.createError(ErrorType.VALIDATION_ERROR, error.message, 'The provided information is not valid. Please check your input and try again.', undefined, error);
+        if (message.toLowerCase().includes('validation') || message.toLowerCase().includes('invalid')) {
+            return this.createError(ErrorType.VALIDATION_ERROR, message, 'The provided information is not valid. Please check your input and try again.', undefined, error);
         }
-        if (error.message.includes('timeout') || error.message.includes('timed out')) {
-            return this.createError(ErrorType.QUEUE_TIMEOUT, error.message, 'The operation took too long to complete. Please try again.', undefined, error);
+        if (message.includes('timeout') || message.includes('timed out')) {
+            return this.createError(ErrorType.QUEUE_TIMEOUT, message, 'The operation took too long to complete. Please try again.', undefined, error);
         }
         // Default system error
-        return this.createError(ErrorType.SYSTEM_ERROR, error.message, 'A system error occurred. Please try again later.', undefined, error);
+        return this.createError(ErrorType.SYSTEM_ERROR, message, 'A system error occurred. Please try again later.', undefined, error);
     }
     isApplicationError(error) {
         return error && typeof error === 'object' && 'type' in error && 'userMessage' in error;

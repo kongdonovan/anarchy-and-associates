@@ -1,5 +1,5 @@
-import { Job, JobQuestion, DEFAULT_JOB_QUESTIONS } from '../../domain/entities/job';
-import { Application, ApplicationAnswer } from '../../domain/entities/application';
+import { JobQuestion, DEFAULT_JOB_QUESTIONS } from '../../domain/entities/job';
+import { ApplicationAnswer } from '../../domain/entities/application';
 import { StaffRole } from '../../domain/entities/staff-role';
 import { TestUtils } from '../helpers/test-utils';
 
@@ -113,10 +113,10 @@ describe('Job and Application Entities', () => {
         });
 
         expect(job.questions).toHaveLength(3);
-        expect(job.questions[0].type).toBe('paragraph');
-        expect(job.questions[1].type).toBe('number');
-        expect(job.questions[2].type).toBe('choice');
-        expect(job.questions[2].choices).toEqual(['Full-time', 'Part-time', 'Contract', 'Flexible']);
+        expect(job.questions[0]?.type).toBe('paragraph');
+        expect(job.questions[1]?.type).toBe('number');
+        expect(job.questions[2]?.type).toBe('choice');
+        expect(job.questions[2]?.choices).toEqual(['Full-time', 'Part-time', 'Contract', 'Flexible']);
       });
 
       it('should validate question type constraints', () => {
@@ -181,11 +181,11 @@ describe('Job and Application Entities', () => {
         });
 
         const question = job.questions[0];
-        expect(question.maxLength).toBeUndefined();
-        expect(question.minValue).toBeUndefined();
-        expect(question.maxValue).toBeUndefined();
-        expect(question.choices).toBeUndefined();
-        expect(question.placeholder).toBeUndefined();
+        expect(question?.maxLength).toBeUndefined();
+        expect(question?.minValue).toBeUndefined();
+        expect(question?.maxValue).toBeUndefined();
+        expect(question?.choices).toBeUndefined();
+        expect(question?.placeholder).toBeUndefined();
       });
     });
 
@@ -278,8 +278,8 @@ describe('Job and Application Entities', () => {
         const application = TestUtils.generateMockApplication({ answers });
 
         expect(application.answers).toHaveLength(4);
-        expect(application.answers[0].questionId).toBe('roblox_username');
-        expect(application.answers[0].answer).toBe('TestRobloxUser123');
+        expect(application.answers[0]?.questionId).toBe('roblox_username');
+        expect(application.answers[0]?.answer).toBe('TestRobloxUser123');
       });
 
       it('should handle empty answers', () => {
@@ -305,8 +305,8 @@ describe('Job and Application Entities', () => {
           answers: specialAnswers 
         });
 
-        expect(application.answers[0].answer).toContain('"quotes"');
-        expect(application.answers[1].answer).toContain('中文');
+        expect(application.answers[0]?.answer).toContain('"quotes"');
+        expect(application.answers[1]?.answer).toContain('中文');
       });
 
       it('should handle very long answers', () => {
@@ -320,8 +320,8 @@ describe('Job and Application Entities', () => {
 
         const application = TestUtils.generateMockApplication({ answers });
 
-        expect(application.answers[0].answer).toBe(longAnswer);
-        expect(application.answers[0].answer.length).toBe(2000);
+        expect(application.answers[0]?.answer).toBe(longAnswer);
+        expect(application.answers[0]?.answer.length).toBe(2000);
       });
     });
 
@@ -460,8 +460,8 @@ describe('Job and Application Entities', () => {
         expect(app.robloxUsername).toBe('RobloxUser123');
       });
 
-      expect(sameUserDifferentGuilds[0].guildId)
-        .not.toBe(sameUserDifferentGuilds[1].guildId);
+      expect(sameUserDifferentGuilds[0]?.guildId)
+        .not.toBe(sameUserDifferentGuilds[1]?.guildId);
     });
   });
 

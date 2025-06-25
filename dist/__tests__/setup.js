@@ -37,7 +37,19 @@ jest.mock('discord.js', () => ({
     ModalBuilder: jest.fn(),
     TextInputBuilder: jest.fn(),
     TextInputStyle: {},
-    EmbedBuilder: jest.fn(),
+    EmbedBuilder: jest.fn().mockImplementation(() => ({
+        setColor: jest.fn().mockReturnThis(),
+        setTitle: jest.fn().mockReturnThis(),
+        setDescription: jest.fn().mockReturnThis(),
+        addFields: jest.fn().mockReturnThis(),
+        setFooter: jest.fn().mockReturnThis(),
+        setTimestamp: jest.fn().mockReturnThis(),
+        setThumbnail: jest.fn().mockReturnThis(),
+        setImage: jest.fn().mockReturnThis(),
+        setAuthor: jest.fn().mockReturnThis(),
+        setURL: jest.fn().mockReturnThis(),
+        toJSON: jest.fn().mockReturnValue({})
+    })),
     ChannelType: {},
     PermissionFlagsBits: {}
 }));
@@ -45,7 +57,7 @@ jest.mock('discord.js', () => ({
 jest.mock('discordx', () => ({
     Discord: () => (_target) => _target,
     Slash: () => (_target, _propertyKey, descriptor) => descriptor,
-    SlashOption: () => (_target, _propertyKey, _parameterIndex) => { },
+    SlashOption: () => () => { },
     SlashGroup: () => (_target) => _target,
     ButtonComponent: () => (_target, _propertyKey, descriptor) => descriptor,
     ModalComponent: () => (_target, _propertyKey, descriptor) => descriptor,

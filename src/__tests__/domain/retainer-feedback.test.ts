@@ -1,5 +1,5 @@
 import { Retainer, RetainerStatus } from '../../domain/entities/retainer';
-import { Feedback, FeedbackRating } from '../../domain/entities/feedback';
+import { Feedback, FeedbackRating, getRatingText, getStarDisplay } from '../../domain/entities/feedback';
 import { TestUtils } from '../helpers/test-utils';
 
 describe('Retainer and Feedback Entities', () => {
@@ -10,10 +10,8 @@ describe('Retainer and Feedback Entities', () => {
           _id: TestUtils.generateObjectId(),
           guildId: 'guild123',
           clientId: 'client123',
-          clientUsername: 'testclient',
           lawyerId: 'lawyer123',
-          agreementText: 'This is a legal retainer agreement...',
-          amount: 5000,
+          agreementTemplate: 'This is a legal retainer agreement...',
           status: RetainerStatus.PENDING,
           createdAt: new Date(),
           updatedAt: new Date()
@@ -40,10 +38,8 @@ describe('Retainer and Feedback Entities', () => {
             _id: TestUtils.generateObjectId(),
             guildId: 'guild123',
             clientId: 'client123',
-            clientUsername: 'testclient',
-            lawyerId: 'lawyer123',
-            agreementText: 'Test agreement',
-            amount: 1000,
+              lawyerId: 'lawyer123',
+            agreementTemplate: 'Test agreement',
             status,
             createdAt: new Date(),
             updatedAt: new Date()
@@ -56,21 +52,19 @@ describe('Retainer and Feedback Entities', () => {
       it('should handle different retainer amounts', () => {
         const amounts = [500, 1000, 2500, 5000, 10000];
 
-        amounts.forEach(amount => {
+        amounts.forEach(() => {
           const retainer: Retainer = {
             _id: TestUtils.generateObjectId(),
             guildId: 'guild123',
             clientId: 'client123',
-            clientUsername: 'testclient',
-            lawyerId: 'lawyer123',
-            agreementText: 'Test agreement',
-            amount,
+              lawyerId: 'lawyer123',
+            agreementTemplate: 'Test agreement',
             status: RetainerStatus.PENDING,
             createdAt: new Date(),
             updatedAt: new Date()
           };
 
-          expect(retainer.agreementTemplate).toBe(template);
+          expect(retainer.agreementTemplate).toBe('Test agreement');
           expect(retainer.agreementTemplate.length).toBeGreaterThan(0);
         });
       });
@@ -85,13 +79,12 @@ describe('Retainer and Feedback Entities', () => {
           _id: TestUtils.generateObjectId(),
           guildId: 'guild123',
           clientId: 'client123',
-          clientUsername: 'testclient',
           lawyerId: 'lawyer123',
-          agreementText: 'Test agreement',
-          amount: 2500,
+          agreementTemplate: 'Test agreement',
           status: RetainerStatus.SIGNED,
           signedAt: signedDate,
-          robloxUsername,
+          clientRobloxUsername: robloxUsername,
+          digitalSignature: robloxUsername,
           createdAt: new Date(),
           updatedAt: signedDate
         };
@@ -104,19 +97,14 @@ describe('Retainer and Feedback Entities', () => {
 
       it('should handle retainer cancellation', () => {
         const cancelledDate = new Date();
-        const cancellationReason = 'Client changed mind';
 
         const cancelledRetainer: Retainer = {
           _id: TestUtils.generateObjectId(),
           guildId: 'guild123',
           clientId: 'client123',
-          clientUsername: 'testclient',
           lawyerId: 'lawyer123',
-          agreementText: 'Test agreement',
-          amount: 1500,
+          agreementTemplate: 'Test agreement',
           status: RetainerStatus.CANCELLED,
-          cancelledAt: cancelledDate,
-          cancellationReason,
           createdAt: new Date(),
           updatedAt: cancelledDate
         };
@@ -129,15 +117,18 @@ describe('Retainer and Feedback Entities', () => {
       it('should validate Roblox username format', () => {
         const validRobloxUsernames = [
           'TestUser123',
-          'User_With_Underscores',
+          'User_With_Scores', // Valid 16-character username with underscores
           'a'.repeat(20), // Max length
           'abc' // Min length
         ];
 
         validRobloxUsernames.forEach(username => {
           // Basic regex validation: 3-20 chars, alphanumeric + underscores, no consecutive underscores
-          const robloxRegex = /^(?=.{3,20}$)(?!.*__)(?!_)[a-zA-Z0-9]+(?:_[a-zA-Z0-9]+)?(?<!_)$/;
-          expect(robloxRegex.test(username)).toBe(true);
+          // No leading/trailing underscores
+          const robloxRegex = /^[a-zA-Z0-9]([a-zA-Z0-9_]*[a-zA-Z0-9])?$/.test(username) && 
+                             username.length >= 3 && username.length <= 20 && 
+                             !username.includes('__');
+          expect(robloxRegex).toBe(true);
         });
 
         const invalidRobloxUsernames = [
@@ -166,10 +157,8 @@ describe('Retainer and Feedback Entities', () => {
           _id: TestUtils.generateObjectId(),
           guildId,
           clientId,
-          clientUsername: 'testclient',
           lawyerId: 'lawyer1',
-          agreementText: 'Pending agreement',
-          amount: 1000,
+          agreementTemplate: 'Pending agreement',
           status: RetainerStatus.PENDING,
           createdAt: new Date(),
           updatedAt: new Date()
@@ -179,13 +168,12 @@ describe('Retainer and Feedback Entities', () => {
           _id: TestUtils.generateObjectId(),
           guildId,
           clientId,
-          clientUsername: 'testclient',
           lawyerId: 'lawyer2',
-          agreementText: 'Active agreement',
-          amount: 2000,
+          agreementTemplate: 'Active agreement',
           status: RetainerStatus.SIGNED,
           signedAt: new Date(),
-          robloxUsername: 'TestUser123',
+          clientRobloxUsername: 'TestUser123',
+          digitalSignature: 'TestUser123',
           createdAt: new Date(),
           updatedAt: new Date()
         };
@@ -219,17 +207,15 @@ describe('Retainer and Feedback Entities', () => {
           _id: TestUtils.generateObjectId(),
           guildId: 'guild123',
           clientId: 'client123',
-          clientUsername: 'testclient',
           lawyerId: 'lawyer123',
-          agreementText: longAgreementText,
-          amount: 2500,
+          agreementTemplate: longAgreementText,
           status: RetainerStatus.PENDING,
           createdAt: new Date(),
           updatedAt: new Date()
         };
 
-        expect(retainer.agreementText.length).toBeGreaterThan(5000);
-        expect(retainer.agreementText).toContain('retainer agreement');
+        expect(retainer.agreementTemplate.length).toBeGreaterThan(5000);
+        expect(retainer.agreementTemplate).toContain('retainer agreement');
       });
 
       it('should handle special characters in agreement text', () => {
@@ -246,18 +232,16 @@ describe('Retainer and Feedback Entities', () => {
           _id: TestUtils.generateObjectId(),
           guildId: 'guild123',
           clientId: 'client123',
-          clientUsername: 'testclient',
           lawyerId: 'lawyer123',
-          agreementText: specialAgreementText,
-          amount: 5000,
+          agreementTemplate: specialAgreementText,
           status: RetainerStatus.PENDING,
           createdAt: new Date(),
           updatedAt: new Date()
         };
 
-        expect(retainer.agreementText).toContain('$2,500');
-        expect(retainer.agreementText).toContain('"Representation services"');
-        expect(retainer.agreementText).toContain('lawyer@firm.com');
+        expect(retainer.agreementTemplate).toContain('$2,500');
+        expect(retainer.agreementTemplate).toContain('"Representation services"');
+        expect(retainer.agreementTemplate).toContain('lawyer@firm.com');
       });
     });
   });
@@ -268,46 +252,49 @@ describe('Retainer and Feedback Entities', () => {
         const feedback: Feedback = {
           _id: TestUtils.generateObjectId(),
           guildId: 'guild123',
-          caseId: 'case123',
-          clientId: 'client123',
-          staffId: 'staff123',
-          rating: FeedbackRating.EXCELLENT,
+          submitterId: 'client123',
+          submitterUsername: 'testclient',
+          targetStaffId: 'staff123',
+          targetStaffUsername: 'teststaff',
+          rating: FeedbackRating.FIVE_STAR,
           comment: 'Outstanding legal representation!',
-          isAnonymous: false,
+          isForFirm: false,
           createdAt: new Date(),
           updatedAt: new Date()
         };
 
         expect(feedback.guildId).toBeTruthy();
-        expect(feedback.caseId).toBeTruthy();
-        expect(feedback.clientId).toBeTruthy();
-        expect(feedback.staffId).toBeTruthy();
-        expect(feedback.rating).toBe(FeedbackRating.EXCELLENT);
+        expect(feedback.submitterId).toBeTruthy();
+        expect(feedback.submitterUsername).toBeTruthy();
+        expect(feedback.targetStaffId).toBeTruthy();
+        expect(feedback.targetStaffUsername).toBeTruthy();
+        expect(feedback.rating).toBe(FeedbackRating.FIVE_STAR);
         expect(feedback.comment).toBeTruthy();
-        expect(typeof feedback.isAnonymous).toBe('boolean');
+        expect(typeof feedback.isForFirm).toBe('boolean');
         expect(feedback.createdAt).toBeInstanceOf(Date);
         expect(feedback.updatedAt).toBeInstanceOf(Date);
       });
 
       it('should handle all valid feedback ratings', () => {
         const validRatings = [
-          FeedbackRating.POOR,
-          FeedbackRating.FAIR,
-          FeedbackRating.GOOD,
-          FeedbackRating.VERY_GOOD,
-          FeedbackRating.EXCELLENT
+          FeedbackRating.ONE_STAR,
+          FeedbackRating.TWO_STAR,
+          FeedbackRating.THREE_STAR,
+          FeedbackRating.FOUR_STAR,
+          FeedbackRating.FIVE_STAR
         ];
 
         validRatings.forEach(rating => {
           const feedback: Feedback = {
             _id: TestUtils.generateObjectId(),
             guildId: 'guild123',
-            caseId: 'case123',
-            clientId: 'client123',
-            staffId: 'staff123',
+            submitterId: 'client123',
+            submitterUsername: 'testclient',
+            targetStaffId: 'staff123',
+            targetStaffUsername: 'teststaff',
             rating,
             comment: 'Test feedback',
-            isAnonymous: false,
+            isForFirm: false,
             createdAt: new Date(),
             updatedAt: new Date()
           };
@@ -320,17 +307,16 @@ describe('Retainer and Feedback Entities', () => {
         const anonymousFeedback: Feedback = {
           _id: TestUtils.generateObjectId(),
           guildId: 'guild123',
-          caseId: 'case123',
-          clientId: 'client123',
-          staffId: 'staff123',
-          rating: FeedbackRating.GOOD,
+          submitterId: 'client123',
+          submitterUsername: 'Anonymous',
+          rating: FeedbackRating.THREE_STAR,
           comment: 'Anonymous feedback comment',
-          isAnonymous: true,
+          isForFirm: true,
           createdAt: new Date(),
           updatedAt: new Date()
         };
 
-        expect(anonymousFeedback.isAnonymous).toBe(true);
+        expect(anonymousFeedback.isForFirm).toBe(true);
         expect(anonymousFeedback.comment).toBeTruthy();
       });
     });
@@ -481,7 +467,7 @@ describe('Retainer and Feedback Entities', () => {
         
         // Division by zero protection
         const averageRating = feedbacks.length > 0 
-          ? feedbacks.reduce((sum, f) => sum + 1, 0) / feedbacks.length 
+          ? feedbacks.reduce((sum) => sum + 1, 0) / feedbacks.length 
           : 0;
         
         expect(averageRating).toBe(0);
@@ -563,9 +549,9 @@ describe('Retainer and Feedback Entities', () => {
           expect(feedback.targetStaffUsername).toBe('TestLawyer');
         });
 
-        expect(feedbacks[0].submitterId).not.toBe(feedbacks[1].submitterId);
-        expect(feedbacks[0].isForFirm).toBe(false);
-        expect(feedbacks[1].isForFirm).toBe(false);
+        expect(feedbacks[0]?.submitterId).not.toBe(feedbacks[1]?.submitterId);
+        expect(feedbacks[0]?.isForFirm).toBe(false);
+        expect(feedbacks[1]?.isForFirm).toBe(false);
       });
 
       it('should handle bulk feedback scenarios', () => {
@@ -627,8 +613,8 @@ describe('Retainer and Feedback Entities', () => {
         expect(retainer.clientId).toBe('client123');
       });
 
-      expect(sameClientDifferentGuilds[0].guildId).not.toBe(sameClientDifferentGuilds[1].guildId);
-      expect(sameClientDifferentGuilds[0].status).not.toBe(sameClientDifferentGuilds[1].status);
+      expect(sameClientDifferentGuilds[0]?.guildId).not.toBe(sameClientDifferentGuilds[1]?.guildId);
+      expect(sameClientDifferentGuilds[0]?.status).not.toBe(sameClientDifferentGuilds[1]?.status);
     });
 
     it('should maintain separate feedback per guild', () => {
@@ -665,8 +651,8 @@ describe('Retainer and Feedback Entities', () => {
         expect(feedback.submitterId).toBe('client123');
       });
 
-      expect(crossGuildFeedback[0].guildId).not.toBe(crossGuildFeedback[1].guildId);
-      expect(crossGuildFeedback[0].rating).not.toBe(crossGuildFeedback[1].rating);
+      expect(crossGuildFeedback[0]?.guildId).not.toBe(crossGuildFeedback[1]?.guildId);
+      expect(crossGuildFeedback[0]?.rating).not.toBe(crossGuildFeedback[1]?.rating);
     });
   });
 });

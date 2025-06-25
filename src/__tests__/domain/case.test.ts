@@ -302,8 +302,8 @@ describe('Case Entity', () => {
       const testCase = TestUtils.generateMockCase({ documents });
       
       expect(testCase.documents).toHaveLength(2);
-      expect(testCase.documents[0].title).toBe('client_contract.pdf');
-      expect(testCase.documents[1].title).toBe('internal_notes.txt');
+      expect(testCase.documents[0]?.title).toBe('client_contract.pdf');
+      expect(testCase.documents[1]?.title).toBe('internal_notes.txt');
     });
 
     it('should handle documents with content', () => {
@@ -319,9 +319,9 @@ describe('Case Entity', () => {
         documents: [documentWithContent]
       });
       
-      expect(testCase.documents[0].content).toContain('Photo evidence from scene');
-      expect(testCase.documents[0].title).toBe('evidence.jpg');
-      expect(testCase.documents[0].createdBy).toBe('lawyer123');
+      expect(testCase.documents[0]?.content).toContain('Photo evidence from scene');
+      expect(testCase.documents[0]?.title).toBe('evidence.jpg');
+      expect(testCase.documents[0]?.createdBy).toBe('lawyer123');
     });
   });
 
@@ -364,8 +364,8 @@ describe('Case Entity', () => {
       const testCase = TestUtils.generateMockCase({ notes });
       
       expect(testCase.notes).toHaveLength(2);
-      expect(testCase.notes[0].isInternal).toBe(false);
-      expect(testCase.notes[1].isInternal).toBe(true);
+      expect(testCase.notes[0]?.isInternal).toBe(false);
+      expect(testCase.notes[1]?.isInternal).toBe(true);
     });
 
     it('should handle chronological note ordering', () => {
@@ -389,8 +389,8 @@ describe('Case Entity', () => {
       
       const testCase = TestUtils.generateMockCase({ notes });
       
-      expect(testCase.notes[0].createdAt.getTime())
-        .toBeLessThan(testCase.notes[1].createdAt.getTime());
+      expect(testCase.notes[0]?.createdAt.getTime())
+        .toBeLessThan(testCase.notes[1]?.createdAt.getTime() ?? 0);
     });
   });
 
@@ -504,8 +504,8 @@ describe('Case Entity', () => {
         expect(testCase.guildId).toBeTruthy();
       });
 
-      expect(sameClientDifferentGuilds[0].guildId)
-        .not.toBe(sameClientDifferentGuilds[1].guildId);
+      expect(sameClientDifferentGuilds[0]?.guildId)
+        .not.toBe(sameClientDifferentGuilds[1]?.guildId);
     });
   });
 });

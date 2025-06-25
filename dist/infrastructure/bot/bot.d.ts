@@ -11,6 +11,7 @@ export declare class Bot {
     clearAllCommands(): Promise<void>;
     private initializeServices;
     stop(): Promise<void>;
+    forceResetCommands(): Promise<void>;
     getClient(): Client;
 }
 //# sourceMappingURL=bot.d.ts.map

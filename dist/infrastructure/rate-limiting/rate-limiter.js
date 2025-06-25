@@ -8,10 +8,12 @@ class RateLimiter {
         this.COMMAND_INTERVAL_MS = 1000; // 1 second between commands
         this.WINDOW_SIZE_MS = 60000; // 1 minute window
         this.MAX_COMMANDS_PER_WINDOW = 30; // Max 30 commands per minute
-        // Clean up old entries every 5 minutes
-        setInterval(() => {
-            this.cleanupOldEntries();
-        }, 5 * 60 * 1000);
+        // Clean up old entries every 5 minutes (only in production)
+        if (process.env.NODE_ENV !== 'test') {
+            this.cleanupInterval = setInterval(() => {
+                this.cleanupOldEntries();
+            }, 5 * 60 * 1000);
+        }
     }
     static getInstance() {
         if (!RateLimiter.instance) {
@@ -125,6 +127,23 @@ class RateLimiter {
             activeUsers,
             entries
         };
+    }
+    // Test helper methods - only for testing purposes
+    clearUserLimitsForTesting() {
+        if (process.env.NODE_ENV === 'test') {
+            this.userLimits.clear();
+        }
+    }
+    manualCleanupForTesting() {
+        if (process.env.NODE_ENV === 'test') {
+            this.cleanupOldEntries();
+        }
+    }
+    destroy() {
+        if (this.cleanupInterval) {
+            clearInterval(this.cleanupInterval);
+            this.cleanupInterval = undefined;
+        }
     }
 }
 exports.RateLimiter = RateLimiter;

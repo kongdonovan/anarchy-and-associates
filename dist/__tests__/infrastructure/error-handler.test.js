@@ -53,7 +53,7 @@ describe('ApplicationErrorHandler', () => {
             const genericError = new Error('Unknown error occurred');
             const result = errorHandler.handleError(genericError);
             expect(result.embed).toBeDefined();
-            expect(result.ephemeral).toBe(true);
+            expect(result.ephemeral).toBe(false); // System errors should not be ephemeral
         });
     });
     describe('Error Handling by Type', () => {

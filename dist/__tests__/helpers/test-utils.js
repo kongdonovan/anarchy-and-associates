@@ -4,7 +4,6 @@ exports.TestUtils = void 0;
 const mongodb_1 = require("mongodb");
 const staff_role_1 = require("../../domain/entities/staff-role");
 const case_1 = require("../../domain/entities/case");
-const mongo_client_1 = require("../../infrastructure/database/mongo-client");
 class TestUtils {
     static generateObjectId() {
         return new mongodb_1.ObjectId();
@@ -85,7 +84,11 @@ class TestUtils {
         if (process.env.NODE_ENV !== 'test') {
             throw new Error('clearTestDatabase can only be called in test environment');
         }
-        const mongoClient = mongo_client_1.MongoDbClient.getInstance();
+        // Use the global shared connection
+        const mongoClient = global.__mongoClient;
+        if (!mongoClient) {
+            throw new Error('Global MongoDB client not initialized. Check globalSetup.');
+        }
         const db = mongoClient.getDatabase();
         const collections = await db.listCollections().toArray();
         for (const collection of collections) {
@@ -93,9 +96,10 @@ class TestUtils {
         }
     }
     static async ensureTestDatabaseConnection() {
-        const mongoClient = mongo_client_1.MongoDbClient.getInstance();
-        if (!mongoClient.isConnected()) {
-            await mongoClient.connect();
+        // Connection is managed globally, just verify it exists
+        const mongoClient = global.__mongoClient;
+        if (!mongoClient || !mongoClient.isConnected()) {
+            throw new Error('Global MongoDB connection not available. Check globalSetup.');
         }
     }
     static mockDiscordInteraction(overrides = {}) {

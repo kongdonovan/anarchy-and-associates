@@ -70,6 +70,65 @@ async function initializeDatabase() {
     }
 }
 /**
+ * Initialize commands safely, checking for duplicates
+ */
+async function initializeCommandsSafely(client) {
+    try {
+        logger_1.logger.info('Initializing application commands...');
+        // Check for existing commands first
+        let existingCommands;
+        try {
+            existingCommands = await client.application?.commands.fetch();
+            logger_1.logger.info(`Found ${existingCommands?.size || 0} existing commands on Discord`);
+        }
+        catch (fetchError) {
+            logger_1.logger.warn('Could not fetch existing commands, proceeding with normal initialization:', fetchError);
+            existingCommands = null;
+        }
+        // Get the commands that discordx wants to register
+        const localCommands = client.applicationCommands;
+        logger_1.logger.info(`Found ${localCommands.length} local commands to register`);
+        if (existingCommands && existingCommands.size > 0) {
+            // Check if commands are already registered and up to date
+            const needsUpdate = localCommands.some((localCmd) => {
+                const existingCmd = existingCommands.find((cmd) => cmd.name === localCmd.name);
+                if (!existingCmd) {
+                    logger_1.logger.info(`New command found: ${localCmd.name}`);
+                    return true;
+                }
+                // Check if command description changed
+                if (existingCmd.description !== localCmd.description) {
+                    logger_1.logger.info(`Command ${localCmd.name} description changed`);
+                    return true;
+                }
+                return false;
+            });
+            // Check for orphaned commands
+            const orphanedCommands = existingCommands.filter((discordCmd) => !localCommands.some((localCmd) => localCmd.name === discordCmd.name));
+            if (orphanedCommands.size > 0) {
+                logger_1.logger.info(`Found ${orphanedCommands.size} orphaned commands that will be removed`);
+            }
+            if (!needsUpdate && orphanedCommands.size === 0) {
+                logger_1.logger.info('All commands are already up to date, skipping registration');
+            }
+            else {
+                logger_1.logger.info('Command differences detected, updating commands...');
+                await client.initApplicationCommands();
+                logger_1.logger.info('Slash commands updated successfully');
+            }
+        }
+        else {
+            // No existing commands or couldn't fetch them, proceed with normal registration
+            logger_1.logger.info('No existing commands found, registering all commands...');
+            await client.initApplicationCommands();
+            logger_1.logger.info('Slash commands initialized successfully');
+        }
+    }
+    catch (error) {
+        logger_1.logger.error('Error initializing commands:', error);
+    }
+}
+/**
  * Initialize the Discord client
  */
 async function initializeClient() {
@@ -91,15 +150,8 @@ async function initializeClient() {
         if (!client.user)
             return;
         logger_1.logger.info(`Bot logged in as ${client.user.tag}`);
-        // Initialize slash commands
-        try {
-            logger_1.logger.info('Initializing application commands...');
-            await client.initApplicationCommands();
-            logger_1.logger.info('Slash commands initialized successfully');
-        }
-        catch (error) {
-            logger_1.logger.error('Error initializing commands:', error);
-        }
+        // Initialize slash commands with smart duplicate prevention
+        await initializeCommandsSafely(client);
     });
     client.on('interactionCreate', async (interaction) => {
         try {
@@ -132,8 +184,8 @@ async function reload() {
         if (client) {
             // Rebuild metadata
             await discordx_1.MetadataStorage.instance.build();
-            // Re-initialize commands
-            await client.initApplicationCommands();
+            // Re-initialize commands safely (checking for duplicates)
+            await initializeCommandsSafely(client);
             logger_1.logger.info("> Reload success");
         }
     }

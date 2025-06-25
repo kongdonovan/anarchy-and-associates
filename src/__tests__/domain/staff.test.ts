@@ -1,4 +1,4 @@
-import { Staff, PromotionRecord } from '../../domain/entities/staff';
+import { PromotionRecord } from '../../domain/entities/staff';
 import { StaffRole, RoleUtils } from '../../domain/entities/staff-role';
 import { TestUtils } from '../helpers/test-utils';
 
@@ -147,12 +147,12 @@ describe('Staff Entity', () => {
       });
 
       expect(staff.promotionHistory).toHaveLength(2);
-      expect(staff.promotionHistory[0].toRole).toBe(StaffRole.JUNIOR_ASSOCIATE);
-      expect(staff.promotionHistory[1].toRole).toBe(StaffRole.SENIOR_ASSOCIATE);
+      expect(staff.promotionHistory[0]?.toRole).toBe(StaffRole.JUNIOR_ASSOCIATE);
+      expect(staff.promotionHistory[1]?.toRole).toBe(StaffRole.SENIOR_ASSOCIATE);
       
       // Verify chronological order
-      expect(staff.promotionHistory[0].promotedAt.getTime())
-        .toBeLessThan(staff.promotionHistory[1].promotedAt.getTime());
+      expect(staff.promotionHistory[0]?.promotedAt.getTime())
+        .toBeLessThan(staff.promotionHistory[1]?.promotedAt.getTime() ?? 0);
     });
 
     it('should track demotion events', () => {
@@ -170,10 +170,10 @@ describe('Staff Entity', () => {
         promotionHistory: [demotionRecord]
       });
 
-      expect(staff.promotionHistory[0].actionType).toBe('demotion');
-      expect(staff.promotionHistory[0].reason).toBe('Performance issues');
-      expect(RoleUtils.getRoleLevel(staff.promotionHistory[0].fromRole))
-        .toBeGreaterThan(RoleUtils.getRoleLevel(staff.promotionHistory[0].toRole));
+      expect(staff.promotionHistory[0]?.actionType).toBe('demotion');
+      expect(staff.promotionHistory[0]?.reason).toBe('Performance issues');
+      expect(RoleUtils.getRoleLevel(staff.promotionHistory[0]?.fromRole ?? StaffRole.PARALEGAL))
+        .toBeGreaterThan(RoleUtils.getRoleLevel(staff.promotionHistory[0]?.toRole ?? StaffRole.PARALEGAL));
     });
 
     it('should track hiring and firing events', () => {
@@ -203,8 +203,8 @@ describe('Staff Entity', () => {
         promotionHistory: [hireRecord, fireRecord]
       });
 
-      expect(hiredStaff.promotionHistory[0].actionType).toBe('hire');
-      expect(firedStaff.promotionHistory[1].actionType).toBe('fire');
+      expect(hiredStaff.promotionHistory[0]?.actionType).toBe('hire');
+      expect(firedStaff.promotionHistory[1]?.actionType).toBe('fire');
       expect(firedStaff.status).toBe('terminated');
     });
   });
@@ -247,12 +247,12 @@ describe('Staff Entity', () => {
       const longHistory: PromotionRecord[] = [];
       const baseDate = new Date('2020-01-01');
       
-      // Create a promotion every 6 months for 4 years
+      // Create a promotion every 6 months for 4 years - ensure we have more than 5 promotions
       const roles = RoleUtils.getAllRolesSortedByLevel().reverse(); // Start from lowest level
-      for (let i = 0; i < Math.min(8, roles.length - 1); i++) {
+      for (let i = 0; i < Math.min(8, roles.length); i++) {
         longHistory.push({
-          fromRole: i === 0 ? StaffRole.PARALEGAL : roles[i - 1],
-          toRole: roles[Math.min(i, roles.length - 1)],
+          fromRole: i === 0 ? StaffRole.PARALEGAL : (roles[i - 1] ?? StaffRole.PARALEGAL),
+          toRole: roles[Math.min(i, roles.length - 1)] ?? StaffRole.PARALEGAL,
           promotedBy: `manager${i}`,
           promotedAt: new Date(baseDate.getTime() + i * 6 * 30 * 24 * 60 * 60 * 1000),
           actionType: 'promotion'
@@ -302,8 +302,8 @@ describe('Staff Entity', () => {
         promotionHistory: [incompletePromotion]
       });
 
-      expect(staff.promotionHistory[0].reason).toBeUndefined();
-      expect(staff.promotionHistory[0].actionType).toBe('promotion');
+      expect(staff.promotionHistory[0]?.reason).toBeUndefined();
+      expect(staff.promotionHistory[0]?.actionType).toBe('promotion');
     });
   });
 

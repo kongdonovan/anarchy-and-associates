@@ -44,7 +44,6 @@ describe('Security and Permission Boundary Tests', () => {
 
   beforeAll(async () => {
     await DatabaseTestHelpers.setupTestDatabase();
-    await DatabaseTestHelpers.createIndexes();
   });
 
   beforeEach(async () => {
@@ -310,17 +309,17 @@ describe('Security and Permission Boundary Tests', () => {
       // Should be completely isolated
       expect(guild1Staff.staff).toHaveLength(1);
       expect(guild2Staff.staff).toHaveLength(1);
-      expect(guild1Staff.staff[0].role).toBe(StaffRole.PARALEGAL);
-      expect(guild2Staff.staff[0].role).toBe(StaffRole.MANAGING_PARTNER);
+      expect(guild1Staff.staff[0]?.role).toBe(StaffRole.PARALEGAL);
+      expect(guild2Staff.staff[0]?.role).toBe(StaffRole.MANAGING_PARTNER);
 
       // Verify no cross-contamination
-      expect(guild1Staff.staff[0].guildId).toBe(testGuildId);
-      expect(guild2Staff.staff[0].guildId).toBe(otherGuildId);
+      expect(guild1Staff.staff[0]?.guildId).toBe(testGuildId);
+      expect(guild2Staff.staff[0]?.guildId).toBe(otherGuildId);
     });
 
     it('should prevent cross-guild case access', async () => {
       // Create cases in both guilds
-      const case1 = await caseService.createCase({
+      await caseService.createCase({
         guildId: testGuildId,
         clientId: 'client-1',
         clientUsername: 'client1',
@@ -328,7 +327,7 @@ describe('Security and Permission Boundary Tests', () => {
         description: 'Confidential information for guild 1'
       });
 
-      const case2 = await caseService.createCase({
+      await caseService.createCase({
         guildId: otherGuildId,
         clientId: 'client-1',
         clientUsername: 'client1',
@@ -343,11 +342,11 @@ describe('Security and Permission Boundary Tests', () => {
       // Should only see cases from respective guilds
       expect(guild1Cases).toHaveLength(1);
       expect(guild2Cases).toHaveLength(1);
-      expect(guild1Cases[0].title).toBe('Guild 1 Sensitive Case');
-      expect(guild2Cases[0].title).toBe('Guild 2 Sensitive Case');
+      expect(guild1Cases[0]?.title).toBe('Guild 1 Sensitive Case');
+      expect(guild2Cases[0]?.title).toBe('Guild 2 Sensitive Case');
 
       // Verify case IDs are different
-      expect(guild1Cases[0]._id?.toString()).not.toBe(guild2Cases[0]._id?.toString());
+      expect(guild1Cases[0]?._id?.toString()).not.toBe(guild2Cases[0]?._id?.toString());
     });
   });
 
@@ -463,7 +462,7 @@ describe('Security and Permission Boundary Tests', () => {
       });
 
       expect(cases).toHaveLength(1);
-      expect(cases[0].title).toBe('Sensitive Legal Matter');
+      expect(cases[0]?.title).toBe('Sensitive Legal Matter');
 
       // In production, additional access controls would be applied
       // based on user roles and case assignments

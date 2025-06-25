@@ -40,7 +40,6 @@ describe('Concurrency and Race Condition Tests', () => {
 
   beforeAll(async () => {
     await DatabaseTestHelpers.setupTestDatabase();
-    await DatabaseTestHelpers.createIndexes();
   });
 
   beforeEach(async () => {

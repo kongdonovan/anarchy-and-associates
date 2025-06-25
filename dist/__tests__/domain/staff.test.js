@@ -58,45 +58,50 @@ describe('Staff Entity', () => {
     });
     describe('Staff Role Hierarchy', () => {
         it('should correctly identify role levels', () => {
-            expect((0, staff_role_1.getStaffRoleLevel)(staff_role_1.StaffRole.PARALEGAL)).toBe(1);
-            expect((0, staff_role_1.getStaffRoleLevel)(staff_role_1.StaffRole.JUNIOR_ASSOCIATE)).toBe(2);
-            expect((0, staff_role_1.getStaffRoleLevel)(staff_role_1.StaffRole.SENIOR_ASSOCIATE)).toBe(3);
-            expect((0, staff_role_1.getStaffRoleLevel)(staff_role_1.StaffRole.JUNIOR_PARTNER)).toBe(4);
-            expect((0, staff_role_1.getStaffRoleLevel)(staff_role_1.StaffRole.SENIOR_PARTNER)).toBe(5);
-            expect((0, staff_role_1.getStaffRoleLevel)(staff_role_1.StaffRole.MANAGING_PARTNER)).toBe(6);
+            expect(staff_role_1.RoleUtils.getRoleLevel(staff_role_1.StaffRole.PARALEGAL)).toBe(1);
+            expect(staff_role_1.RoleUtils.getRoleLevel(staff_role_1.StaffRole.JUNIOR_ASSOCIATE)).toBe(2);
+            expect(staff_role_1.RoleUtils.getRoleLevel(staff_role_1.StaffRole.SENIOR_ASSOCIATE)).toBe(3);
+            expect(staff_role_1.RoleUtils.getRoleLevel(staff_role_1.StaffRole.JUNIOR_PARTNER)).toBe(4);
+            expect(staff_role_1.RoleUtils.getRoleLevel(staff_role_1.StaffRole.SENIOR_PARTNER)).toBe(5);
+            expect(staff_role_1.RoleUtils.getRoleLevel(staff_role_1.StaffRole.MANAGING_PARTNER)).toBe(6);
         });
         it('should return correct max counts for each role', () => {
-            expect((0, staff_role_1.getRoleMaxCount)(staff_role_1.StaffRole.PARALEGAL)).toBe(10);
-            expect((0, staff_role_1.getRoleMaxCount)(staff_role_1.StaffRole.JUNIOR_ASSOCIATE)).toBe(10);
-            expect((0, staff_role_1.getRoleMaxCount)(staff_role_1.StaffRole.SENIOR_ASSOCIATE)).toBe(10);
-            expect((0, staff_role_1.getRoleMaxCount)(staff_role_1.StaffRole.JUNIOR_PARTNER)).toBe(5);
-            expect((0, staff_role_1.getRoleMaxCount)(staff_role_1.StaffRole.SENIOR_PARTNER)).toBe(3);
-            expect((0, staff_role_1.getRoleMaxCount)(staff_role_1.StaffRole.MANAGING_PARTNER)).toBe(1);
+            expect(staff_role_1.RoleUtils.getRoleMaxCount(staff_role_1.StaffRole.PARALEGAL)).toBe(10);
+            expect(staff_role_1.RoleUtils.getRoleMaxCount(staff_role_1.StaffRole.JUNIOR_ASSOCIATE)).toBe(10);
+            expect(staff_role_1.RoleUtils.getRoleMaxCount(staff_role_1.StaffRole.SENIOR_ASSOCIATE)).toBe(10);
+            expect(staff_role_1.RoleUtils.getRoleMaxCount(staff_role_1.StaffRole.JUNIOR_PARTNER)).toBe(5);
+            expect(staff_role_1.RoleUtils.getRoleMaxCount(staff_role_1.StaffRole.SENIOR_PARTNER)).toBe(3);
+            expect(staff_role_1.RoleUtils.getRoleMaxCount(staff_role_1.StaffRole.MANAGING_PARTNER)).toBe(1);
         });
-        it('should validate promotion eligibility correctly', () => {
-            // Valid promotions (one level up)
-            expect((0, staff_role_1.canPromoteToRole)(staff_role_1.StaffRole.PARALEGAL, staff_role_1.StaffRole.JUNIOR_ASSOCIATE)).toBe(true);
-            expect((0, staff_role_1.canPromoteToRole)(staff_role_1.StaffRole.JUNIOR_ASSOCIATE, staff_role_1.StaffRole.SENIOR_ASSOCIATE)).toBe(true);
-            expect((0, staff_role_1.canPromoteToRole)(staff_role_1.StaffRole.SENIOR_ASSOCIATE, staff_role_1.StaffRole.JUNIOR_PARTNER)).toBe(true);
-            expect((0, staff_role_1.canPromoteToRole)(staff_role_1.StaffRole.JUNIOR_PARTNER, staff_role_1.StaffRole.SENIOR_PARTNER)).toBe(true);
-            expect((0, staff_role_1.canPromoteToRole)(staff_role_1.StaffRole.SENIOR_PARTNER, staff_role_1.StaffRole.MANAGING_PARTNER)).toBe(true);
-            // Invalid promotions (same level or downgrade)
-            expect((0, staff_role_1.canPromoteToRole)(staff_role_1.StaffRole.PARALEGAL, staff_role_1.StaffRole.PARALEGAL)).toBe(false);
-            expect((0, staff_role_1.canPromoteToRole)(staff_role_1.StaffRole.JUNIOR_ASSOCIATE, staff_role_1.StaffRole.PARALEGAL)).toBe(false);
-            expect((0, staff_role_1.canPromoteToRole)(staff_role_1.StaffRole.SENIOR_PARTNER, staff_role_1.StaffRole.JUNIOR_PARTNER)).toBe(false);
-            // Invalid promotions (skipping levels)
-            expect((0, staff_role_1.canPromoteToRole)(staff_role_1.StaffRole.PARALEGAL, staff_role_1.StaffRole.SENIOR_ASSOCIATE)).toBe(false);
-            expect((0, staff_role_1.canPromoteToRole)(staff_role_1.StaffRole.JUNIOR_ASSOCIATE, staff_role_1.StaffRole.JUNIOR_PARTNER)).toBe(false);
-            expect((0, staff_role_1.canPromoteToRole)(staff_role_1.StaffRole.PARALEGAL, staff_role_1.StaffRole.MANAGING_PARTNER)).toBe(false);
+        it('should validate role transitions correctly', () => {
+            // Test getting next promotion
+            expect(staff_role_1.RoleUtils.getNextPromotion(staff_role_1.StaffRole.PARALEGAL)).toBe(staff_role_1.StaffRole.JUNIOR_ASSOCIATE);
+            expect(staff_role_1.RoleUtils.getNextPromotion(staff_role_1.StaffRole.JUNIOR_ASSOCIATE)).toBe(staff_role_1.StaffRole.SENIOR_ASSOCIATE);
+            expect(staff_role_1.RoleUtils.getNextPromotion(staff_role_1.StaffRole.SENIOR_ASSOCIATE)).toBe(staff_role_1.StaffRole.JUNIOR_PARTNER);
+            expect(staff_role_1.RoleUtils.getNextPromotion(staff_role_1.StaffRole.JUNIOR_PARTNER)).toBe(staff_role_1.StaffRole.SENIOR_PARTNER);
+            expect(staff_role_1.RoleUtils.getNextPromotion(staff_role_1.StaffRole.SENIOR_PARTNER)).toBe(staff_role_1.StaffRole.MANAGING_PARTNER);
+            expect(staff_role_1.RoleUtils.getNextPromotion(staff_role_1.StaffRole.MANAGING_PARTNER)).toBe(null);
+            // Test getting previous demotion
+            expect(staff_role_1.RoleUtils.getPreviousDemotion(staff_role_1.StaffRole.MANAGING_PARTNER)).toBe(staff_role_1.StaffRole.SENIOR_PARTNER);
+            expect(staff_role_1.RoleUtils.getPreviousDemotion(staff_role_1.StaffRole.SENIOR_PARTNER)).toBe(staff_role_1.StaffRole.JUNIOR_PARTNER);
+            expect(staff_role_1.RoleUtils.getPreviousDemotion(staff_role_1.StaffRole.JUNIOR_PARTNER)).toBe(staff_role_1.StaffRole.SENIOR_ASSOCIATE);
+            expect(staff_role_1.RoleUtils.getPreviousDemotion(staff_role_1.StaffRole.SENIOR_ASSOCIATE)).toBe(staff_role_1.StaffRole.JUNIOR_ASSOCIATE);
+            expect(staff_role_1.RoleUtils.getPreviousDemotion(staff_role_1.StaffRole.JUNIOR_ASSOCIATE)).toBe(staff_role_1.StaffRole.PARALEGAL);
+            expect(staff_role_1.RoleUtils.getPreviousDemotion(staff_role_1.StaffRole.PARALEGAL)).toBe(null);
         });
-        it('should handle promotion eligibility with context', () => {
-            const currentStaff = test_utils_1.TestUtils.generateMockStaff({
-                role: staff_role_1.StaffRole.JUNIOR_ASSOCIATE,
-                hiredAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) // 90 days ago
-            });
-            const eligibility = (0, staff_role_1.getPromotionEligibility)(currentStaff, staff_role_1.StaffRole.SENIOR_ASSOCIATE);
-            expect(eligibility.eligible).toBe(true);
-            expect(eligibility.reason).toContain('meets requirements');
+        it('should validate promotion authority correctly', () => {
+            // Senior Partner can promote to lower roles
+            expect(staff_role_1.RoleUtils.canPromote(staff_role_1.StaffRole.SENIOR_PARTNER, staff_role_1.StaffRole.JUNIOR_PARTNER)).toBe(true);
+            expect(staff_role_1.RoleUtils.canPromote(staff_role_1.StaffRole.SENIOR_PARTNER, staff_role_1.StaffRole.SENIOR_ASSOCIATE)).toBe(true);
+            expect(staff_role_1.RoleUtils.canPromote(staff_role_1.StaffRole.SENIOR_PARTNER, staff_role_1.StaffRole.JUNIOR_ASSOCIATE)).toBe(true);
+            expect(staff_role_1.RoleUtils.canPromote(staff_role_1.StaffRole.SENIOR_PARTNER, staff_role_1.StaffRole.PARALEGAL)).toBe(true);
+            // Managing Partner can promote to all lower roles
+            expect(staff_role_1.RoleUtils.canPromote(staff_role_1.StaffRole.MANAGING_PARTNER, staff_role_1.StaffRole.SENIOR_PARTNER)).toBe(true);
+            expect(staff_role_1.RoleUtils.canPromote(staff_role_1.StaffRole.MANAGING_PARTNER, staff_role_1.StaffRole.JUNIOR_PARTNER)).toBe(true);
+            // Lower roles cannot promote
+            expect(staff_role_1.RoleUtils.canPromote(staff_role_1.StaffRole.JUNIOR_ASSOCIATE, staff_role_1.StaffRole.PARALEGAL)).toBe(false);
+            expect(staff_role_1.RoleUtils.canPromote(staff_role_1.StaffRole.SENIOR_ASSOCIATE, staff_role_1.StaffRole.JUNIOR_ASSOCIATE)).toBe(false);
+            expect(staff_role_1.RoleUtils.canPromote(staff_role_1.StaffRole.JUNIOR_PARTNER, staff_role_1.StaffRole.SENIOR_ASSOCIATE)).toBe(false);
         });
     });
     describe('Promotion History Management', () => {
@@ -124,11 +129,11 @@ describe('Staff Entity', () => {
                 promotionHistory: promotions
             });
             expect(staff.promotionHistory).toHaveLength(2);
-            expect(staff.promotionHistory[0].toRole).toBe(staff_role_1.StaffRole.JUNIOR_ASSOCIATE);
-            expect(staff.promotionHistory[1].toRole).toBe(staff_role_1.StaffRole.SENIOR_ASSOCIATE);
+            expect(staff.promotionHistory[0]?.toRole).toBe(staff_role_1.StaffRole.JUNIOR_ASSOCIATE);
+            expect(staff.promotionHistory[1]?.toRole).toBe(staff_role_1.StaffRole.SENIOR_ASSOCIATE);
             // Verify chronological order
-            expect(staff.promotionHistory[0].promotedAt.getTime())
-                .toBeLessThan(staff.promotionHistory[1].promotedAt.getTime());
+            expect(staff.promotionHistory[0]?.promotedAt.getTime())
+                .toBeLessThan(staff.promotionHistory[1]?.promotedAt.getTime() ?? 0);
         });
         it('should track demotion events', () => {
             const demotionRecord = {
@@ -143,10 +148,10 @@ describe('Staff Entity', () => {
                 role: staff_role_1.StaffRole.JUNIOR_ASSOCIATE,
                 promotionHistory: [demotionRecord]
             });
-            expect(staff.promotionHistory[0].actionType).toBe('demotion');
-            expect(staff.promotionHistory[0].reason).toBe('Performance issues');
-            expect((0, staff_role_1.getStaffRoleLevel)(staff.promotionHistory[0].fromRole))
-                .toBeGreaterThan((0, staff_role_1.getStaffRoleLevel)(staff.promotionHistory[0].toRole));
+            expect(staff.promotionHistory[0]?.actionType).toBe('demotion');
+            expect(staff.promotionHistory[0]?.reason).toBe('Performance issues');
+            expect(staff_role_1.RoleUtils.getRoleLevel(staff.promotionHistory[0]?.fromRole ?? staff_role_1.StaffRole.PARALEGAL))
+                .toBeGreaterThan(staff_role_1.RoleUtils.getRoleLevel(staff.promotionHistory[0]?.toRole ?? staff_role_1.StaffRole.PARALEGAL));
         });
         it('should track hiring and firing events', () => {
             const hireRecord = {
@@ -171,8 +176,8 @@ describe('Staff Entity', () => {
                 status: 'terminated',
                 promotionHistory: [hireRecord, fireRecord]
             });
-            expect(hiredStaff.promotionHistory[0].actionType).toBe('hire');
-            expect(firedStaff.promotionHistory[1].actionType).toBe('fire');
+            expect(hiredStaff.promotionHistory[0]?.actionType).toBe('hire');
+            expect(firedStaff.promotionHistory[1]?.actionType).toBe('fire');
             expect(firedStaff.status).toBe('terminated');
         });
     });
@@ -206,11 +211,12 @@ describe('Staff Entity', () => {
         it('should handle staff with very long service history', () => {
             const longHistory = [];
             const baseDate = new Date('2020-01-01');
-            // Create a promotion every 6 months for 4 years
-            for (let i = 0; i < 8; i++) {
+            // Create a promotion every 6 months for 4 years - ensure we have more than 5 promotions
+            const roles = staff_role_1.RoleUtils.getAllRolesSortedByLevel().reverse(); // Start from lowest level
+            for (let i = 0; i < Math.min(8, roles.length); i++) {
                 longHistory.push({
-                    fromRole: i === 0 ? staff_role_1.StaffRole.PARALEGAL : (longHistory[i - 1].toRole),
-                    toRole: i < 5 ? Object.values(staff_role_1.StaffRole)[Math.min(i + 1, 5)] : staff_role_1.StaffRole.SENIOR_PARTNER,
+                    fromRole: i === 0 ? staff_role_1.StaffRole.PARALEGAL : (roles[i - 1] ?? staff_role_1.StaffRole.PARALEGAL),
+                    toRole: roles[Math.min(i, roles.length - 1)] ?? staff_role_1.StaffRole.PARALEGAL,
                     promotedBy: `manager${i}`,
                     promotedAt: new Date(baseDate.getTime() + i * 6 * 30 * 24 * 60 * 60 * 1000),
                     actionType: 'promotion'
@@ -251,8 +257,8 @@ describe('Staff Entity', () => {
             const staff = test_utils_1.TestUtils.generateMockStaff({
                 promotionHistory: [incompletePromotion]
             });
-            expect(staff.promotionHistory[0].reason).toBeUndefined();
-            expect(staff.promotionHistory[0].actionType).toBe('promotion');
+            expect(staff.promotionHistory[0]?.reason).toBeUndefined();
+            expect(staff.promotionHistory[0]?.actionType).toBe('promotion');
         });
     });
     describe('Cross-Guild Isolation', () => {

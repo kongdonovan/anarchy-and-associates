@@ -77,10 +77,61 @@ export class Bot {
     try {
       logger.info('Initializing application commands...');
       
-      // Simple initialization following discordx documentation
-      await this.client.initApplicationCommands();
+      // Smart command registration - check for existing commands first
+      let existingCommands;
+      try {
+        existingCommands = await this.client.application?.commands.fetch();
+        logger.info(`Found ${existingCommands?.size || 0} existing commands on Discord`);
+      } catch (fetchError) {
+        logger.warn('Could not fetch existing commands, proceeding with normal initialization:', fetchError);
+        existingCommands = null;
+      }
+
+      // Get the commands that discordx wants to register
+      const localCommands = this.client.applicationCommands;
+      logger.info(`Found ${localCommands.length} local commands to register`);
       
-      logger.info('Slash commands initialized successfully');
+      if (existingCommands && existingCommands.size > 0) {
+        // Check if commands are already registered and up to date
+        const needsUpdate = localCommands.some(localCmd => {
+          const existingCmd = existingCommands.find(cmd => cmd.name === localCmd.name);
+          if (!existingCmd) {
+            logger.info(`New command found: ${localCmd.name}`);
+            return true;
+          }
+          
+          // Check if command description changed
+          if (existingCmd.description !== localCmd.description) {
+            logger.info(`Command ${localCmd.name} description changed`);
+            return true;
+          }
+          
+          return false;
+        });
+        
+        // Check for orphaned commands
+        const orphanedCommands = existingCommands.filter(discordCmd => 
+          !localCommands.some(localCmd => localCmd.name === discordCmd.name)
+        );
+        
+        if (orphanedCommands.size > 0) {
+          logger.info(`Found ${orphanedCommands.size} orphaned commands that will be removed`);
+        }
+        
+        if (!needsUpdate && orphanedCommands.size === 0) {
+          logger.info('All commands are already up to date, skipping registration');
+        } else {
+          logger.info('Command differences detected, updating commands...');
+          await this.client.initApplicationCommands();
+          logger.info('Slash commands updated successfully');
+        }
+      } else {
+        // No existing commands or couldn't fetch them, proceed with normal registration
+        logger.info('No existing commands found, registering all commands...');
+        await this.client.initApplicationCommands();
+        logger.info('Slash commands initialized successfully');
+      }
+      
     } catch (error) {
       logger.error('Error initializing commands:', error);
       // Don't throw - continue with bot startup even if commands fail
@@ -149,6 +200,18 @@ export class Bot {
       logger.info('Bot stopped successfully');
     } catch (error) {
       logger.error('Error stopping bot:', error);
+      throw error;
+    }
+  }
+
+  // Force clear all commands (useful for development reset)
+  public async forceResetCommands(): Promise<void> {
+    try {
+      logger.info('Force clearing all commands...');
+      await this.client.clearApplicationCommands();
+      logger.info('All commands cleared. Next startup will re-register all commands.');
+    } catch (error) {
+      logger.error('Error force clearing commands:', error);
       throw error;
     }
   }

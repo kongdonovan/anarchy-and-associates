@@ -10,7 +10,7 @@ export class MongoDbClient {
 
   private constructor() {
     this.connectionString = process.env.MONGODB_URI || 'mongodb://localhost:27017';
-    this.databaseName = process.env.MONGO_DATABASE || 'anarchy_associates';
+    this.databaseName = process.env.MONGODB_DB_NAME || 'anarchy_associates';
   }
 
   public static getInstance(): MongoDbClient {
