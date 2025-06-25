@@ -21,8 +21,8 @@ export class RetainerService {
   ) {}
 
   public async createRetainer(context: PermissionContext, request: RetainerCreationRequest): Promise<Retainer> {
-    // Check retainer permission
-    const hasPermission = await this.permissionService.hasRetainerPermissionWithContext(context);
+    // Check lawyer permission (updated from retainer permission)
+    const hasPermission = await this.permissionService.hasLawyerPermissionWithContext(context);
     if (!hasPermission) {
       throw new Error('You do not have permission to create retainer agreements');
     }
@@ -115,8 +115,8 @@ export class RetainerService {
   }
 
   public async cancelRetainer(context: PermissionContext, retainerId: string): Promise<Retainer> {
-    // Check retainer permission
-    const hasPermission = await this.permissionService.hasRetainerPermissionWithContext(context);
+    // Check lawyer permission (updated from retainer permission)
+    const hasPermission = await this.permissionService.hasLawyerPermissionWithContext(context);
     if (!hasPermission) {
       throw new Error('You do not have permission to cancel retainer agreements');
     }
@@ -152,8 +152,8 @@ export class RetainerService {
   }
 
   public async getActiveRetainers(context: PermissionContext): Promise<Retainer[]> {
-    // Check retainer permission
-    const hasPermission = await this.permissionService.hasRetainerPermissionWithContext(context);
+    // Check lawyer permission (updated from retainer permission)
+    const hasPermission = await this.permissionService.hasLawyerPermissionWithContext(context);
     if (!hasPermission) {
       throw new Error('You do not have permission to view retainer agreements');
     }
@@ -162,8 +162,8 @@ export class RetainerService {
   }
 
   public async getPendingRetainers(context: PermissionContext): Promise<Retainer[]> {
-    // Check retainer permission
-    const hasPermission = await this.permissionService.hasRetainerPermissionWithContext(context);
+    // Check lawyer permission (updated from retainer permission)
+    const hasPermission = await this.permissionService.hasLawyerPermissionWithContext(context);
     if (!hasPermission) {
       throw new Error('You do not have permission to view pending retainer agreements');
     }
@@ -172,11 +172,11 @@ export class RetainerService {
   }
 
   public async getClientRetainers(context: PermissionContext, clientId: string, includeAll = false): Promise<Retainer[]> {
-    // Users can view their own retainers, or staff with retainer permission can view any
+    // Users can view their own retainers, or staff with lawyer permission can view any
     const isOwnRetainers = context.userId === clientId;
-    const hasRetainerPermission = await this.permissionService.hasRetainerPermissionWithContext(context);
+    const hasLawyerPermission = await this.permissionService.hasLawyerPermissionWithContext(context);
     
-    if (!isOwnRetainers && !hasRetainerPermission) {
+    if (!isOwnRetainers && !hasLawyerPermission) {
       throw new Error('You do not have permission to view these retainer agreements');
     }
 
@@ -189,8 +189,8 @@ export class RetainerService {
     pending: number;
     cancelled: number;
   }> {
-    // Check retainer permission
-    const hasPermission = await this.permissionService.hasRetainerPermissionWithContext(context);
+    // Check lawyer permission (updated from retainer permission)
+    const hasPermission = await this.permissionService.hasLawyerPermissionWithContext(context);
     if (!hasPermission) {
       throw new Error('You do not have permission to view retainer statistics');
     }

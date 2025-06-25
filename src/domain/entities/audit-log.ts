@@ -15,6 +15,20 @@ export enum AuditAction {
   JOB_REMOVED = 'job_removed',
   JOB_LIST_VIEWED = 'job_list_viewed',
   JOB_INFO_VIEWED = 'job_info_viewed',
+  // Guild Owner Bypass Actions
+  GUILD_OWNER_BYPASS = 'guild_owner_bypass',
+  BUSINESS_RULE_VIOLATION = 'business_rule_violation',
+  ROLE_LIMIT_BYPASSED = 'role_limit_bypassed',
+  PERMISSION_OVERRIDE = 'permission_override',
+  // Case Actions
+  CASE_CREATED = 'case_created',
+  CASE_ASSIGNED = 'case_assigned',
+  CASE_CLOSED = 'case_closed',
+  CASE_ARCHIVED = 'case_archived',
+  CHANNEL_ARCHIVED = 'channel_archived',
+  // Lead Attorney Actions  
+  LEAD_ATTORNEY_CHANGED = 'lead_attorney_changed',
+  LEAD_ATTORNEY_REMOVED = 'lead_attorney_removed',
 }
 
 export interface AuditLog extends BaseEntity {
@@ -35,8 +49,22 @@ export interface AuditLog extends BaseEntity {
     };
     reason?: string;
     metadata?: Record<string, any>;
+    // Enhanced fields for bypass tracking
+    bypassInfo?: {
+      bypassType: 'guild-owner' | 'admin' | 'emergency';
+      businessRuleViolated: string;
+      originalValidationErrors: string[];
+      bypassReason?: string;
+      currentCount?: number;
+      maxCount?: number;
+      ruleMetadata?: Record<string, any>;
+    };
   };
   timestamp: Date;
   ipAddress?: string;
   channelId?: string;
+  // New fields for enhanced audit tracking
+  isGuildOwnerBypass?: boolean;
+  businessRulesBypassed?: string[];
+  severity?: 'low' | 'medium' | 'high' | 'critical';
 }

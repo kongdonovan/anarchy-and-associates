@@ -3,20 +3,25 @@ import {
   Slash,
   SlashOption,
   SlashGroup,
+  ModalComponent,
 } from 'discordx';
 import {
   ApplicationCommandOptionType,
   EmbedBuilder,
   User,
   CommandInteraction,
+  ModalSubmitInteraction,
 } from 'discord.js';
 import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
 import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-repository';
+import { CaseRepository } from '../../infrastructure/repositories/case-repository';
 import { StaffService } from '../../application/services/staff-service';
 import { DiscordRoleSyncService } from '../../application/services/discord-role-sync-service';
 import { PermissionService, PermissionContext } from '../../application/services/permission-service';
+import { BusinessRuleValidationService } from '../../application/services/business-rule-validation-service';
 import { GuildConfigRepository } from '../../infrastructure/repositories/guild-config-repository';
 import { StaffRole, RoleUtils } from '../../domain/entities/staff-role';
+import { GuildOwnerUtils } from '../../infrastructure/utils/guild-owner-utils';
 import { logger } from '../../infrastructure/logger';
 
 @Discord()
@@ -25,21 +30,30 @@ import { logger } from '../../infrastructure/logger';
 export class StaffCommands {
   private staffRepository: StaffRepository;
   private auditLogRepository: AuditLogRepository;
+  private caseRepository: CaseRepository;
   private guildConfigRepository: GuildConfigRepository;
   private staffService: StaffService;
   private roleSyncService: DiscordRoleSyncService;
   private permissionService: PermissionService;
+  private businessRuleValidationService: BusinessRuleValidationService;
 
   constructor() {
     this.staffRepository = new StaffRepository();
     this.auditLogRepository = new AuditLogRepository();
+    this.caseRepository = new CaseRepository();
     this.guildConfigRepository = new GuildConfigRepository();
-    this.staffService = new StaffService(this.staffRepository, this.auditLogRepository);
+    this.permissionService = new PermissionService(this.guildConfigRepository);
+    this.staffService = new StaffService(this.staffRepository, this.auditLogRepository, this.permissionService, this.businessRuleValidationService);
     this.roleSyncService = new DiscordRoleSyncService(
       this.staffRepository,
       this.auditLogRepository
     );
-    this.permissionService = new PermissionService(this.guildConfigRepository);
+    this.businessRuleValidationService = new BusinessRuleValidationService(
+      this.guildConfigRepository,
+      this.staffRepository,
+      this.caseRepository,
+      this.permissionService
+    );
   }
 
   private async getPermissionContext(interaction: CommandInteraction): Promise<PermissionContext> {
@@ -126,7 +140,7 @@ export class StaffCommands {
       }
 
       const context = await this.getPermissionContext(interaction);
-      const hasPermission = await this.permissionService.hasActionPermission(context, 'hr');
+      const hasPermission = await this.permissionService.hasSeniorStaffPermissionWithContext(context);
 
       if (!hasPermission) {
         await interaction.reply({
@@ -159,19 +173,96 @@ export class StaffCommands {
         }
       }
 
-      const result = await this.staffService.hireStaff({
-        guildId: interaction.guildId,
+      // Validate role limits using business rule validation service
+      const roleLimitValidation = await this.businessRuleValidationService.validateRoleLimit(
+        context,
+        role as StaffRole
+      );
+
+      // If role limit exceeded and user is guild owner, show bypass modal
+      if (!roleLimitValidation.valid && roleLimitValidation.bypassAvailable && context.isGuildOwner) {
+        const bypassModal = GuildOwnerUtils.createRoleLimitBypassModal(
+          interaction.user.id,
+          roleLimitValidation
+        );
+
+        const bypassEmbed = GuildOwnerUtils.createBypassConfirmationEmbed(roleLimitValidation);
+
+        await interaction.reply({
+          embeds: [bypassEmbed],
+          ephemeral: true
+        });
+
+        await interaction.followUp({
+          embeds: [this.createInfoEmbed(
+            'Bypass Required', 
+            'Please complete the confirmation modal to proceed with hiring beyond normal limits.'
+          )],
+          ephemeral: true
+        });
+
+        await interaction.user.send({ components: [] }).catch(() => {
+          // Ignore DM failures
+        });
+
+        try {
+          await interaction.showModal(bypassModal);
+        } catch (error) {
+          logger.error('Error showing bypass modal:', error);
+          await interaction.editReply({
+            embeds: [this.createErrorEmbed('Failed to show bypass confirmation modal.')],
+          });
+        }
+        return;
+      }
+
+      // If role limit exceeded and no bypass available, deny
+      if (!roleLimitValidation.valid && !roleLimitValidation.bypassAvailable) {
+        await interaction.reply({
+          embeds: [this.createErrorEmbed(roleLimitValidation.errors.join('\n'))],
+          ephemeral: true,
+        });
+        return;
+      }
+
+      // Proceed with hiring (either no limits exceeded or bypass was handled elsewhere)
+      await this.performStaffHiring(interaction, user, role as StaffRole, robloxUsername, reason, context);
+    } catch (error) {
+      logger.error('Error in hire staff command:', error);
+      await interaction.reply({
+        embeds: [this.createErrorEmbed('An error occurred while processing the command.')],
+        ephemeral: true,
+      });
+    }
+  }
+
+  /**
+   * Perform the actual staff hiring (separated for reuse in bypass flow)
+   */
+  private async performStaffHiring(
+    interaction: CommandInteraction,
+    user: User,
+    role: StaffRole,
+    robloxUsername: string,
+    reason: string,
+    context: PermissionContext,
+    bypassReason?: string
+  ): Promise<void> {
+    try {
+      const result = await this.staffService.hireStaff(context, {
+        guildId: interaction.guildId!,
         userId: user.id,
         robloxUsername,
-        role: role as StaffRole,
+        role,
         hiredBy: interaction.user.id,
         reason,
+        isGuildOwner: context.isGuildOwner
       });
 
       if (!result.success) {
-        await interaction.reply({
+        const replyMethod = interaction.replied ? 'editReply' : 'reply';
+        await interaction[replyMethod]({
           embeds: [this.createErrorEmbed(result.error || 'Failed to hire staff member.')],
-          ephemeral: true,
         });
         return;
       }
@@ -181,18 +272,98 @@ export class StaffCommands {
         await this.roleSyncService.syncStaffRole(interaction.guild, result.staff, interaction.user.id);
       }
 
-      await interaction.reply({
-        embeds: [this.createSuccessEmbed(
-          `Successfully hired ${user.displayName} as ${role}.\nRoblox Username: ${robloxUsername}`
-        )],
+      // Create success message
+      let successMessage = `Successfully hired ${user.displayName} as ${role}.\nRoblox Username: ${robloxUsername}`;
+      if (bypassReason) {
+        successMessage += `\n\n**Guild Owner Bypass Applied**\nReason: ${bypassReason}`;
+      }
+
+      const replyMethod = interaction.replied ? 'editReply' : 'reply';
+      await interaction[replyMethod]({
+        embeds: [bypassReason ? 
+          GuildOwnerUtils.createBypassSuccessEmbed(role, result.staff?.role ? RoleUtils.getRoleLevel(result.staff.role) : 1, bypassReason) :
+          this.createSuccessEmbed(successMessage)
+        ],
       });
 
-      logger.info(`Staff hired: ${user.id} as ${role} by ${interaction.user.id} in guild ${interaction.guildId}`);
+      logger.info(`Staff hired: ${user.id} as ${role} by ${interaction.user.id} in guild ${interaction.guildId}`, {
+        bypassUsed: !!bypassReason,
+        bypassReason
+      });
     } catch (error) {
-      logger.error('Error in hire staff command:', error);
+      logger.error('Error in performStaffHiring:', error);
+      const replyMethod = interaction.replied ? 'editReply' : 'reply';
+      await interaction[replyMethod]({
+        embeds: [this.createErrorEmbed('An error occurred while processing the hiring.')],
+      });
+    }
+  }
+
+  /**
+   * Handle guild owner bypass modal submission
+   */
+  @ModalComponent({ id: /role_limit_bypass_.*/ })
+  async handleRoleLimitBypass(interaction: ModalSubmitInteraction): Promise<void> {
+    try {
+      // Verify this is a valid bypass attempt
+      if (!GuildOwnerUtils.isEligibleForBypass(interaction)) {
+        await interaction.reply({
+          embeds: [GuildOwnerUtils.createBypassErrorEmbed('You are not authorized to perform bypass operations.')],
+          ephemeral: true
+        });
+        return;
+      }
+
+      // Check if bypass is expired
+      if (GuildOwnerUtils.isBypassExpired(interaction.customId)) {
+        await interaction.reply({
+          embeds: [GuildOwnerUtils.createBypassErrorEmbed('Bypass confirmation has expired. Please retry the original command.')],
+          ephemeral: true
+        });
+        return;
+      }
+
+      // Validate bypass confirmation
+      const confirmation = GuildOwnerUtils.validateBypassConfirmation(interaction);
+      if (!confirmation.confirmed) {
+        await interaction.reply({
+          embeds: [GuildOwnerUtils.createBypassErrorEmbed(confirmation.error || 'Bypass confirmation failed.')],
+          ephemeral: true
+        });
+        return;
+      }
+
+      // Parse bypass information from custom ID
+      const bypassInfo = GuildOwnerUtils.parseBypassId(interaction.customId);
+      if (!bypassInfo) {
+        await interaction.reply({
+          embeds: [GuildOwnerUtils.createBypassErrorEmbed('Invalid bypass request. Please retry the original command.')],
+          ephemeral: true
+        });
+        return;
+      }
+
       await interaction.reply({
-        embeds: [this.createErrorEmbed('An error occurred while processing the command.')],
-        ephemeral: true,
+        embeds: [this.createInfoEmbed(
+          'Bypass Confirmed',
+          'Guild owner bypass has been confirmed. The original operation will now proceed with elevated privileges.\n\n' +
+          '**Note:** You will need to re-run the original hire command as this confirmation does not automatically execute it.'
+        )],
+        ephemeral: true
+      });
+
+      logger.info('Guild owner bypass confirmed', {
+        userId: interaction.user.id,
+        guildId: interaction.guildId,
+        bypassType: bypassInfo.bypassType,
+        reason: confirmation.reason
+      });
+
+    } catch (error) {
+      logger.error('Error handling role limit bypass:', error);
+      await interaction.reply({
+        embeds: [GuildOwnerUtils.createBypassErrorEmbed('An error occurred while processing the bypass confirmation.')],
+        ephemeral: true
       });
     }
   }
@@ -225,7 +396,7 @@ export class StaffCommands {
       }
 
       const context = await this.getPermissionContext(interaction);
-      const hasPermission = await this.permissionService.hasActionPermission(context, 'hr');
+      const hasPermission = await this.permissionService.hasSeniorStaffPermissionWithContext(context);
 
       if (!hasPermission) {
         await interaction.reply({
@@ -336,7 +507,7 @@ export class StaffCommands {
       }
 
       const context = await this.getPermissionContext(interaction);
-      const hasPermission = await this.permissionService.hasActionPermission(context, 'hr');
+      const hasPermission = await this.permissionService.hasSeniorStaffPermissionWithContext(context);
 
       if (!hasPermission) {
         await interaction.reply({
@@ -451,7 +622,7 @@ export class StaffCommands {
       }
 
       const context = await this.getPermissionContext(interaction);
-      const hasPermission = await this.permissionService.hasActionPermission(context, 'hr');
+      const hasPermission = await this.permissionService.hasSeniorStaffPermissionWithContext(context);
 
       if (!hasPermission) {
         await interaction.reply({

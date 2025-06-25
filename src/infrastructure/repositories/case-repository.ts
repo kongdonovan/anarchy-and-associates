@@ -234,4 +234,49 @@ export class CaseRepository extends BaseMongoRepository<Case> {
     const updatedNotes = [...existingCase.notes, note];
     return this.update(caseId, { notes: updatedNotes });
   }
+
+  /**
+   * Find all cases where a user is involved (as client, lead attorney, or assigned lawyer)
+   */
+  public async findCasesByUserId(guildId: string, userId: string): Promise<Case[]> {
+    try {
+      const query = {
+        guildId,
+        $or: [
+          { clientId: userId },
+          { leadAttorneyId: userId },
+          { assignedLawyerIds: { $in: [userId] } }
+        ]
+      };
+
+      return await this.findByFilters(query as any);
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Conditionally update a case only if it matches certain criteria
+   * This prevents race conditions by checking and updating in a single atomic operation
+   */
+  public async conditionalUpdate(
+    caseId: string,
+    conditions: Partial<Case>,
+    updates: Partial<Case>
+  ): Promise<Case | null> {
+    try {
+      const query = { _id: this.toObjectId(caseId), ...conditions };
+      const updateDoc = { $set: { ...updates, updatedAt: new Date() } };
+      
+      const result = await this.collection.findOneAndUpdate(
+        query,
+        updateDoc,
+        { returnDocument: 'after' }
+      );
+      
+      return result ? (result as Case) : null;
+    } catch (error) {
+      throw error;
+    }
+  }
 }

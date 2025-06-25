@@ -28,10 +28,11 @@ export class GuildConfigRepository extends BaseMongoRepository<GuildConfig> {
       clientRoleId: undefined,
       permissions: {
         admin: [],
-        hr: [],
+        'senior-staff': [],
         case: [],
         config: [],
-        retainer: [],
+        lawyer: [],
+        'lead-attorney': [],
         repair: [],
       },
       adminRoles: [],

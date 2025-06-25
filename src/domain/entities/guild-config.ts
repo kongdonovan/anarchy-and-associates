@@ -11,10 +11,11 @@ export interface GuildConfig extends BaseEntity {
   clientRoleId?: string;
   permissions: {
     admin: string[];
-    hr: string[];
+    'senior-staff': string[]; // Renamed from hr, broader scope
     case: string[];
     config: string[];
-    retainer: string[];
+    lawyer: string[]; // New: replaces retainer, for legal practice
+    'lead-attorney': string[]; // New: for lead attorney assignments
     repair: string[];
   };
   adminRoles: string[];

@@ -16,18 +16,46 @@ import { CaseRepository, CaseSearchFilters, CaseSortOptions, CasePaginationOptio
 import { CaseCounterRepository } from '../../infrastructure/repositories/case-counter-repository';
 import { GuildConfigRepository } from '../../infrastructure/repositories/guild-config-repository';
 import { PermissionService, PermissionContext } from './permission-service';
+import { BusinessRuleValidationService } from './business-rule-validation-service';
 import { logger } from '../../infrastructure/logger';
 import { randomUUID } from 'crypto';
-import { Client, CategoryChannel, ChannelType, PermissionFlagsBits, TextChannel } from 'discord.js';
+import { Client, CategoryChannel, ChannelType, PermissionFlagsBits, TextChannel, Guild } from 'discord.js';
+import { CaseChannelArchiveService } from './case-channel-archive-service';
 
 export class CaseService {
+  private archiveService?: CaseChannelArchiveService;
+
   constructor(
     private caseRepository: CaseRepository,
     private caseCounterRepository: CaseCounterRepository,
     private guildConfigRepository: GuildConfigRepository,
     private permissionService: PermissionService,
+    private businessRuleValidationService: BusinessRuleValidationService,
     private discordClient?: Client
-  ) {}
+  ) {
+    // Initialize archive service if we have required dependencies
+    if (this.permissionService && this.businessRuleValidationService) {
+      this.initializeArchiveService();
+    }
+  }
+
+  private initializeArchiveService(): void {
+    try {
+      // Import audit log repository
+      const { AuditLogRepository } = require('../../infrastructure/repositories/audit-log-repository');
+      const auditLogRepository = new AuditLogRepository();
+
+      this.archiveService = new CaseChannelArchiveService(
+        this.caseRepository,
+        this.guildConfigRepository,
+        auditLogRepository,
+        this.permissionService,
+        this.businessRuleValidationService
+      );
+    } catch (error) {
+      logger.warn('Failed to initialize archive service:', error);
+    }
+  }
 
   public async createCase(context: PermissionContext, request: CaseCreationRequest): Promise<Case> {
     // Check case permission
@@ -36,10 +64,35 @@ export class CaseService {
       throw new Error('You do not have permission to create cases');
     }
 
+    // Validate client case limits (5 active cases max per client)
+    const caseLimitValidation = await this.validateClientCaseLimits(
+      request.clientId,
+      request.guildId
+    );
+    
+    if (!caseLimitValidation.valid) {
+      const errorMessage = caseLimitValidation.errors.join(', ');
+      logger.warn('Case creation blocked due to client case limit', {
+        clientId: request.clientId,
+        guildId: request.guildId,
+        errors: caseLimitValidation.errors
+      });
+      throw new Error(errorMessage);
+    }
+
+    // Log warnings if client is approaching limit
+    if (caseLimitValidation.warnings.length > 0) {
+      logger.warn('Client approaching case limit', {
+        clientId: request.clientId,
+        warnings: caseLimitValidation.warnings
+      });
+    }
+
     logger.info('Creating new case', {
       guildId: request.guildId,
       clientId: request.clientId,
-      title: request.title
+      title: request.title,
+      clientCurrentCases: caseLimitValidation.currentCases
     });
 
     // Generate sequential case number
@@ -77,6 +130,24 @@ export class CaseService {
     const hasPermission = await this.permissionService.hasActionPermission(context, 'case');
     if (!hasPermission) {
       throw new Error('You do not have permission to assign lawyers to cases');
+    }
+
+    // Validate that the lawyer being assigned has the required permissions
+    const lawyerValidation = await this.validateLawyerPermissions(
+      context.guildId,
+      request.lawyerId,
+      'lawyer'
+    );
+
+    if (!lawyerValidation.valid) {
+      const errorMessage = `User cannot be assigned to case: ${lawyerValidation.errors.join(', ')}`;
+      logger.warn('Lawyer assignment blocked due to insufficient permissions', {
+        caseId: request.caseId,
+        lawyerId: request.lawyerId,
+        assignedBy: request.assignedBy,
+        errors: lawyerValidation.errors
+      });
+      throw new Error(errorMessage);
     }
 
     logger.info('Assigning lawyer to case', {
@@ -204,14 +275,68 @@ export class CaseService {
       result: request.result
     });
 
+    // Optionally archive the case channel if Discord client and archive service are available
+    if (this.discordClient && this.archiveService && updatedCase.channelId) {
+      try {
+        const guild = this.discordClient.guilds.cache.get(updatedCase.guildId);
+        if (guild) {
+          // Note: We don't await this to avoid blocking the case closure
+          // The channel will be archived in the background
+          this.archiveService.archiveCaseChannel(guild, updatedCase, context)
+            .then(result => {
+              if (result.success) {
+                logger.info('Case channel archived successfully after case closure', {
+                  caseId: request.caseId,
+                  channelId: result.channelId,
+                  archiveCategoryId: result.archiveCategoryId
+                });
+              } else {
+                logger.warn('Failed to archive case channel after closure', {
+                  caseId: request.caseId,
+                  channelId: result.channelId,
+                  error: result.error
+                });
+              }
+            })
+            .catch(error => {
+              logger.error('Error archiving case channel after closure:', {
+                caseId: request.caseId,
+                channelId: updatedCase.channelId,
+                error: error instanceof Error ? error.message : 'Unknown error'
+              });
+            });
+        }
+      } catch (error) {
+        logger.warn('Failed to initiate case channel archiving after closure:', error);
+      }
+    }
+
     return updatedCase;
   }
 
   public async setLeadAttorney(context: PermissionContext, caseId: string, newLeadAttorneyId: string): Promise<Case> {
-    // Check case permission
-    const hasPermission = await this.permissionService.hasActionPermission(context, 'case');
+    // Check lead-attorney permission (updated to use new permission system)
+    const hasPermission = await this.permissionService.hasLeadAttorneyPermissionWithContext(context);
     if (!hasPermission) {
       throw new Error('You do not have permission to set lead attorney');
+    }
+
+    // Validate that the new lead attorney has the required permissions
+    const leadAttorneyValidation = await this.validateLawyerPermissions(
+      context.guildId,
+      newLeadAttorneyId,
+      'lead-attorney'
+    );
+
+    if (!leadAttorneyValidation.valid) {
+      const errorMessage = `User cannot be assigned as lead attorney: ${leadAttorneyValidation.errors.join(', ')}`;
+      logger.warn('Lead attorney assignment blocked due to insufficient permissions', {
+        caseId,
+        newLeadAttorneyId,
+        changedBy: context.userId,
+        errors: leadAttorneyValidation.errors
+      });
+      throw new Error(errorMessage);
     }
 
     logger.info('Setting lead attorney for case', { 
@@ -290,8 +415,33 @@ export class CaseService {
       const topic = `Case: ${caseData.title} | Client: ${caseData.clientUsername} | Lead: <@${caseData.leadAttorneyId || 'TBD'}>`;
       await textChannel.setTopic(topic);
 
-      // Clear existing lawyer permissions and re-add them
+      // Validate assigned lawyers have proper permissions before updating
+      const validatedLawyers: string[] = [];
       for (const lawyerId of caseData.assignedLawyerIds) {
+        try {
+          const validation = await this.validateLawyerPermissions(caseData.guildId, lawyerId, 'lawyer');
+          if (validation.valid) {
+            validatedLawyers.push(lawyerId);
+          } else {
+            logger.warn('Removing invalid lawyer from case channel permissions during update', {
+              caseId: caseData._id,
+              lawyerId,
+              errors: validation.errors
+            });
+            // Remove permissions for invalid lawyers
+            await textChannel.permissionOverwrites.delete(lawyerId);
+          }
+        } catch (error) {
+          logger.warn('Failed to validate lawyer permissions for channel update', {
+            caseId: caseData._id,
+            lawyerId,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          });
+        }
+      }
+
+      // Update permissions for validated lawyers only
+      for (const lawyerId of validatedLawyers) {
         await textChannel.permissionOverwrites.edit(lawyerId, {
           ViewChannel: true,
           SendMessages: true,
@@ -299,6 +449,26 @@ export class CaseService {
           ManageMessages: true
         });
       }
+
+      // Ensure staff roles maintain their permissions
+      const staffRolePermissions = await this.getStaffRolePermissions(guild);
+      for (const staffPermission of staffRolePermissions) {
+        await textChannel.permissionOverwrites.edit(staffPermission.id, {
+          ViewChannel: true,
+          SendMessages: true,
+          ReadMessageHistory: true,
+          ManageMessages: true,
+          ManageThreads: true
+        });
+      }
+
+      logger.info('Case channel permissions updated with validation', {
+        caseId: caseData._id,
+        channelId: caseData.channelId,
+        validatedLawyers: validatedLawyers.length,
+        totalAssignedLawyers: caseData.assignedLawyerIds.length,
+        staffRolesUpdated: staffRolePermissions.length
+      });
     }
   }
 
@@ -481,10 +651,10 @@ export class CaseService {
   }
 
   public async acceptCase(context: PermissionContext, caseId: string): Promise<Case> {
-    // Check case permission
-    const hasPermission = await this.permissionService.hasActionPermission(context, 'case');
+    // Check lead-attorney permission (since accepting a case makes you the lead attorney)
+    const hasPermission = await this.permissionService.hasLeadAttorneyPermissionWithContext(context);
     if (!hasPermission) {
-      throw new Error('You do not have permission to accept cases');
+      throw new Error('You do not have permission to accept cases as lead attorney');
     }
 
     logger.info('Accepting case', { caseId, acceptedBy: context.userId });
@@ -557,6 +727,29 @@ export class CaseService {
       throw new Error('Guild not found');
     }
 
+    // Validate bot permissions for channel creation
+    const botMember = guild.members.me;
+    if (!botMember) {
+      throw new Error('Bot member not found in guild');
+    }
+
+    const requiredPermissions = [
+      PermissionFlagsBits.ManageChannels,
+      PermissionFlagsBits.ViewChannel,
+      PermissionFlagsBits.SendMessages,
+      PermissionFlagsBits.ManageMessages
+    ];
+
+    const hasRequiredPermissions = botMember.permissions.has(requiredPermissions);
+    if (!hasRequiredPermissions) {
+      logger.error('Bot lacks required permissions for channel creation', {
+        guildId: caseData.guildId,
+        caseId: caseData._id,
+        requiredPermissions: requiredPermissions.map(p => p.toString())
+      });
+      throw new Error('Bot does not have required permissions to create case channels');
+    }
+
     // Generate channel name from case number
     const channelName = generateChannelName(caseData.caseNumber);
 
@@ -571,17 +764,45 @@ export class CaseService {
       parentCategory = categories.first() as CategoryChannel;
     }
 
-    // Create the case channel
+    // Validate assigned lawyers have proper permissions
+    const validatedLawyers: string[] = [];
+    for (const lawyerId of caseData.assignedLawyerIds) {
+      try {
+        const validation = await this.validateLawyerPermissions(caseData.guildId, lawyerId, 'lawyer');
+        if (validation.valid) {
+          validatedLawyers.push(lawyerId);
+        } else {
+          logger.warn('Removing invalid lawyer from case channel permissions', {
+            caseId: caseData._id,
+            lawyerId,
+            errors: validation.errors
+          });
+        }
+      } catch (error) {
+        logger.warn('Failed to validate lawyer permissions for channel creation', {
+          caseId: caseData._id,
+          lawyerId,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
+    }
+
+    // Get staff roles for automatic channel access
+    const staffRolePermissions = await this.getStaffRolePermissions(guild);
+
+    // Create the case channel with enhanced permission validation
     const channel = await guild.channels.create({
       name: channelName,
       type: ChannelType.GuildText,
       parent: parentCategory?.id,
       topic: `Case: ${caseData.title} | Client: ${caseData.clientUsername} | Lead: <@${caseData.leadAttorneyId || 'TBD'}>`,
       permissionOverwrites: [
+        // Deny everyone by default
         {
           id: guild.roles.everyone.id,
           deny: [PermissionFlagsBits.ViewChannel],
         },
+        // Allow client access
         {
           id: caseData.clientId,
           allow: [
@@ -590,8 +811,8 @@ export class CaseService {
             PermissionFlagsBits.ReadMessageHistory
           ],
         },
-        // Add permissions for assigned lawyers
-        ...caseData.assignedLawyerIds.map(lawyerId => ({
+        // Add permissions for validated lawyers only
+        ...validatedLawyers.map(lawyerId => ({
           id: lawyerId,
           allow: [
             PermissionFlagsBits.ViewChannel,
@@ -599,8 +820,22 @@ export class CaseService {
             PermissionFlagsBits.ReadMessageHistory,
             PermissionFlagsBits.ManageMessages
           ],
-        }))
+        })),
+        // Add staff role permissions
+        ...staffRolePermissions
       ],
+    });
+
+    logger.info('Case channel created successfully with enhanced permissions', {
+      caseId: caseData._id,
+      channelId: channel.id,
+      channelName,
+      guildId: caseData.guildId,
+      clientId: caseData.clientId,
+      validatedLawyers: validatedLawyers.length,
+      totalAssignedLawyers: caseData.assignedLawyerIds.length,
+      staffRolesAdded: staffRolePermissions.length,
+      categoryId: parentCategory?.id
     });
 
     return channel.id;
@@ -631,5 +866,283 @@ export class CaseService {
 
     logger.info('Case declined successfully', { caseId, declinedBy: context.userId });
     return updatedCase;
+  }
+
+  /**
+   * Helper method to validate that a user has the required permissions to be assigned to a case
+   */
+  private async validateLawyerPermissions(
+    guildId: string, 
+    userId: string, 
+    requiredPermission: 'lawyer' | 'lead-attorney'
+  ): Promise<{ valid: boolean; errors: string[] }> {
+    try {
+      const userContext: PermissionContext = {
+        guildId,
+        userId,
+        userRoles: [], // Will be populated by the validation service
+        isGuildOwner: false // Will be checked by the validation service
+      };
+
+      const validation = await this.businessRuleValidationService.validatePermission(
+        userContext, 
+        requiredPermission
+      );
+
+      return {
+        valid: validation.valid,
+        errors: validation.errors
+      };
+    } catch (error) {
+      logger.error('Error validating lawyer permissions:', error);
+      return {
+        valid: false,
+        errors: ['Failed to validate lawyer permissions']
+      };
+    }
+  }
+
+  /**
+   * Helper method to validate client case limits
+   */
+  private async validateClientCaseLimits(
+    clientId: string, 
+    guildId: string
+  ): Promise<{ valid: boolean; errors: string[]; warnings: string[]; currentCases?: number }> {
+    try {
+      const validation = await this.businessRuleValidationService.validateClientCaseLimit(
+        clientId,
+        guildId
+      );
+
+      return {
+        valid: validation.valid,
+        errors: validation.errors,
+        warnings: validation.warnings,
+        currentCases: validation.currentCases
+      };
+    } catch (error) {
+      logger.error('Error validating client case limits:', error);
+      return {
+        valid: false,
+        errors: ['Failed to validate client case limits'],
+        warnings: [],
+        currentCases: 0
+      };
+    }
+  }
+
+  /**
+   * Get staff role permissions for case channels
+   * Senior staff (Managing Partner, Senior Partner) get full access to case channels
+   */
+  private async getStaffRolePermissions(guild: any): Promise<Array<{
+    id: string;
+    allow: bigint[];
+  }>> {
+    try {
+      const staffRolePermissions: Array<{ id: string; allow: bigint[] }> = [];
+      
+      // Define staff roles that should have access to case channels
+      const staffRoleNames = [
+        'Managing Partner',
+        'Senior Partner', 
+        'Junior Partner'
+      ];
+
+      // Find staff roles in the guild
+      for (const roleName of staffRoleNames) {
+        const role = guild.roles.cache.find((r: any) => r.name === roleName);
+        if (role) {
+          staffRolePermissions.push({
+            id: role.id,
+            allow: [
+              PermissionFlagsBits.ViewChannel,
+              PermissionFlagsBits.SendMessages,
+              PermissionFlagsBits.ReadMessageHistory,
+              PermissionFlagsBits.ManageMessages,
+              PermissionFlagsBits.ManageThreads
+            ]
+          });
+        }
+      }
+
+      logger.debug('Added staff role permissions to case channel', {
+        guildId: guild.id,
+        staffRolesFound: staffRolePermissions.length,
+        staffRoleIds: staffRolePermissions.map(p => p.id)
+      });
+
+      return staffRolePermissions;
+    } catch (error) {
+      logger.error('Error getting staff role permissions:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Archive a specific case channel
+   */
+  public async archiveCaseChannel(
+    context: PermissionContext, 
+    caseId: string
+  ): Promise<{ success: boolean; message: string; channelId?: string }> {
+    try {
+      if (!this.discordClient || !this.archiveService) {
+        return {
+          success: false,
+          message: 'Archive service not available'
+        };
+      }
+
+      // Get case data
+      const caseData = await this.caseRepository.findById(caseId);
+      if (!caseData) {
+        return {
+          success: false,
+          message: 'Case not found'
+        };
+      }
+
+      if (!caseData.channelId) {
+        return {
+          success: false,
+          message: 'Case has no associated channel'
+        };
+      }
+
+      // Get guild
+      const guild = this.discordClient.guilds.cache.get(caseData.guildId);
+      if (!guild) {
+        return {
+          success: false,
+          message: 'Guild not found'
+        };
+      }
+
+      // Archive the channel
+      const result = await this.archiveService.archiveCaseChannel(guild, caseData, context);
+      
+      return {
+        success: result.success,
+        message: result.success 
+          ? `Channel archived successfully: ${result.channelName}`
+          : `Archive failed: ${result.error}`,
+        channelId: result.channelId
+      };
+    } catch (error) {
+      logger.error('Error in archiveCaseChannel:', error);
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Unknown error occurred'
+      };
+    }
+  }
+
+  /**
+   * Archive all closed case channels in a guild
+   */
+  public async archiveAllClosedCaseChannels(
+    context: PermissionContext
+  ): Promise<{ success: boolean; message: string; archivedCount: number; failedCount: number }> {
+    try {
+      if (!this.discordClient || !this.archiveService) {
+        return {
+          success: false,
+          message: 'Archive service not available',
+          archivedCount: 0,
+          failedCount: 0
+        };
+      }
+
+      // Get guild
+      const guild = this.discordClient.guilds.cache.get(context.guildId);
+      if (!guild) {
+        return {
+          success: false,
+          message: 'Guild not found',
+          archivedCount: 0,
+          failedCount: 0
+        };
+      }
+
+      // Archive all closed case channels
+      const results = await this.archiveService.archiveClosedCaseChannels(guild, context);
+      
+      const archivedCount = results.filter(r => r.success).length;
+      const failedCount = results.filter(r => !r.success).length;
+      
+      return {
+        success: true,
+        message: `Archive process completed. ${archivedCount} channels archived, ${failedCount} failed.`,
+        archivedCount,
+        failedCount
+      };
+    } catch (error) {
+      logger.error('Error in archiveAllClosedCaseChannels:', error);
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Unknown error occurred',
+        archivedCount: 0,
+        failedCount: 0
+      };
+    }
+  }
+
+  /**
+   * Find and optionally clean up orphaned case channels
+   */
+  public async findOrphanedCaseChannels(
+    context: PermissionContext
+  ): Promise<{ 
+    success: boolean; 
+    message: string; 
+    orphanedChannels: Array<{
+      channelId: string;
+      channelName: string;
+      inactiveDays: number;
+      shouldArchive: boolean;
+    }>;
+  }> {
+    try {
+      if (!this.discordClient || !this.archiveService) {
+        return {
+          success: false,
+          message: 'Archive service not available',
+          orphanedChannels: []
+        };
+      }
+
+      // Get guild
+      const guild = this.discordClient.guilds.cache.get(context.guildId);
+      if (!guild) {
+        return {
+          success: false,
+          message: 'Guild not found',
+          orphanedChannels: []
+        };
+      }
+
+      // Find orphaned channels
+      const orphanedChannels = await this.archiveService.findOrphanedCaseChannels(guild, context);
+      
+      return {
+        success: true,
+        message: `Found ${orphanedChannels.length} orphaned case channels`,
+        orphanedChannels: orphanedChannels.map(c => ({
+          channelId: c.channelId,
+          channelName: c.channelName,
+          inactiveDays: c.inactiveDays,
+          shouldArchive: c.shouldArchive
+        }))
+      };
+    } catch (error) {
+      logger.error('Error in findOrphanedCaseChannels:', error);
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Unknown error occurred',
+        orphanedChannels: []
+      };
+    }
   }
 }

@@ -1,21 +1,64 @@
 import { StaffService } from '../../application/services/staff-service';
 import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
 import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-repository';
+import { PermissionService, PermissionContext } from '../../application/services/permission-service';
+import { BusinessRuleValidationService } from '../../application/services/business-rule-validation-service';
+import { GuildConfigRepository } from '../../infrastructure/repositories/guild-config-repository';
+import { CaseRepository } from '../../infrastructure/repositories/case-repository';
 import { StaffRole } from '../../domain/entities/staff-role';
 
-// Mock the repositories
+// Mock the repositories and services
 jest.mock('../../infrastructure/repositories/staff-repository');
 jest.mock('../../infrastructure/repositories/audit-log-repository');
+jest.mock('../../infrastructure/repositories/guild-config-repository');
+jest.mock('../../infrastructure/repositories/case-repository');
+jest.mock('../../application/services/permission-service');
+jest.mock('../../application/services/business-rule-validation-service');
 
 describe('StaffService', () => {
   let staffService: StaffService;
   let mockStaffRepository: jest.Mocked<StaffRepository>;
   let mockAuditLogRepository: jest.Mocked<AuditLogRepository>;
+  let mockPermissionService: jest.Mocked<PermissionService>;
+  let mockBusinessRuleValidationService: jest.Mocked<BusinessRuleValidationService>;
+  let mockGuildConfigRepository: jest.Mocked<GuildConfigRepository>;
+  let mockCaseRepository: jest.Mocked<CaseRepository>;
+
+  const testContext: PermissionContext = {
+    guildId: 'guild123',
+    userId: 'admin123',
+    userRoles: ['admin_role'],
+    isGuildOwner: false,
+  };
+
+  const guildOwnerContext: PermissionContext = {
+    ...testContext,
+    isGuildOwner: true,
+  };
 
   beforeEach(() => {
     mockStaffRepository = new StaffRepository() as jest.Mocked<StaffRepository>;
     mockAuditLogRepository = new AuditLogRepository() as jest.Mocked<AuditLogRepository>;
-    staffService = new StaffService(mockStaffRepository, mockAuditLogRepository);
+    mockGuildConfigRepository = new GuildConfigRepository() as jest.Mocked<GuildConfigRepository>;
+    mockCaseRepository = new CaseRepository() as jest.Mocked<CaseRepository>;
+    mockPermissionService = new PermissionService(mockGuildConfigRepository) as jest.Mocked<PermissionService>;
+    mockBusinessRuleValidationService = new BusinessRuleValidationService(
+      mockGuildConfigRepository,
+      mockStaffRepository,
+      mockCaseRepository,
+      mockPermissionService
+    ) as jest.Mocked<BusinessRuleValidationService>;
+
+    staffService = new StaffService(
+      mockStaffRepository,
+      mockAuditLogRepository,
+      mockPermissionService,
+      mockBusinessRuleValidationService
+    );
+
+    // Default permission service mocks
+    mockPermissionService.hasSeniorStaffPermissionWithContext.mockResolvedValue(true);
+    mockPermissionService.isAdmin.mockResolvedValue(false);
   });
 
   describe('validateRobloxUsername', () => {
@@ -70,12 +113,22 @@ describe('StaffService', () => {
       role: StaffRole.PARALEGAL,
       hiredBy: 'admin123',
       reason: 'Test hire',
+      isGuildOwner: false,
     };
 
     beforeEach(() => {
       mockStaffRepository.findByUserId.mockResolvedValue(null);
       mockStaffRepository.findStaffByRobloxUsername.mockResolvedValue(null);
-      mockStaffRepository.canHireRole.mockResolvedValue(true);
+      mockBusinessRuleValidationService.validateRoleLimit.mockResolvedValue({
+        valid: true,
+        errors: [],
+        warnings: [],
+        bypassAvailable: false,
+        currentCount: 3,
+        maxCount: 10,
+        roleName: StaffRole.PARALEGAL,
+        metadata: {},
+      });
       mockAuditLogRepository.logAction.mockResolvedValue({} as any);
     });
 
@@ -92,10 +145,14 @@ describe('StaffService', () => {
 
       mockStaffRepository.add.mockResolvedValue(mockStaff);
 
-      const result = await staffService.hireStaff(hireRequest);
+      const result = await staffService.hireStaff(testContext, hireRequest);
 
       expect(result.success).toBe(true);
       expect(result.staff).toBeDefined();
+      expect(mockBusinessRuleValidationService.validateRoleLimit).toHaveBeenCalledWith(
+        testContext,
+        StaffRole.PARALEGAL
+      );
       expect(mockStaffRepository.add).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: hireRequest.userId,
@@ -107,10 +164,20 @@ describe('StaffService', () => {
       expect(mockAuditLogRepository.logAction).toHaveBeenCalled();
     });
 
+    it('should check senior-staff permission before hiring', async () => {
+      mockPermissionService.hasSeniorStaffPermissionWithContext.mockResolvedValue(false);
+
+      const result = await staffService.hireStaff(testContext, hireRequest);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('permission to hire staff members');
+      expect(mockStaffRepository.add).not.toHaveBeenCalled();
+    });
+
     it('should reject invalid Roblox username', async () => {
       const invalidRequest = { ...hireRequest, robloxUsername: 'ab' };
       
-      const result = await staffService.hireStaff(invalidRequest);
+      const result = await staffService.hireStaff(testContext, invalidRequest);
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('3-20 characters');
@@ -122,7 +189,7 @@ describe('StaffService', () => {
         status: 'active',
       } as any);
 
-      const result = await staffService.hireStaff(hireRequest);
+      const result = await staffService.hireStaff(testContext, hireRequest);
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('already an active staff member');
@@ -132,21 +199,73 @@ describe('StaffService', () => {
     it('should reject if Roblox username is already used', async () => {
       mockStaffRepository.findStaffByRobloxUsername.mockResolvedValue({} as any);
 
-      const result = await staffService.hireStaff(hireRequest);
+      const result = await staffService.hireStaff(testContext, hireRequest);
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('already associated with another staff member');
       expect(mockStaffRepository.add).not.toHaveBeenCalled();
     });
 
-    it('should reject if role limit reached', async () => {
-      mockStaffRepository.canHireRole.mockResolvedValue(false);
+    it('should reject if role limit reached for regular user', async () => {
+      mockBusinessRuleValidationService.validateRoleLimit.mockResolvedValue({
+        valid: false,
+        errors: ['Cannot hire Paralegal. Maximum limit of 10 reached'],
+        warnings: [],
+        bypassAvailable: false,
+        currentCount: 10,
+        maxCount: 10,
+        roleName: StaffRole.PARALEGAL,
+        metadata: {},
+      });
 
-      const result = await staffService.hireStaff(hireRequest);
+      const result = await staffService.hireStaff(testContext, hireRequest);
 
       expect(result.success).toBe(false);
-      expect(result.error).toContain('Maximum limit');
+      expect(result.error).toContain('Maximum limit of 10 reached');
       expect(mockStaffRepository.add).not.toHaveBeenCalled();
+    });
+
+    it('should allow guild owner to bypass role limits', async () => {
+      mockBusinessRuleValidationService.validateRoleLimit.mockResolvedValue({
+        valid: false,
+        errors: ['Cannot hire Managing Partner. Maximum limit of 1 reached'],
+        warnings: [],
+        bypassAvailable: true,
+        bypassType: 'guild-owner',
+        currentCount: 1,
+        maxCount: 1,
+        roleName: StaffRole.MANAGING_PARTNER,
+        metadata: {},
+      });
+
+      const mockStaff = {
+        _id: {} as any,
+        ...hireRequest,
+        role: StaffRole.MANAGING_PARTNER,
+        hiredAt: new Date(),
+        promotionHistory: [],
+        status: 'active' as const,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      mockStaffRepository.add.mockResolvedValue(mockStaff);
+      mockAuditLogRepository.logRoleLimitBypass.mockResolvedValue({} as any);
+
+      const guildOwnerRequest = { ...hireRequest, role: StaffRole.MANAGING_PARTNER };
+      const result = await staffService.hireStaff(guildOwnerContext, guildOwnerRequest);
+
+      expect(result.success).toBe(true);
+      expect(mockAuditLogRepository.logRoleLimitBypass).toHaveBeenCalledWith(
+        'guild123',
+        'admin123',
+        'user123',
+        StaffRole.MANAGING_PARTNER,
+        1,
+        1,
+        'Test hire'
+      );
+      expect(mockStaffRepository.add).toHaveBeenCalled();
     });
   });
 

@@ -1,9 +1,14 @@
 import { Guild, GuildMember, Events } from 'discord.js';
 import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
 import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-repository';
+import { CaseRepository } from '../../infrastructure/repositories/case-repository';
+import { GuildConfigRepository } from '../../infrastructure/repositories/guild-config-repository';
 import { Staff, PromotionRecord } from '../../domain/entities/staff';
 import { StaffRole } from '../../domain/entities/staff-role';
 import { AuditAction } from '../../domain/entities/audit-log';
+import { PermissionService } from './permission-service';
+import { BusinessRuleValidationService } from './business-rule-validation-service';
+import { ChannelPermissionManager } from './channel-permission-manager';
 import { logger } from '../../infrastructure/logger';
 
 export interface RoleChangeEvent {
@@ -19,6 +24,7 @@ export interface RoleChangeEvent {
 export class RoleTrackingService {
   private staffRepository: StaffRepository;
   private auditLogRepository: AuditLogRepository;
+  private channelPermissionManager: ChannelPermissionManager;
   
   // Map Discord role names to staff roles based on Anarchy config
   private readonly STAFF_ROLE_MAPPING: Record<string, StaffRole> = {
@@ -43,6 +49,26 @@ export class RoleTrackingService {
   constructor() {
     this.staffRepository = new StaffRepository();
     this.auditLogRepository = new AuditLogRepository();
+    
+    // Initialize channel permission manager with required dependencies
+    const caseRepository = new CaseRepository();
+    const guildConfigRepository = new GuildConfigRepository();
+    const permissionService = new PermissionService(guildConfigRepository);
+    const businessRuleValidationService = new BusinessRuleValidationService(
+      guildConfigRepository,
+      this.staffRepository,
+      caseRepository,
+      permissionService
+    );
+    
+    this.channelPermissionManager = new ChannelPermissionManager(
+      caseRepository,
+      this.staffRepository,
+      this.auditLogRepository,
+      guildConfigRepository,
+      permissionService,
+      businessRuleValidationService
+    );
   }
 
   /**
@@ -161,6 +187,23 @@ export class RoleTrackingService {
         logger.info(`Hired new staff member ${userId} as ${role} in guild ${guildId}`);
       }
 
+      // Update channel permissions for new hire
+      const newStaffRole = this.mapDiscordRoleToStaffRole(role);
+      if (newStaffRole) {
+        try {
+          await this.channelPermissionManager.handleRoleChange(
+            member.guild,
+            member,
+            undefined, // No old role for new hire
+            newStaffRole,
+            'hire'
+          );
+          logger.info(`Updated channel permissions for new hire ${userId} with role ${role}`);
+        } catch (error) {
+          logger.error(`Failed to update channel permissions for new hire ${userId}:`, error);
+        }
+      }
+
       // Log audit trail
       await this.logAuditEvent({
         type: 'hire',
@@ -179,7 +222,7 @@ export class RoleTrackingService {
   /**
    * Handle firing a staff member
    */
-  private async handleFiring(userId: string, guildId: string, oldRole: string, _member: GuildMember): Promise<void> {
+  private async handleFiring(userId: string, guildId: string, oldRole: string, member: GuildMember): Promise<void> {
     try {
       const existingStaff = await this.staffRepository.findByUserId(guildId, userId);
       
@@ -191,6 +234,23 @@ export class RoleTrackingService {
           logger.info(`Fired and deleted staff member ${userId} from ${oldRole} in guild ${guildId}`);
         } else {
           logger.warn(`Failed to delete staff record for user ${userId} in guild ${guildId}`);
+        }
+      }
+
+      // Remove channel permissions for fired staff
+      const oldStaffRole = this.mapDiscordRoleToStaffRole(oldRole);
+      if (oldStaffRole) {
+        try {
+          await this.channelPermissionManager.handleRoleChange(
+            member.guild,
+            member,
+            oldStaffRole,
+            undefined, // No new role for fired staff
+            'fire'
+          );
+          logger.info(`Removed channel permissions for fired staff ${userId} with old role ${oldRole}`);
+        } catch (error) {
+          logger.error(`Failed to remove channel permissions for fired staff ${userId}:`, error);
         }
       }
 
@@ -240,6 +300,24 @@ export class RoleTrackingService {
         logger.info(`Promoted staff member ${userId} from ${oldRole} to ${newRole} in guild ${guildId}`);
       }
 
+      // Update channel permissions for promotion
+      const oldStaffRole = this.mapDiscordRoleToStaffRole(oldRole);
+      const newStaffRole = this.mapDiscordRoleToStaffRole(newRole);
+      if (oldStaffRole && newStaffRole) {
+        try {
+          await this.channelPermissionManager.handleRoleChange(
+            member.guild,
+            member,
+            oldStaffRole,
+            newStaffRole,
+            'promotion'
+          );
+          logger.info(`Updated channel permissions for promotion ${userId} from ${oldRole} to ${newRole}`);
+        } catch (error) {
+          logger.error(`Failed to update channel permissions for promotion ${userId}:`, error);
+        }
+      }
+
       // Log audit trail
       await this.logAuditEvent({
         type: 'promotion',
@@ -285,6 +363,24 @@ export class RoleTrackingService {
         }
 
         logger.info(`Demoted staff member ${userId} from ${oldRole} to ${newRole} in guild ${guildId}`);
+      }
+
+      // Update channel permissions for demotion
+      const oldStaffRole = this.mapDiscordRoleToStaffRole(oldRole);
+      const newStaffRole = this.mapDiscordRoleToStaffRole(newRole);
+      if (oldStaffRole && newStaffRole) {
+        try {
+          await this.channelPermissionManager.handleRoleChange(
+            member.guild,
+            member,
+            oldStaffRole,
+            newStaffRole,
+            'demotion'
+          );
+          logger.info(`Updated channel permissions for demotion ${userId} from ${oldRole} to ${newRole}`);
+        } catch (error) {
+          logger.error(`Failed to update channel permissions for demotion ${userId}:`, error);
+        }
       }
 
       // Log audit trail

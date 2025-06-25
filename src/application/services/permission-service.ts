@@ -112,6 +112,9 @@ export class PermissionService {
     return await this.isAdmin(context) || await this.hasActionPermission(context, 'config');
   }
 
+  /**
+   * @deprecated Use hasSeniorStaffPermissionWithContext instead
+   */
   public async hasHRPermission(guildId: string, userId: string): Promise<boolean> {
     try {
       // Get user roles from Discord API would be ideal, but for now we'll create a minimal context
@@ -123,7 +126,7 @@ export class PermissionService {
         isGuildOwner: false, // This should be checked against Discord API
       };
 
-      return await this.isAdmin(context) || await this.hasActionPermission(context, 'hr');
+      return await this.hasSeniorStaffPermissionWithContext(context);
     } catch (error) {
       logger.error(`Error checking HR permission:`, error);
       return false;
@@ -131,17 +134,32 @@ export class PermissionService {
   }
 
   /**
-   * Check HR permission with proper context (preferred method)
+   * @deprecated Use hasSeniorStaffPermissionWithContext instead
    */
   public async hasHRPermissionWithContext(context: PermissionContext): Promise<boolean> {
     try {
-      return await this.isAdmin(context) || await this.hasActionPermission(context, 'hr');
+      return await this.hasSeniorStaffPermissionWithContext(context);
     } catch (error) {
       logger.error(`Error checking HR permission:`, error);
       return false;
     }
   }
 
+  /**
+   * Check senior staff permission (replaces HR permission with broader scope)
+   */
+  public async hasSeniorStaffPermissionWithContext(context: PermissionContext): Promise<boolean> {
+    try {
+      return await this.isAdmin(context) || await this.hasActionPermission(context, 'senior-staff');
+    } catch (error) {
+      logger.error(`Error checking senior staff permission:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * @deprecated Use hasLawyerPermissionWithContext instead
+   */
   public async hasRetainerPermission(guildId: string, userId: string): Promise<boolean> {
     try {
       // Get user roles from Discord API would be ideal, but for now we'll create a minimal context
@@ -153,7 +171,7 @@ export class PermissionService {
         isGuildOwner: false, // This should be checked against Discord API
       };
 
-      return await this.isAdmin(context) || await this.hasActionPermission(context, 'retainer');
+      return await this.hasLawyerPermissionWithContext(context);
     } catch (error) {
       logger.error(`Error checking retainer permission:`, error);
       return false;
@@ -161,13 +179,37 @@ export class PermissionService {
   }
 
   /**
-   * Check retainer permission with proper context (preferred method)
+   * @deprecated Use hasLawyerPermissionWithContext instead
    */
   public async hasRetainerPermissionWithContext(context: PermissionContext): Promise<boolean> {
     try {
-      return await this.isAdmin(context) || await this.hasActionPermission(context, 'retainer');
+      return await this.hasLawyerPermissionWithContext(context);
     } catch (error) {
       logger.error(`Error checking retainer permission:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Check lawyer permission (replaces retainer permission, for legal practice)
+   */
+  public async hasLawyerPermissionWithContext(context: PermissionContext): Promise<boolean> {
+    try {
+      return await this.isAdmin(context) || await this.hasActionPermission(context, 'lawyer');
+    } catch (error) {
+      logger.error(`Error checking lawyer permission:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Check lead attorney permission (for lead attorney assignments)
+   */
+  public async hasLeadAttorneyPermissionWithContext(context: PermissionContext): Promise<boolean> {
+    try {
+      return await this.isAdmin(context) || await this.hasActionPermission(context, 'lead-attorney');
+    } catch (error) {
+      logger.error(`Error checking lead attorney permission:`, error);
       return false;
     }
   }
@@ -180,10 +222,11 @@ export class PermissionService {
     const isAdmin = await this.isAdmin(context);
     const permissions: Record<PermissionAction, boolean> = {
       admin: await this.hasActionPermission(context, 'admin'),
-      hr: await this.hasActionPermission(context, 'hr'),
+      'senior-staff': await this.hasActionPermission(context, 'senior-staff'),
       case: await this.hasActionPermission(context, 'case'),
       config: await this.hasActionPermission(context, 'config'),
-      retainer: await this.hasActionPermission(context, 'retainer'),
+      lawyer: await this.hasActionPermission(context, 'lawyer'),
+      'lead-attorney': await this.hasActionPermission(context, 'lead-attorney'),
       repair: await this.hasActionPermission(context, 'repair'),
     };
 
