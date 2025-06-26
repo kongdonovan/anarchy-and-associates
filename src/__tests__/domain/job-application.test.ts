@@ -2,6 +2,7 @@ import { JobQuestion, DEFAULT_JOB_QUESTIONS } from '../../domain/entities/job';
 import { ApplicationAnswer } from '../../domain/entities/application';
 import { StaffRole } from '../../domain/entities/staff-role';
 import { TestUtils } from '../helpers/test-utils';
+import { CaseStatus, CasePriority } from '../../domain/entities/case';
 
 describe('Job and Application Entities', () => {
   describe('Job Entity', () => {
@@ -358,7 +359,7 @@ describe('Job and Application Entities', () => {
 
       it('should handle applications without review details', () => {
         const pendingApplication = TestUtils.generateMockApplication({
-          status: 'pending'
+          status: CaseStatus.PENDING
         });
 
         expect(pendingApplication.reviewedBy).toBeUndefined();
@@ -414,7 +415,7 @@ describe('Job and Application Entities', () => {
 
       const application = TestUtils.generateMockApplication({
         jobId: closedJob._id!.toString(),
-        status: 'pending'
+        status: CaseStatus.PENDING
       });
 
       expect(closedJob.isOpen).toBe(false);

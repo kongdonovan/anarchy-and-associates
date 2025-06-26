@@ -48,6 +48,13 @@ describe('Discord Command Workflows E2E Tests', () => {
         await database_helpers_1.DatabaseTestHelpers.setupTestDatabase();
     });
     beforeEach(async () => {
+        // Create test permission context
+        const context = {
+            guildId: testGuildId,
+            userId: adminUserId,
+            userRoles: ['admin-role-123'],
+            isGuildOwner: false
+        };
         // Initialize repositories
         staffRepository = new staff_repository_1.StaffRepository();
         caseRepository = new case_repository_1.CaseRepository();
@@ -55,8 +62,9 @@ describe('Discord Command Workflows E2E Tests', () => {
         guildConfigRepository = new guild_config_repository_1.GuildConfigRepository();
         caseCounterRepository = new case_counter_repository_1.CaseCounterRepository();
         // Initialize services
-        staffService = new staff_service_1.StaffService(staffRepository, auditLogRepository);
-        caseService = new case_service_1.CaseService(caseRepository, caseCounterRepository, guildConfigRepository);
+        const businessRuleValidationService = new BusinessRuleValidationService(guildConfigRepository, staffRepository, caseRepository, permissionService);
+        staffService = new staff_service_1.StaffService(staffRepository, auditLogRepository, permissionService, businessRuleValidationService);
+        caseService = new case_service_1.CaseService(caseRepository, caseCounterRepository, guildConfigRepository, permissionService, businessRuleValidationService);
         permissionService = new permission_service_1.PermissionService(guildConfigRepository);
         // Initialize infrastructure
         operationQueue = operation_queue_1.OperationQueue.getInstance();
@@ -78,7 +86,7 @@ describe('Discord Command Workflows E2E Tests', () => {
             clientRoleId: 'client-role-123',
             permissions: {
                 admin: ['admin-role-123'],
-                hr: ['hr-role-123'],
+                'senior-staff': ['hr-role-123'],
                 case: ['case-role-123'],
                 config: ['config-role-123'],
                 retainer: ['retainer-role-123'],
@@ -93,6 +101,13 @@ describe('Discord Command Workflows E2E Tests', () => {
     });
     describe('Staff Management Workflow', () => {
         it('should complete full staff hiring workflow with permissions', async () => {
+            // Create test permission context
+            const context = {
+                guildId: testGuildId,
+                userId: adminUserId,
+                userRoles: ['admin-role-123'],
+                isGuildOwner: false
+            };
             // Simulate /staff hire command workflow
             const mockPermissionContext = {
                 guildId: testGuildId,
@@ -128,10 +143,17 @@ describe('Discord Command Workflows E2E Tests', () => {
             expect(auditLogs).toHaveLength(1);
             expect(auditLogs[0]?.actorId).toBe(adminUserId);
             // 6. Verify staff can be retrieved
-            const staffInfo = await staffService.getStaffInfo(testGuildId, regularUserId, adminUserId);
+            const staffInfo = await staffService.getStaffInfo(context, regularUserId);
             expect(staffInfo?.userId).toBe(regularUserId);
         });
         it('should prevent unauthorized staff hiring', async () => {
+            // Create test permission context
+            const context = {
+                guildId: testGuildId,
+                userId: adminUserId,
+                userRoles: ['admin-role-123'],
+                isGuildOwner: false
+            };
             // Simulate unauthorized user trying to hire staff
             const unauthorizedContext = {
                 guildId: testGuildId,
@@ -143,7 +165,7 @@ describe('Discord Command Workflows E2E Tests', () => {
             const hasPermission = await permissionService.hasActionPermission(unauthorizedContext, 'admin');
             expect(hasPermission).toBe(false);
             // 2. Attempt hire should fail in real workflow (simulated)
-            await staffService.hireStaff({
+            await staffService.hireStaff(context, {
                 guildId: testGuildId,
                 userId: 'target-user',
                 hiredBy: regularUserId,
@@ -155,8 +177,15 @@ describe('Discord Command Workflows E2E Tests', () => {
             expect(hasPermission).toBe(false);
         });
         it('should handle staff promotion workflow with role limits', async () => {
+            // Create test permission context
+            const context = {
+                guildId: testGuildId,
+                userId: adminUserId,
+                userRoles: ['admin-role-123'],
+                isGuildOwner: false
+            };
             // First hire staff member
-            await staffService.hireStaff({
+            await staffService.hireStaff(context, {
                 guildId: testGuildId,
                 userId: regularUserId,
                 hiredBy: adminUserId,
@@ -174,7 +203,7 @@ describe('Discord Command Workflows E2E Tests', () => {
             expect(promotionResult.success).toBe(true);
             expect(promotionResult.staff?.role).toBe(staff_role_1.StaffRole.JUNIOR_ASSOCIATE);
             // Verify promotion history
-            const staff = await staffService.getStaffInfo(testGuildId, regularUserId, adminUserId);
+            const staff = await staffService.getStaffInfo(context, regularUserId);
             expect(staff?.promotionHistory.length).toBeGreaterThan(1);
             const promotion = staff?.promotionHistory.find(p => p.actionType === 'promotion');
             expect(promotion?.fromRole).toBe(staff_role_1.StaffRole.PARALEGAL);
@@ -183,8 +212,15 @@ describe('Discord Command Workflows E2E Tests', () => {
     });
     describe('Case Management Workflow', () => {
         beforeEach(async () => {
+            // Create test permission context
+            const context = {
+                guildId: testGuildId,
+                userId: adminUserId,
+                userRoles: ['admin-role-123'],
+                isGuildOwner: false
+            };
             // Setup staff member for case workflows
-            await staffService.hireStaff({
+            await staffService.hireStaff(context, {
                 guildId: testGuildId,
                 userId: regularUserId,
                 hiredBy: adminUserId,
@@ -230,7 +266,7 @@ describe('Discord Command Workflows E2E Tests', () => {
         });
         it('should handle case closure workflow with all results', async () => {
             // Create and accept a case
-            const testCase = await caseService.createCase({
+            const testCase = await caseService.createCase(context, {
                 guildId: testGuildId,
                 clientId: clientUserId,
                 clientUsername: 'ClosureClient',
@@ -242,7 +278,7 @@ describe('Discord Command Workflows E2E Tests', () => {
             const results = [case_1.CaseResult.WIN, case_1.CaseResult.LOSS, case_1.CaseResult.SETTLEMENT];
             for (const [index, result] of results.entries()) {
                 // Create separate case for each result
-                const separateCase = await caseService.createCase({
+                const separateCase = await caseService.createCase(context, {
                     guildId: testGuildId,
                     clientId: `client-${index}`,
                     clientUsername: `client${index}`,
@@ -267,7 +303,7 @@ describe('Discord Command Workflows E2E Tests', () => {
         });
         it('should handle concurrent case operations safely', async () => {
             // Create a case
-            const testCase = await caseService.createCase({
+            const testCase = await caseService.createCase(context, {
                 guildId: testGuildId,
                 clientId: clientUserId,
                 clientUsername: 'ConcurrentTest',
@@ -290,7 +326,7 @@ describe('Discord Command Workflows E2E Tests', () => {
             expect(successCount).toBeGreaterThan(0);
             expect(successCount).toBeLessThanOrEqual(3);
             // Verify final case state
-            const finalCase = await caseService.getCaseById(caseId);
+            const finalCase = await caseService.getCaseById(context, caseId);
             expect(finalCase?.status).toBe(case_1.CaseStatus.IN_PROGRESS);
             expect(finalCase?.leadAttorneyId).toBeTruthy();
         });
@@ -305,7 +341,7 @@ describe('Discord Command Workflows E2E Tests', () => {
             };
             // Guild owners should have all permissions
             const adminPerm = await permissionService.hasActionPermission(guildOwnerContext, 'admin');
-            const hrPerm = await permissionService.hasActionPermission(guildOwnerContext, 'hr');
+            const hrPerm = await permissionService.hasActionPermission($1, 'senior-staff');
             const casePerm = await permissionService.hasActionPermission(guildOwnerContext, 'case');
             expect(adminPerm).toBe(true);
             expect(hrPerm).toBe(true);
@@ -331,7 +367,7 @@ describe('Discord Command Workflows E2E Tests', () => {
                 isGuildOwner: false
             };
             const adminPerm = await permissionService.hasActionPermission(hrContext, 'admin');
-            const hrPerm = await permissionService.hasActionPermission(hrContext, 'hr');
+            const hrPerm = await permissionService.hasActionPermission($1, 'senior-staff');
             const casePerm = await permissionService.hasActionPermission(hrContext, 'case');
             expect(adminPerm).toBe(false);
             expect(hrPerm).toBe(true);
@@ -419,7 +455,7 @@ describe('Discord Command Workflows E2E Tests', () => {
     describe('Error Recovery and Rollback', () => {
         it('should handle database failures gracefully', async () => {
             // Test with edge case data that may cause issues
-            const result = await staffService.hireStaff({
+            const result = await staffService.hireStaff(context, {
                 guildId: testGuildId,
                 userId: 'db-error-test',
                 hiredBy: adminUserId,
@@ -429,7 +465,7 @@ describe('Discord Command Workflows E2E Tests', () => {
             // Service handles edge cases gracefully
             expect(result).toBeDefined();
             // Test normal operation works
-            const normalResult = await staffService.hireStaff({
+            const normalResult = await staffService.hireStaff(context, {
                 guildId: testGuildId,
                 userId: 'db-retry-test',
                 hiredBy: adminUserId,
@@ -440,7 +476,7 @@ describe('Discord Command Workflows E2E Tests', () => {
         });
         it('should maintain data consistency during failures', async () => {
             // Create initial state
-            const staff = await staffService.hireStaff({
+            const staff = await staffService.hireStaff(context, {
                 guildId: testGuildId,
                 userId: 'consistency-test',
                 hiredBy: adminUserId,
@@ -449,7 +485,7 @@ describe('Discord Command Workflows E2E Tests', () => {
             });
             expect(staff.success).toBe(true);
             // Test promotion operation
-            const promotionResult = await staffService.promoteStaff({
+            const promotionResult = await staffService.promoteStaff(context, {
                 guildId: testGuildId,
                 userId: 'consistency-test',
                 promotedBy: adminUserId,
@@ -458,7 +494,7 @@ describe('Discord Command Workflows E2E Tests', () => {
             // Service handles operations gracefully
             expect(promotionResult).toBeDefined();
             // Verify staff state
-            const currentStaff = await staffService.getStaffInfo(testGuildId, 'consistency-test', adminUserId);
+            const currentStaff = await staffService.getStaffInfo(context, 'consistency-test');
             expect(currentStaff).toBeDefined();
         });
     });
@@ -479,7 +515,7 @@ describe('Discord Command Workflows E2E Tests', () => {
                 clientRoleId: undefined,
                 permissions: {
                     admin: [],
-                    hr: [],
+                    'senior-staff': [],
                     case: [],
                     config: [],
                     retainer: [],
@@ -499,7 +535,7 @@ describe('Discord Command Workflows E2E Tests', () => {
                 clientRoleId: undefined,
                 permissions: {
                     admin: [],
-                    hr: [],
+                    'senior-staff': [],
                     case: [],
                     config: [],
                     retainer: [],
@@ -509,14 +545,14 @@ describe('Discord Command Workflows E2E Tests', () => {
                 adminUsers: [adminUserId]
             });
             // Hire same user in different guilds with different roles
-            const hire1 = await staffService.hireStaff({
+            const hire1 = await staffService.hireStaff(context, {
                 guildId: guild1,
                 userId,
                 hiredBy: adminUserId,
                 robloxUsername: 'Guild1User',
                 role: staff_role_1.StaffRole.MANAGING_PARTNER
             });
-            const hire2 = await staffService.hireStaff({
+            const hire2 = await staffService.hireStaff(context, {
                 guildId: guild2,
                 userId,
                 hiredBy: adminUserId,
@@ -533,14 +569,14 @@ describe('Discord Command Workflows E2E Tests', () => {
             expect(guild1Staff.staff[0]?.role).toBe(staff_role_1.StaffRole.MANAGING_PARTNER);
             expect(guild2Staff.staff[0]?.role).toBe(staff_role_1.StaffRole.PARALEGAL);
             // Cases should also be isolated
-            await caseService.createCase({
+            await caseService.createCase(context, {
                 guildId: guild1,
                 clientId: 'client-1',
                 clientUsername: 'client1',
                 title: 'Guild 1 Case',
                 description: 'Case for guild 1'
             });
-            await caseService.createCase({
+            await caseService.createCase(context, {
                 guildId: guild2,
                 clientId: 'client-1',
                 clientUsername: 'client1',

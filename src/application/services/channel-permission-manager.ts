@@ -17,6 +17,7 @@ import { Case, CaseStatus } from '../../domain/entities/case';
 import { StaffRole, RoleUtils } from '../../domain/entities/staff-role';
 import { AuditAction } from '../../domain/entities/audit-log';
 import { logger } from '../../infrastructure/logger';
+import { CaseStatus, CasePriority } from '../../domain/entities/case';
 
 export interface ChannelPermissionUpdate {
   channelId: string;

@@ -2,6 +2,7 @@ import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-
 import { AuditAction } from '../../domain/entities/audit-log';
 import { StaffRole } from '../../domain/entities/staff-role';
 import { logger } from '../../infrastructure/logger';
+import { ObjectId } from 'mongodb';
 
 // Mock the logger and base repository
 jest.mock('../../infrastructure/logger');
@@ -24,18 +25,16 @@ describe('Enhanced AuditLogRepository', () => {
       toArray: jest.fn().mockResolvedValue([]),
       countDocuments: jest.fn().mockResolvedValue(0),
       aggregate: jest.fn().mockReturnThis(),
-      insertOne: jest.fn().mockResolvedValue({ insertedId: 'audit_id_123' }),
-    };
+      insertOne: jest.fn().mockResolvedValue({ insertedId: 'audit_id_123' }) };
 
     auditLogRepository = new AuditLogRepository();
     // Mock the collection property
     Object.defineProperty(auditLogRepository, 'collection', {
-      get: () => mockCollection,
-    });
+      get: () => mockCollection });
 
     // Mock the add method from base repository  
     auditLogRepository.add = jest.fn().mockResolvedValue({
-      _id: 'audit_id_123',
+      _id: new ObjectId(),
       guildId,
       action: AuditAction.GUILD_OWNER_BYPASS,
       actorId,
@@ -43,8 +42,7 @@ describe('Enhanced AuditLogRepository', () => {
       timestamp: new Date(),
       details: {},
       createdAt: new Date(),
-      updatedAt: new Date(),
-    } as any);
+      updatedAt: new Date() } as any);
   });
 
   describe('logGuildOwnerBypass', () => {
@@ -78,13 +76,10 @@ describe('Enhanced AuditLogRepository', () => {
               businessRuleViolated,
               originalValidationErrors,
               bypassReason,
-              ruleMetadata: metadata,
-            }),
-          }),
+              ruleMetadata: metadata }) }),
           isGuildOwnerBypass: true,
           businessRulesBypassed: [businessRuleViolated],
-          severity: 'high',
-        })
+          severity: 'high' })
       );
 
       expect(logger.warn).toHaveBeenCalledWith(
@@ -94,8 +89,7 @@ describe('Enhanced AuditLogRepository', () => {
           actorId,
           targetId,
           businessRuleViolated,
-          bypassReason,
-        })
+          bypassReason })
       );
 
       expect(result).toBeDefined();
@@ -126,10 +120,7 @@ describe('Enhanced AuditLogRepository', () => {
               bypassType: 'guild-owner',
               businessRuleViolated,
               originalValidationErrors,
-              bypassReason: undefined,
-            }),
-          }),
-        })
+              bypassReason: undefined }) }) })
       );
 
       expect(result).toBeDefined();
@@ -181,8 +172,7 @@ describe('Enhanced AuditLogRepository', () => {
             metadata: {
               role,
               newCount: currentCount + 1,
-              previousLimit: maxCount,
-            },
+              previousLimit: maxCount },
             bypassInfo: expect.objectContaining({
               bypassType: 'guild-owner',
               businessRuleViolated: 'role-limit',
@@ -190,13 +180,10 @@ describe('Enhanced AuditLogRepository', () => {
               bypassReason,
               currentCount,
               maxCount,
-              ruleMetadata: { role, newCount: currentCount + 1 },
-            }),
-          }),
+              ruleMetadata: { role, newCount: currentCount + 1 } }) }),
           isGuildOwnerBypass: true,
           businessRulesBypassed: ['role-limit'],
-          severity: 'medium',
-        })
+          severity: 'medium' })
       );
 
       expect(logger.warn).toHaveBeenCalledWith(
@@ -208,8 +195,7 @@ describe('Enhanced AuditLogRepository', () => {
           role,
           currentCount,
           maxCount,
-          bypassReason,
-        })
+          bypassReason })
       );
 
       expect(result).toBeDefined();
@@ -229,9 +215,7 @@ describe('Enhanced AuditLogRepository', () => {
       expect(auditLogRepository.add).toHaveBeenCalledWith(
         expect.objectContaining({
           details: expect.objectContaining({
-            reason: 'Role limit bypassed by guild owner',
-          }),
-        })
+            reason: 'Role limit bypassed by guild owner' }) })
       );
     });
   });
@@ -264,12 +248,9 @@ describe('Enhanced AuditLogRepository', () => {
             metadata: expect.objectContaining({
               ...metadata,
               originalAction: action,
-              violationDetails,
-            }),
-          }),
+              violationDetails }) }),
           businessRulesBypassed: [ruleViolated],
-          severity: 'high',
-        })
+          severity: 'high' })
       );
 
       expect(logger.warn).toHaveBeenCalledWith(
@@ -279,8 +260,7 @@ describe('Enhanced AuditLogRepository', () => {
           actorId,
           targetId,
           ruleViolated,
-          violationDetails,
-        })
+          violationDetails })
       );
 
       expect(result).toBeDefined();
@@ -291,18 +271,22 @@ describe('Enhanced AuditLogRepository', () => {
     it('should find guild owner bypasses with correct filter', async () => {
       const mockBypasses = [
         {
-          _id: 'bypass_1',
+          _id: new ObjectId(),
           guildId,
           action: AuditAction.GUILD_OWNER_BYPASS,
           isGuildOwnerBypass: true,
           timestamp: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date()
         },
         {
-          _id: 'bypass_2',
+          _id: new ObjectId(),
           guildId,
           action: AuditAction.ROLE_LIMIT_BYPASSED,
           isGuildOwnerBypass: true,
           timestamp: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date()
         },
       ];
 
@@ -312,8 +296,7 @@ describe('Enhanced AuditLogRepository', () => {
 
       expect(mockCollection.find).toHaveBeenCalledWith({
         guildId,
-        isGuildOwnerBypass: true,
-      });
+        isGuildOwnerBypass: true });
       expect(mockCollection.sort).toHaveBeenCalledWith({ timestamp: -1 });
       expect(mockCollection.limit).toHaveBeenCalledWith(25);
       expect(result).toEqual(mockBypasses);
@@ -336,10 +319,12 @@ describe('Enhanced AuditLogRepository', () => {
     it('should find business rule violations with correct filter', async () => {
       const mockViolations = [
         {
-          _id: 'violation_1',
+          _id: new ObjectId(),
           guildId,
           action: AuditAction.BUSINESS_RULE_VIOLATION,
           timestamp: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date()
         },
       ];
 
@@ -349,8 +334,7 @@ describe('Enhanced AuditLogRepository', () => {
 
       expect(mockCollection.find).toHaveBeenCalledWith({
         guildId,
-        action: AuditAction.BUSINESS_RULE_VIOLATION,
-      });
+        action: AuditAction.BUSINESS_RULE_VIOLATION });
       expect(mockCollection.sort).toHaveBeenCalledWith({ timestamp: -1 });
       expect(mockCollection.limit).toHaveBeenCalledWith(10);
       expect(result).toEqual(mockViolations);
@@ -372,27 +356,22 @@ describe('Enhanced AuditLogRepository', () => {
         totalBypasses: 15,
         roleLimitBypasses: 8,
         businessRuleViolations: 3,
-        recentBypasses: 2,
-      });
+        recentBypasses: 2 });
 
       // Verify the correct queries were made
       expect(mockCollection.countDocuments).toHaveBeenCalledWith({
         guildId,
-        isGuildOwnerBypass: true,
-      });
+        isGuildOwnerBypass: true });
       expect(mockCollection.countDocuments).toHaveBeenCalledWith({
         guildId,
-        action: AuditAction.ROLE_LIMIT_BYPASSED,
-      });
+        action: AuditAction.ROLE_LIMIT_BYPASSED });
       expect(mockCollection.countDocuments).toHaveBeenCalledWith({
         guildId,
-        action: AuditAction.BUSINESS_RULE_VIOLATION,
-      });
+        action: AuditAction.BUSINESS_RULE_VIOLATION });
       expect(mockCollection.countDocuments).toHaveBeenCalledWith({
         guildId,
         isGuildOwnerBypass: true,
-        timestamp: { $gte: expect.any(Date) },
-      });
+        timestamp: { $gte: expect.any(Date) } });
     });
 
     it('should handle statistics query errors', async () => {
@@ -425,9 +404,7 @@ describe('Enhanced AuditLogRepository', () => {
       expect(auditLogRepository.add).toHaveBeenCalledWith(
         expect.objectContaining({
           details: expect.objectContaining({
-            reason: longReason,
-          }),
-        })
+            reason: longReason }) })
       );
     });
 
@@ -435,8 +412,7 @@ describe('Enhanced AuditLogRepository', () => {
       const specialMetadata = {
         'special-key!@#$%': 'value with émojis 🚀',
         'unicode': '测试数据',
-        'nested': { 'array': [1, 2, 3], 'null': null },
-      };
+        'nested': { 'array': [1, 2, 3], 'null': null } };
 
       await auditLogRepository.logGuildOwnerBypass(
         guildId,
@@ -451,9 +427,7 @@ describe('Enhanced AuditLogRepository', () => {
       expect(auditLogRepository.add).toHaveBeenCalledWith(
         expect.objectContaining({
           details: expect.objectContaining({
-            metadata: specialMetadata,
-          }),
-        })
+            metadata: specialMetadata }) })
       );
     });
 
@@ -489,8 +463,7 @@ describe('Enhanced AuditLogRepository', () => {
 
       expect(auditLogRepository.add).toHaveBeenCalledWith(
         expect.objectContaining({
-          guildId: malformedGuildId,
-        })
+          guildId: malformedGuildId })
       );
     });
 
@@ -507,8 +480,7 @@ describe('Enhanced AuditLogRepository', () => {
 
       expect(auditLogRepository.add).toHaveBeenCalledWith(
         expect.objectContaining({
-          businessRulesBypassed: [multipleRules.join(', ')],
-        })
+          businessRulesBypassed: [multipleRules.join(', ')] })
       );
     });
   });
@@ -521,8 +493,7 @@ describe('Enhanced AuditLogRepository', () => {
       expect(mockCollection.find).toHaveBeenCalledWith(
         expect.objectContaining({
           guildId,
-          isGuildOwnerBypass: true,
-        })
+          isGuildOwnerBypass: true })
       );
       expect(mockCollection.sort).toHaveBeenCalledWith({ timestamp: -1 });
     });
@@ -537,8 +508,7 @@ describe('Enhanced AuditLogRepository', () => {
       const largeResultSet = Array.from({ length: 1000 }, (_, i) => ({
         _id: `audit_${i}`,
         guildId,
-        timestamp: new Date(),
-      }));
+        timestamp: new Date() }));
 
       mockCollection.toArray.mockResolvedValue(largeResultSet);
 

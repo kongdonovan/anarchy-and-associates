@@ -230,6 +230,7 @@ let AdminCommands = class AdminCommands {
         }
     }
     async listAdmins(interaction) {
+        const context = await this.getPermissionContext(interaction);
         try {
             if (!interaction.guildId) {
                 await interaction.reply({
@@ -443,6 +444,7 @@ let AdminCommands = class AdminCommands {
         }
     }
     async debugWipeCollections(interaction) {
+        const context = await this.getPermissionContext(interaction);
         try {
             if (!interaction.guildId) {
                 await interaction.reply({
@@ -568,6 +570,7 @@ let AdminCommands = class AdminCommands {
         }
     }
     async setupServer(interaction) {
+        const context = await this.getPermissionContext(interaction);
         try {
             if (!interaction.guildId) {
                 await interaction.reply({

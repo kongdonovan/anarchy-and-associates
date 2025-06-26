@@ -9,8 +9,11 @@ const logger_1 = require("../infrastructure/logger");
 // Set default test environment variables
 process.env.NODE_ENV = 'test';
 process.env.LOG_LEVEL = 'error';
-process.env.MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/anarchy_associates_test';
-process.env.MONGODB_DB_NAME = process.env.MONGODB_DB_NAME || 'anarchy_associates_test';
+process.env.MONGODB_URI =
+    process.env.MONGODB_URI ||
+        'mongodb://localhost:27017/anarchy_associates_test';
+process.env.MONGODB_DB_NAME =
+    process.env.MONGODB_DB_NAME || 'anarchy_associates_test';
 async function globalSetup() {
     try {
         logger_1.logger.info('Setting up global test database connection...');
@@ -24,10 +27,16 @@ async function globalSetup() {
             await db.collection(collection.name).deleteMany({});
         }
         // Create indexes for performance
-        await db.collection('staff').createIndex({ guildId: 1, userId: 1 }, { unique: true });
-        await db.collection('cases').createIndex({ guildId: 1, caseNumber: 1 }, { unique: true });
+        await db
+            .collection('staff')
+            .createIndex({ guildId: 1, userId: 1 }, { unique: true });
+        await db
+            .collection('cases')
+            .createIndex({ guildId: 1, caseNumber: 1 }, { unique: true });
         await db.collection('jobs').createIndex({ guildId: 1, status: 1 });
-        await db.collection('applications').createIndex({ guildId: 1, jobId: 1, applicantId: 1 });
+        await db
+            .collection('applications')
+            .createIndex({ guildId: 1, jobId: 1, applicantId: 1 });
         await db.collection('auditLogs').createIndex({ guildId: 1, timestamp: -1 });
         // Store connection globally for test access
         global.__mongoClient = mongoClient;

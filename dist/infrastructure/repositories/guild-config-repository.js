@@ -28,10 +28,11 @@ class GuildConfigRepository extends base_mongo_repository_1.BaseMongoRepository 
             clientRoleId: undefined,
             permissions: {
                 admin: [],
-                hr: [],
+                'senior-staff': [],
                 case: [],
                 config: [],
-                retainer: [],
+                lawyer: [],
+                'lead-attorney': [],
                 repair: [],
             },
             adminRoles: [],

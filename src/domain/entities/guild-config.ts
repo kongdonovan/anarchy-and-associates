@@ -20,4 +20,15 @@ export interface GuildConfig extends BaseEntity {
   };
   adminRoles: string[];
   adminUsers: string[];
+  channelCleanupConfig?: {
+    scanInterval: number;
+    inactivityThreshold: number;
+    archiveThreshold: number;
+    deleteThreshold: number;
+    batchSize: number;
+    enableAutoCleanup: boolean;
+    notificationChannelId?: string;
+    excludedCategories: string[];
+    excludedChannels: string[];
+  };
 }

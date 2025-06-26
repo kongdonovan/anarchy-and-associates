@@ -55,5 +55,14 @@ export declare class CaseRepository extends BaseMongoRepository<Case> {
     }>;
     addDocument(caseId: string, document: Case['documents'][0]): Promise<Case | null>;
     addNote(caseId: string, note: Case['notes'][0]): Promise<Case | null>;
+    /**
+     * Find all cases where a user is involved (as client, lead attorney, or assigned lawyer)
+     */
+    findCasesByUserId(guildId: string, userId: string): Promise<Case[]>;
+    /**
+     * Conditionally update a case only if it matches certain criteria
+     * This prevents race conditions by checking and updating in a single atomic operation
+     */
+    conditionalUpdate(caseId: string, conditions: Partial<Case>, updates: Partial<Case>): Promise<Case | null>;
 }
 //# sourceMappingURL=case-repository.d.ts.map

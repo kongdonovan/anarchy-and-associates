@@ -22,7 +22,7 @@ class RepairService {
         try {
             logger_1.logger.info(`Starting staff roles repair for guild ${guild.id}, dry-run: ${dryRun}`);
             // Get all staff records for this guild
-            const staffMembers = await this.staffRepository.findByFilters({ guildId: guild.id, status: 'active' });
+            const staffMembers = await this.staffRepository.findByFilters({ guildId: guild.id, status: RetainerStatus.ACTIVE });
             // Get all Discord members
             await guild.members.fetch();
             // Sync database -> Discord (add missing roles)
@@ -88,7 +88,7 @@ class RepairService {
             // Get all job records for this guild
             const jobs = await this.jobRepository.findByFilters({ guildId: guild.id });
             // Get all staff members to see who should have job roles
-            const staffMembers = await this.staffRepository.findByFilters({ guildId: guild.id, status: 'active' });
+            const staffMembers = await this.staffRepository.findByFilters({ guildId: guild.id, status: RetainerStatus.ACTIVE });
             for (const job of jobs) {
                 const discordRole = guild.roles.cache.get(job.roleId);
                 if (!discordRole) {

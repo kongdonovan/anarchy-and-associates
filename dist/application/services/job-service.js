@@ -5,6 +5,7 @@ const job_1 = require("../../domain/entities/job");
 const staff_role_1 = require("../../domain/entities/staff-role");
 const audit_log_1 = require("../../domain/entities/audit-log");
 const logger_1 = require("../../infrastructure/logger");
+const case_1 = require("../../domain/entities/case");
 class JobService {
     constructor(jobRepository, auditLogRepository, _staffRepository, // Future use for staff validation
     permissionService) {
@@ -211,7 +212,7 @@ class JobService {
                 actorId: context.userId,
                 details: {
                     before: { status: 'open' },
-                    after: { status: 'closed' },
+                    after: { status: case_1.CaseStatus.CLOSED },
                     metadata: {
                         jobId,
                         title: job.title,

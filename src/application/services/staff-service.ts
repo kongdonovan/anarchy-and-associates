@@ -203,7 +203,7 @@ export class StaffService {
             actionType: 'hire',
           },
         ],
-        status: 'active',
+        status: RetainerStatus.ACTIVE,
       };
 
       const staff = await this.staffRepository.add(staffData);
@@ -217,7 +217,7 @@ export class StaffService {
         details: {
           after: {
             role,
-            status: 'active',
+            status: RetainerStatus.ACTIVE,
           },
           reason,
           metadata: {
@@ -468,7 +468,7 @@ export class StaffService {
         details: {
           before: { 
             role: staff.role,
-            status: 'active',
+            status: RetainerStatus.ACTIVE,
           },
           reason,
           metadata: {

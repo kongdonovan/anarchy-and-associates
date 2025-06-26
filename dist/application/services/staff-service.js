@@ -5,10 +5,11 @@ const staff_role_1 = require("../../domain/entities/staff-role");
 const audit_log_1 = require("../../domain/entities/audit-log");
 const logger_1 = require("../../infrastructure/logger");
 class StaffService {
-    constructor(staffRepository, auditLogRepository, permissionService) {
+    constructor(staffRepository, auditLogRepository, permissionService, businessRuleValidationService) {
         this.staffRepository = staffRepository;
         this.auditLogRepository = auditLogRepository;
         this.permissionService = permissionService;
+        this.businessRuleValidationService = businessRuleValidationService;
     }
     async validateRobloxUsername(username) {
         try {
@@ -46,8 +47,8 @@ class StaffService {
     }
     async hireStaff(context, request) {
         try {
-            // Check HR permission
-            const hasPermission = await this.permissionService.hasHRPermissionWithContext(context);
+            // Check senior-staff permission (updated from HR permission)
+            const hasPermission = await this.permissionService.hasSeniorStaffPermissionWithContext(context);
             if (!hasPermission) {
                 return {
                     success: false,
@@ -100,14 +101,25 @@ class StaffService {
                     error: 'Roblox username is already associated with another staff member',
                 };
             }
-            // Check role limits (guild owners can bypass limits)
-            if (!request.isGuildOwner) {
-                const canHire = await this.staffRepository.canHireRole(guildId, role);
-                if (!canHire) {
-                    const maxCount = staff_role_1.RoleUtils.getRoleMaxCount(role);
+            // Validate role limits using business rule validation service
+            const roleLimitValidation = await this.businessRuleValidationService.validateRoleLimit(context, role);
+            if (!roleLimitValidation.valid) {
+                // Log business rule violation if guild owner is bypassing
+                if (context.isGuildOwner && roleLimitValidation.bypassAvailable) {
+                    await this.auditLogRepository.logRoleLimitBypass(guildId, context.userId, userId, role, roleLimitValidation.currentCount, roleLimitValidation.maxCount, reason);
+                    logger_1.logger.info('Guild owner bypassing role limit during hire', {
+                        guildId,
+                        role,
+                        currentCount: roleLimitValidation.currentCount,
+                        maxCount: roleLimitValidation.maxCount,
+                        bypassedBy: context.userId
+                    });
+                }
+                else {
+                    // Not guild owner or bypass not available
                     return {
                         success: false,
-                        error: `Cannot hire ${role}. Maximum limit of ${maxCount} reached`,
+                        error: roleLimitValidation.errors.join(', '),
                     };
                 }
             }
@@ -129,7 +141,7 @@ class StaffService {
                         actionType: 'hire',
                     },
                 ],
-                status: 'active',
+                status: RetainerStatus.ACTIVE,
             };
             const staff = await this.staffRepository.add(staffData);
             // Log the action
@@ -141,7 +153,7 @@ class StaffService {
                 details: {
                     after: {
                         role,
-                        status: 'active',
+                        status: RetainerStatus.ACTIVE,
                     },
                     reason,
                     metadata: {
@@ -166,8 +178,8 @@ class StaffService {
     }
     async promoteStaff(context, request) {
         try {
-            // Check HR permission
-            const hasPermission = await this.permissionService.hasHRPermissionWithContext(context);
+            // Check senior-staff permission (updated from HR permission)
+            const hasPermission = await this.permissionService.hasSeniorStaffPermissionWithContext(context);
             if (!hasPermission) {
                 return {
                     success: false,
@@ -198,14 +210,27 @@ class StaffService {
                     error: 'New role must be higher than current role for promotion',
                 };
             }
-            // Check role limits for new role
-            const canHire = await this.staffRepository.canHireRole(guildId, newRole);
-            if (!canHire) {
-                const maxCount = staff_role_1.RoleUtils.getRoleMaxCount(newRole);
-                return {
-                    success: false,
-                    error: `Cannot promote to ${newRole}. Maximum limit of ${maxCount} reached`,
-                };
+            // Validate role limits using business rule validation service
+            const roleLimitValidation = await this.businessRuleValidationService.validateRoleLimit(context, newRole);
+            if (!roleLimitValidation.valid) {
+                // Log business rule violation if guild owner is bypassing
+                if (context.isGuildOwner && roleLimitValidation.bypassAvailable) {
+                    await this.auditLogRepository.logRoleLimitBypass(guildId, context.userId, userId, newRole, roleLimitValidation.currentCount, roleLimitValidation.maxCount, reason);
+                    logger_1.logger.info('Guild owner bypassing role limit during promotion', {
+                        guildId,
+                        role: newRole,
+                        currentCount: roleLimitValidation.currentCount,
+                        maxCount: roleLimitValidation.maxCount,
+                        bypassedBy: context.userId
+                    });
+                }
+                else {
+                    // Not guild owner or bypass not available
+                    return {
+                        success: false,
+                        error: roleLimitValidation.errors.join(', '),
+                    };
+                }
             }
             // Update staff role
             const updatedStaff = await this.staffRepository.updateStaffRole(guildId, userId, newRole, promotedBy, reason);
@@ -244,8 +269,8 @@ class StaffService {
     }
     async demoteStaff(context, request) {
         try {
-            // Check HR permission
-            const hasPermission = await this.permissionService.hasHRPermissionWithContext(context);
+            // Check senior-staff permission (updated from HR permission)
+            const hasPermission = await this.permissionService.hasSeniorStaffPermissionWithContext(context);
             if (!hasPermission) {
                 return {
                     success: false,
@@ -306,8 +331,8 @@ class StaffService {
     }
     async fireStaff(context, request) {
         try {
-            // Check HR permission
-            const hasPermission = await this.permissionService.hasHRPermissionWithContext(context);
+            // Check senior-staff permission (updated from HR permission)
+            const hasPermission = await this.permissionService.hasSeniorStaffPermissionWithContext(context);
             if (!hasPermission) {
                 return {
                     success: false,
@@ -334,7 +359,7 @@ class StaffService {
                 details: {
                     before: {
                         role: staff.role,
-                        status: 'active',
+                        status: RetainerStatus.ACTIVE,
                     },
                     reason,
                     metadata: {
@@ -360,8 +385,8 @@ class StaffService {
     }
     async getStaffInfo(context, userId) {
         try {
-            // Check if user can view staff info (HR or admin permission)
-            const hasPermission = await this.permissionService.hasHRPermissionWithContext(context) ||
+            // Check if user can view staff info (senior-staff or admin permission)
+            const hasPermission = await this.permissionService.hasSeniorStaffPermissionWithContext(context) ||
                 await this.permissionService.isAdmin(context);
             if (!hasPermission) {
                 throw new Error('You do not have permission to view staff information');
@@ -389,8 +414,8 @@ class StaffService {
     }
     async getStaffList(context, roleFilter, page = 1, limit = 10) {
         try {
-            // Check if user can view staff list (HR or admin permission)
-            const hasPermission = await this.permissionService.hasHRPermissionWithContext(context) ||
+            // Check if user can view staff list (senior-staff or admin permission)
+            const hasPermission = await this.permissionService.hasSeniorStaffPermissionWithContext(context) ||
                 await this.permissionService.isAdmin(context);
             if (!hasPermission) {
                 throw new Error('You do not have permission to view staff list');
@@ -420,8 +445,8 @@ class StaffService {
     }
     async getStaffHierarchy(context) {
         try {
-            // Check if user can view staff hierarchy (HR or admin permission)
-            const hasPermission = await this.permissionService.hasHRPermissionWithContext(context) ||
+            // Check if user can view staff hierarchy (senior-staff or admin permission)
+            const hasPermission = await this.permissionService.hasSeniorStaffPermissionWithContext(context) ||
                 await this.permissionService.isAdmin(context);
             if (!hasPermission) {
                 throw new Error('You do not have permission to view staff hierarchy');
@@ -435,8 +460,8 @@ class StaffService {
     }
     async getRoleCounts(context) {
         try {
-            // Check if user can view role counts (HR or admin permission)
-            const hasPermission = await this.permissionService.hasHRPermissionWithContext(context) ||
+            // Check if user can view role counts (senior-staff or admin permission)
+            const hasPermission = await this.permissionService.hasSeniorStaffPermissionWithContext(context) ||
                 await this.permissionService.isAdmin(context);
             if (!hasPermission) {
                 throw new Error('You do not have permission to view role counts');

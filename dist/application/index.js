@@ -25,4 +25,5 @@ __exportStar(require("./services/case-service"), exports);
 __exportStar(require("./services/discord-role-sync-service"), exports);
 __exportStar(require("./services/feedback-service"), exports);
 __exportStar(require("./services/reminder-service"), exports);
+__exportStar(require("./services/cross-entity-validation-service"), exports);
 //# sourceMappingURL=index.js.map

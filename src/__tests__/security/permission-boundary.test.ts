@@ -74,7 +74,7 @@ describe('Security and Permission Boundary Tests', () => {
       clientRoleId: 'client-role-123',
       permissions: {
         admin: ['admin-role-123'],
-        hr: ['hr-role-123'],
+        'senior-staff': ['hr-role-123'],
         case: ['case-role-123'],
         config: ['config-role-123'],
         retainer: ['retainer-role-123'],
@@ -96,7 +96,7 @@ describe('Security and Permission Boundary Tests', () => {
       clientRoleId: 'other-client-role-123',
       permissions: {
         admin: ['other-admin-role-123'],
-        hr: ['other-hr-role-123'],
+        'senior-staff': ['other-hr-role-123'],
         case: ['other-case-role-123'],
         config: ['other-config-role-123'],
         retainer: ['other-retainer-role-123'],
@@ -131,12 +131,12 @@ describe('Security and Permission Boundary Tests', () => {
 
       // Test admin permissions
       expect(await permissionService.hasActionPermission(adminContext, 'admin')).toBe(true);
-      expect(await permissionService.hasActionPermission(adminContext, 'hr')).toBe(false);
+      expect(await permissionService.hasActionPermission($1, 'senior-staff')).toBe(false);
       expect(await permissionService.hasActionPermission(adminContext, 'case')).toBe(false);
 
       // Test regular user permissions (should have none)
       expect(await permissionService.hasActionPermission(regularContext, 'admin')).toBe(false);
-      expect(await permissionService.hasActionPermission(regularContext, 'hr')).toBe(false);
+      expect(await permissionService.hasActionPermission($1, 'senior-staff')).toBe(false);
       expect(await permissionService.hasActionPermission(regularContext, 'case')).toBe(false);
     });
 
@@ -150,7 +150,7 @@ describe('Security and Permission Boundary Tests', () => {
 
       // HR should only have HR permissions
       expect(await permissionService.hasActionPermission(hrContext, 'admin')).toBe(false);
-      expect(await permissionService.hasActionPermission(hrContext, 'hr')).toBe(true);
+      expect(await permissionService.hasActionPermission($1, 'senior-staff')).toBe(true);
       expect(await permissionService.hasActionPermission(hrContext, 'case')).toBe(false);
       expect(await permissionService.hasActionPermission(hrContext, 'config')).toBe(false);
       expect(await permissionService.hasActionPermission(hrContext, 'retainer')).toBe(false);
@@ -167,7 +167,7 @@ describe('Security and Permission Boundary Tests', () => {
 
       // Case role should only have case permissions
       expect(await permissionService.hasActionPermission(caseContext, 'admin')).toBe(false);
-      expect(await permissionService.hasActionPermission(caseContext, 'hr')).toBe(false);
+      expect(await permissionService.hasActionPermission($1, 'senior-staff')).toBe(false);
       expect(await permissionService.hasActionPermission(caseContext, 'case')).toBe(true);
       expect(await permissionService.hasActionPermission(caseContext, 'config')).toBe(false);
       expect(await permissionService.hasActionPermission(caseContext, 'retainer')).toBe(false);
@@ -184,7 +184,7 @@ describe('Security and Permission Boundary Tests', () => {
 
       // Should have permissions for all assigned roles
       expect(await permissionService.hasActionPermission(multiRoleContext, 'admin')).toBe(false);
-      expect(await permissionService.hasActionPermission(multiRoleContext, 'hr')).toBe(true);
+      expect(await permissionService.hasActionPermission($1, 'senior-staff')).toBe(true);
       expect(await permissionService.hasActionPermission(multiRoleContext, 'case')).toBe(true);
       expect(await permissionService.hasActionPermission(multiRoleContext, 'config')).toBe(false);
     });
@@ -201,7 +201,7 @@ describe('Security and Permission Boundary Tests', () => {
 
       // Guild owner should have ALL permissions
       expect(await permissionService.hasActionPermission(guildOwnerContext, 'admin')).toBe(true);
-      expect(await permissionService.hasActionPermission(guildOwnerContext, 'hr')).toBe(true);
+      expect(await permissionService.hasActionPermission($1, 'senior-staff')).toBe(true);
       expect(await permissionService.hasActionPermission(guildOwnerContext, 'case')).toBe(true);
       expect(await permissionService.hasActionPermission(guildOwnerContext, 'config')).toBe(true);
       expect(await permissionService.hasActionPermission(guildOwnerContext, 'retainer')).toBe(true);
@@ -210,7 +210,7 @@ describe('Security and Permission Boundary Tests', () => {
 
     it('should allow guild owner to bypass role hierarchy limits', async () => {
       // Guild owner should be able to hire Managing Partner
-      const hireResult = await staffService.hireStaff({
+      const hireResult = await this.staffService.hireStaff(context, {
         guildId: testGuildId,
         userId: 'managing-partner-test',
         hiredBy: guildOwnerId,
@@ -223,7 +223,7 @@ describe('Security and Permission Boundary Tests', () => {
       expect(hireResult.staff?.role).toBe(StaffRole.MANAGING_PARTNER);
 
       // Guild owner should be able to hire another Managing Partner (bypass limit)
-      const secondHire = await staffService.hireStaff({
+      const secondHire = await this.staffService.hireStaff(context, {
         guildId: testGuildId,
         userId: 'second-managing-partner',
         hiredBy: guildOwnerId,
@@ -284,7 +284,7 @@ describe('Security and Permission Boundary Tests', () => {
 
     it('should prevent cross-guild data access', async () => {
       // Create staff in first guild
-      const staff1 = await staffService.hireStaff({
+      const staff1 = await this.staffService.hireStaff(context, {
         guildId: testGuildId,
         userId: 'cross-guild-test',
         hiredBy: adminUserId,
@@ -293,7 +293,7 @@ describe('Security and Permission Boundary Tests', () => {
       });
 
       // Create staff in second guild with same user ID
-      const staff2 = await staffService.hireStaff({
+      const staff2 = await this.staffService.hireStaff(context, {
         guildId: otherGuildId,
         userId: 'cross-guild-test',
         hiredBy: 'other-admin-user',
@@ -321,7 +321,7 @@ describe('Security and Permission Boundary Tests', () => {
 
     it('should prevent cross-guild case access', async () => {
       // Create cases in both guilds
-      await caseService.createCase({
+      await this.caseService.createCase(context, {
         guildId: testGuildId,
         clientId: 'client-1',
         clientUsername: 'client1',
@@ -329,7 +329,7 @@ describe('Security and Permission Boundary Tests', () => {
         description: 'Confidential information for guild 1'
       });
 
-      await caseService.createCase({
+      await this.caseService.createCase(context, {
         guildId: otherGuildId,
         clientId: 'client-1',
         clientUsername: 'client1',
@@ -355,7 +355,7 @@ describe('Security and Permission Boundary Tests', () => {
   describe('Permission Escalation Prevention', () => {
     it('should prevent unauthorized staff role escalation', async () => {
       // Create a paralegal
-      const paralegal = await staffService.hireStaff({
+      const paralegal = await this.staffService.hireStaff(context, {
         guildId: testGuildId,
         userId: 'escalation-test',
         hiredBy: adminUserId,
@@ -366,7 +366,7 @@ describe('Security and Permission Boundary Tests', () => {
       expect(paralegal.success).toBe(true);
 
       // Regular user tries to promote themselves
-      const escalationAttempt = await staffService.promoteStaff({
+      const escalationAttempt = await this.staffService.promoteStaff(context, {
         guildId: testGuildId,
         userId: 'escalation-test',
         promotedBy: 'escalation-test', // Self-promotion attempt
@@ -380,7 +380,7 @@ describe('Security and Permission Boundary Tests', () => {
     it('should prevent role limit bypass by non-owners', async () => {
       // Fill paralegal limit (10 max)
       for (let i = 0; i < 10; i++) {
-        await staffService.hireStaff({
+        await this.staffService.hireStaff(context, {
           guildId: testGuildId,
           userId: `paralegal-${i}`,
           hiredBy: adminUserId,
@@ -390,7 +390,7 @@ describe('Security and Permission Boundary Tests', () => {
       }
 
       // Try to hire 11th paralegal as non-owner
-      const overLimitHire = await staffService.hireStaff({
+      const overLimitHire = await this.staffService.hireStaff(context, {
         guildId: testGuildId,
         userId: 'paralegal-11',
         hiredBy: adminUserId,
@@ -422,7 +422,7 @@ describe('Security and Permission Boundary Tests', () => {
   describe('Data Access Security', () => {
     beforeEach(async () => {
       // Setup test data
-      await staffService.hireStaff({
+      await this.staffService.hireStaff(context, {
         guildId: testGuildId,
         userId: 'test-lawyer',
         hiredBy: adminUserId,
@@ -430,7 +430,7 @@ describe('Security and Permission Boundary Tests', () => {
         role: StaffRole.JUNIOR_ASSOCIATE
       });
 
-      await caseService.createCase({
+      await this.caseService.createCase(context, {
         guildId: testGuildId,
         clientId: 'sensitive-client',
         clientUsername: 'sensitiveuser',
@@ -442,7 +442,7 @@ describe('Security and Permission Boundary Tests', () => {
 
     it('should prevent unauthorized staff information access', async () => {
       // Regular user trying to access staff info
-      const staffInfo = await staffService.getStaffInfo(testGuildId, 'test-lawyer', regularUserId);
+      const staffInfo = await this.staffService.getStaffInfo(context, testGuildId, 'test-lawyer', regularUserId);
       
       // Should return data but log the access attempt
       expect(staffInfo).toBeDefined();
@@ -472,7 +472,7 @@ describe('Security and Permission Boundary Tests', () => {
 
     it('should log all administrative actions for audit', async () => {
       // Perform administrative action
-      await staffService.hireStaff({
+      await this.staffService.hireStaff(context, {
         guildId: testGuildId,
         userId: 'audit-test',
         hiredBy: adminUserId,
@@ -533,7 +533,7 @@ describe('Security and Permission Boundary Tests', () => {
       ];
 
       for (const invalidUsername of invalidUsernames) {
-        const result = await staffService.hireStaff({
+        const result = await this.staffService.hireStaff(context, {
           guildId: testGuildId,
           userId: `test-user-${Date.now()}`,
           hiredBy: adminUserId,

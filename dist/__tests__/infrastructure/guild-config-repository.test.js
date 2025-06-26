@@ -85,9 +85,9 @@ describe('GuildConfigRepository', () => {
         it('should set permission role', async () => {
             await repository.createDefaultConfig(testGuildId);
             const roleId = 'role_123';
-            const result = await repository.setPermissionRole(testGuildId, 'hr', roleId);
+            const result = await repository.setPermissionRole(testGuildId, 'senior-staff', roleId);
             expect(result).not.toBeNull();
-            expect(result.permissions.hr).toContain(roleId);
+            expect(result.permissions['senior-staff']).toContain(roleId);
         });
     });
 });

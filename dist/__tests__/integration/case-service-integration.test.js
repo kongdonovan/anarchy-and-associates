@@ -31,7 +31,7 @@ describe('CaseService Integration Tests', () => {
             const guildId = 'test-guild-123';
             const clientId = 'client-123';
             const clientUsername = 'testclient';
-            const case1 = await caseService.createCase({
+            const case1 = await this.caseService.createCase(context, {
                 guildId,
                 clientId,
                 clientUsername,
@@ -39,7 +39,7 @@ describe('CaseService Integration Tests', () => {
                 description: 'First test case',
                 priority: case_1.CasePriority.HIGH
             });
-            const case2 = await caseService.createCase({
+            const case2 = await this.caseService.createCase(context, {
                 guildId,
                 clientId: 'client-456',
                 clientUsername: 'otherclient',
@@ -86,21 +86,21 @@ describe('CaseService Integration Tests', () => {
             const guild1 = 'guild-1';
             const guild2 = 'guild-2';
             // Create cases in different guilds
-            const case1 = await caseService.createCase({
+            const case1 = await this.caseService.createCase(context, {
                 guildId: guild1,
                 clientId: 'client-1',
                 clientUsername: 'client1',
                 title: 'Guild 1 Case',
                 description: 'Test case for guild 1'
             });
-            const case2 = await caseService.createCase({
+            const case2 = await this.caseService.createCase(context, {
                 guildId: guild2,
                 clientId: 'client-2',
                 clientUsername: 'client2',
                 title: 'Guild 2 Case',
                 description: 'Test case for guild 2'
             });
-            const case3 = await caseService.createCase({
+            const case3 = await this.caseService.createCase(context, {
                 guildId: guild1,
                 clientId: 'client-3',
                 clientUsername: 'client3',
@@ -117,7 +117,7 @@ describe('CaseService Integration Tests', () => {
             const guildId = 'test-guild-123';
             // Test with invalid case data that should cause actual validation failures
             // Empty guildId is handled gracefully, so test realistic validation
-            const result1 = await caseService.createCase({
+            const result1 = await this.caseService.createCase(context, {
                 guildId: '',
                 clientId: 'client-123',
                 clientUsername: 'testclient',
@@ -127,7 +127,7 @@ describe('CaseService Integration Tests', () => {
             // The service handles edge cases gracefully
             expect(result1).toBeDefined();
             // Test valid case creation
-            const result2 = await caseService.createCase({
+            const result2 = await this.caseService.createCase(context, {
                 guildId,
                 clientId: 'client-valid',
                 clientUsername: 'testclient',
@@ -137,7 +137,7 @@ describe('CaseService Integration Tests', () => {
             expect(result2).toBeDefined();
             expect(result2.caseNumber).toBeDefined();
             // Test that cases can be created for same client (this is allowed)
-            const result3 = await caseService.createCase({
+            const result3 = await this.caseService.createCase(context, {
                 guildId,
                 clientId: 'client-valid', // Same client ID
                 clientUsername: 'testclient',
@@ -151,7 +151,7 @@ describe('CaseService Integration Tests', () => {
     describe('Case Assignment Integration', () => {
         let testCase;
         beforeEach(async () => {
-            testCase = await caseService.createCase({
+            testCase = await this.caseService.createCase(context, {
                 guildId: 'test-guild-123',
                 clientId: 'client-123',
                 clientUsername: 'testclient',
@@ -167,7 +167,7 @@ describe('CaseService Integration Tests', () => {
             expect(acceptedCase.leadAttorneyId).toBe(lawyerId);
             expect(acceptedCase.assignedLawyerIds).toContain(lawyerId);
             // Verify case is retrievable by ID
-            const retrievedCase = await caseService.getCaseById(caseId);
+            const retrievedCase = await this.caseService.getCaseById(context, caseId);
             expect(retrievedCase?.status).toBe(case_1.CaseStatus.IN_PROGRESS);
             expect(retrievedCase?.leadAttorneyId).toBe(lawyerId);
         });
@@ -180,17 +180,17 @@ describe('CaseService Integration Tests', () => {
             // Accept case first
             await caseService.acceptCase(caseId, leadLawyerId);
             // Assign additional lawyers
-            await caseService.assignLawyer({
+            await this.caseService.assignLawyer(context, {
                 caseId,
                 lawyerId: assistantLawyer1,
                 assignedBy
             });
-            await caseService.assignLawyer({
+            await this.caseService.assignLawyer(context, {
                 caseId,
                 lawyerId: assistantLawyer2,
                 assignedBy
             });
-            const updatedCase = await caseService.getCaseById(caseId);
+            const updatedCase = await this.caseService.getCaseById(context, caseId);
             expect(updatedCase?.leadAttorneyId).toBe(leadLawyerId);
             expect(updatedCase?.assignedLawyerIds).toContain(assistantLawyer1);
             expect(updatedCase?.assignedLawyerIds).toContain(assistantLawyer2);
@@ -210,7 +210,7 @@ describe('CaseService Integration Tests', () => {
         let openCase;
         beforeEach(async () => {
             // Create and open a case for testing
-            const testCase = await caseService.createCase({
+            const testCase = await this.caseService.createCase(context, {
                 guildId: 'test-guild-123',
                 clientId: 'client-123',
                 clientUsername: 'testclient',
@@ -224,7 +224,7 @@ describe('CaseService Integration Tests', () => {
             const closedBy = 'lawyer-123';
             const result = case_1.CaseResult.WIN;
             const resultNotes = 'Successful resolution for client';
-            const closedCase = await caseService.closeCase({
+            const closedCase = await this.caseService.closeCase(context, {
                 caseId,
                 result,
                 resultNotes,
@@ -239,7 +239,7 @@ describe('CaseService Integration Tests', () => {
             const closedAtDate = new Date(closedCase.closedAt);
             expect(closedAtDate.getTime()).toBeGreaterThan(0);
             // Verify case state after closure (assignment may still work)
-            const assignResult = await caseService.assignLawyer({
+            const assignResult = await this.caseService.assignLawyer(context, {
                 caseId,
                 lawyerId: 'new-lawyer',
                 assignedBy: 'manager'
@@ -250,7 +250,7 @@ describe('CaseService Integration Tests', () => {
         it('should validate case closure parameters', async () => {
             const caseId = openCase._id.toString();
             // Test closure with empty closedBy (service handles gracefully)
-            const result = await caseService.closeCase({
+            const result = await this.caseService.closeCase(context, {
                 caseId,
                 result: case_1.CaseResult.WIN,
                 closedBy: ''
@@ -268,7 +268,7 @@ describe('CaseService Integration Tests', () => {
             ];
             for (const [index, result] of validResults.entries()) {
                 // Create new case for each result test
-                const testCase = await caseService.createCase({
+                const testCase = await this.caseService.createCase(context, {
                     guildId: 'test-guild-123',
                     clientId: `client-${index}`,
                     clientUsername: `client${index}`,
@@ -276,7 +276,7 @@ describe('CaseService Integration Tests', () => {
                     description: `Test case for result ${result}`
                 });
                 const openCase = await caseService.acceptCase(testCase._id.toString(), 'lawyer-123');
-                const closedCase = await caseService.closeCase({
+                const closedCase = await this.caseService.closeCase(context, {
                     caseId: openCase._id.toString(),
                     result,
                     closedBy: 'lawyer-123'
@@ -289,7 +289,7 @@ describe('CaseService Integration Tests', () => {
             const caseId = openCase._id.toString();
             const closedBy = 'lawyer-123';
             // Close case first time
-            await caseService.closeCase({
+            await this.caseService.closeCase(context, {
                 caseId,
                 result: case_1.CaseResult.WIN,
                 closedBy
@@ -328,7 +328,7 @@ describe('CaseService Integration Tests', () => {
                 }
             ];
             for (const [index, caseData] of testCases.entries()) {
-                await caseService.createCase({
+                await this.caseService.createCase(context, {
                     guildId: 'test-guild-123',
                     clientId: `client-${index}`,
                     clientUsername: caseData.clientUsername,
@@ -358,7 +358,7 @@ describe('CaseService Integration Tests', () => {
         it('should retrieve cases by case number', async () => {
             const currentYear = new Date().getFullYear();
             const expectedCaseNumber = `${currentYear}-0001-client1`;
-            const caseByNumber = await caseService.getCaseByCaseNumber(expectedCaseNumber);
+            const caseByNumber = await this.caseService.getCaseByCaseNumber(context, expectedCaseNumber);
             expect(caseByNumber).toBeDefined();
             expect(caseByNumber?.title).toBe('Contract Dispute');
         });
@@ -405,7 +405,7 @@ describe('CaseService Integration Tests', () => {
             // Create cases sequentially to avoid overwhelming the database
             const createdCases = [];
             for (let i = 0; i < caseCount; i++) {
-                const newCase = await caseService.createCase({
+                const newCase = await this.caseService.createCase(context, {
                     guildId,
                     clientId: `client-${i}`,
                     clientUsername: `client${i}`,
@@ -427,7 +427,7 @@ describe('CaseService Integration Tests', () => {
             const queue = operation_queue_1.OperationQueue.getInstance();
             queue.clearQueue();
             // Create a case first
-            const testCase = await caseService.createCase({
+            const testCase = await this.caseService.createCase(context, {
                 guildId,
                 clientId: 'client-123',
                 clientUsername: 'testclient',
@@ -453,14 +453,14 @@ describe('CaseService Integration Tests', () => {
         it('should handle invalid case IDs gracefully', async () => {
             const invalidIds = ['', 'invalid', '123456789012345678901234', 'not-an-object-id'];
             for (const invalidId of invalidIds) {
-                const result = await caseService.getCaseById(invalidId);
+                const result = await this.caseService.getCaseById(context, invalidId);
                 // Service returns null for invalid IDs instead of throwing
                 expect(result).toBeNull();
             }
         });
         it('should handle database connection failures', async () => {
             // Test graceful error handling with edge case data
-            const result = await caseService.createCase({
+            const result = await this.caseService.createCase(context, {
                 guildId: 'test-guild-123',
                 clientId: 'client-123',
                 clientUsername: 'testclient',
@@ -486,7 +486,7 @@ describe('CaseService Integration Tests', () => {
                 clientRoleId: undefined,
                 permissions: {
                     admin: [],
-                    hr: [],
+                    'senior-staff': [],
                     case: [],
                     config: [],
                     retainer: [],

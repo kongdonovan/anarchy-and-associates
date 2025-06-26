@@ -96,7 +96,7 @@ export class RetainerCommands {
         lawyerId
       };
 
-      const retainer = await this.retainerService.createRetainer(request);
+      const retainer = await this.retainerService.createRetainer(context, request);
 
       // Send DM to client with retainer agreement
       await this.sendRetainerDM(retainer, client, interaction.user);
@@ -135,10 +135,11 @@ export class RetainerCommands {
     name: 'list'
   })
   async listRetainers(interaction: CommandInteraction): Promise<void> {
+      const context = await this.getPermissionContext(interaction);
     try {
       const guildId = interaction.guildId!;
       
-      const activeRetainers = await this.retainerService.getActiveRetainers(guildId);
+      const activeRetainers = await this.retainerService.getActiveRetainers(context, guildId);
       const pendingRetainers = await this.retainerService.getPendingRetainers(guildId);
       const stats = await this.retainerService.getRetainerStats(guildId);
 

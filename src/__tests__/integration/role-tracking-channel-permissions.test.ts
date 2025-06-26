@@ -9,6 +9,7 @@ import { BusinessRuleValidationService } from '../../application/services/busine
 import { StaffRole } from '../../domain/entities/staff-role';
 import { CaseStatus } from '../../domain/entities/case';
 import { ChannelType, PermissionFlagsBits, Events } from 'discord.js';
+import { ObjectId } from 'mongodb';
 
 // Mock all repositories and external services
 jest.mock('../../infrastructure/repositories/staff-repository');
@@ -194,7 +195,7 @@ describe('Role Tracking Channel Permissions Integration', () => {
           userId: testUserId,
           guildId: testGuildId,
           role: StaffRole.PARALEGAL,
-          status: 'active'
+          status: RetainerStatus.ACTIVE
         })
       );
 
@@ -209,12 +210,14 @@ describe('Role Tracking Channel Permissions Integration', () => {
     it('should update channel permissions when staff is promoted', async () => {
       // Setup: Existing staff member
       mockStaffRepo.findByUserId.mockResolvedValue({
-        _id: 'staff_123',
+        _id: new ObjectId(),
         userId: testUserId,
         guildId: testGuildId,
         role: StaffRole.PARALEGAL,
-        status: 'active',
-        promotionHistory: []
+        status: RetainerStatus.ACTIVE,
+        promotionHistory: [],
+        createdAt: new Date(),
+        updatedAt: new Date()
       } as any);
 
       // Setup: Member promoted from Paralegal to Associate
@@ -262,11 +265,13 @@ describe('Role Tracking Channel Permissions Integration', () => {
     it('should update channel permissions when staff is fired', async () => {
       // Setup: Existing staff member
       mockStaffRepo.findByUserId.mockResolvedValue({
-        _id: 'staff_123',
+        _id: new ObjectId(),
         userId: testUserId,
         guildId: testGuildId,
         role: StaffRole.PARALEGAL,
-        status: 'active'
+        status: RetainerStatus.ACTIVE,
+        createdAt: new Date(),
+        updatedAt: new Date()
       } as any);
 
       // Setup: Member loses all staff roles (firing)
@@ -303,12 +308,14 @@ describe('Role Tracking Channel Permissions Integration', () => {
     it('should update channel permissions when staff is demoted', async () => {
       // Setup: Existing staff member
       mockStaffRepo.findByUserId.mockResolvedValue({
-        _id: 'staff_123',
+        _id: new ObjectId(),
         userId: testUserId,
         guildId: testGuildId,
         role: StaffRole.SENIOR_PARTNER,
-        status: 'active',
-        promotionHistory: []
+        status: RetainerStatus.ACTIVE,
+        promotionHistory: [],
+        createdAt: new Date(),
+        updatedAt: new Date()
       } as any);
 
       // Setup: Member demoted from Managing Partner to Associate
@@ -361,13 +368,15 @@ describe('Role Tracking Channel Permissions Integration', () => {
       // Setup: User involved in cases
       mockCaseRepo.findCasesByUserId.mockResolvedValue([
         {
-          _id: 'case_1',
+          _id: new ObjectId(),
           channelId: 'case_channel_123',
           status: CaseStatus.IN_PROGRESS,
           guildId: testGuildId,
           clientId: 'client_123',
           assignedLawyerIds: [testUserId],
-          leadAttorneyId: testUserId
+          leadAttorneyId: testUserId,
+        createdAt: new Date(),
+        updatedAt: new Date()
         } as any
       ]);
 
@@ -384,11 +393,13 @@ describe('Role Tracking Channel Permissions Integration', () => {
 
       // Setup existing staff
       mockStaffRepo.findByUserId.mockResolvedValue({
-        _id: 'staff_123',
+        _id: new ObjectId(),
         userId: testUserId,
         role: StaffRole.JUNIOR_ASSOCIATE,
-        status: 'active',
-        promotionHistory: []
+        status: RetainerStatus.ACTIVE,
+        promotionHistory: [],
+        createdAt: new Date(),
+        updatedAt: new Date()
       } as any);
 
       // Initialize role tracking
@@ -484,12 +495,12 @@ describe('Role Tracking Channel Permissions Integration', () => {
         {
           userId: 'user_1',
           role: StaffRole.MANAGING_PARTNER,
-          status: 'active'
+          status: RetainerStatus.ACTIVE
         },
         {
           userId: 'user_2',
           role: StaffRole.PARALEGAL,
-          status: 'active'
+          status: RetainerStatus.ACTIVE
         }
       ] as any[]);
 

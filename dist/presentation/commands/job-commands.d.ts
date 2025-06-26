@@ -1,6 +1,7 @@
 import { CommandInteraction, ButtonInteraction, StringSelectMenuInteraction, ModalSubmitInteraction } from 'discord.js';
 import { StaffRole } from '../../domain/entities/staff-role';
-export declare class JobsCommands {
+import { BaseCommand } from './base-command';
+export declare class JobsCommands extends BaseCommand {
     private jobService;
     private questionService;
     private cleanupService;

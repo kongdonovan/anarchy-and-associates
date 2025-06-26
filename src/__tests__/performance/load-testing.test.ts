@@ -10,6 +10,7 @@ import { StaffRole } from '../../domain/entities/staff-role';
 import { CasePriority, CaseStatus } from '../../domain/entities/case';
 import { TestUtils } from '../helpers/test-utils';
 import { DatabaseTestHelpers } from '../helpers/database-helpers';
+import { CaseStatus, CasePriority } from '../../domain/entities/case';
 
 /**
  * Performance and Load Testing
@@ -83,7 +84,7 @@ describe('Performance and Load Testing', () => {
       clientRoleId: undefined,
       permissions: {
         admin: [],
-        hr: [],
+        'senior-staff': [],
         case: [],
         config: [],
         retainer: [],
@@ -102,7 +103,7 @@ describe('Performance and Load Testing', () => {
     it('should complete staff hiring within performance threshold', async () => {
       const startTime = Date.now();
 
-      const result = await staffService.hireStaff({
+      const result = await this.staffService.hireStaff(context, {
         guildId: testGuildId,
         userId: 'perf-test-user',
         hiredBy: adminUserId,
@@ -120,7 +121,7 @@ describe('Performance and Load Testing', () => {
     it('should complete case creation within performance threshold', async () => {
       const startTime = Date.now();
 
-      const testCase = await caseService.createCase({
+      const testCase = await this.caseService.createCase(context, {
         guildId: testGuildId,
         clientId: 'perf-test-client',
         clientUsername: 'perftestclient',
@@ -138,7 +139,7 @@ describe('Performance and Load Testing', () => {
 
     it('should complete staff promotion within performance threshold', async () => {
       // Setup: hire staff first
-      await staffService.hireStaff({
+      await this.staffService.hireStaff(context, {
         guildId: testGuildId,
         userId: 'promotion-perf-test',
         hiredBy: adminUserId,
@@ -148,7 +149,7 @@ describe('Performance and Load Testing', () => {
 
       const startTime = Date.now();
 
-      const result = await staffService.promoteStaff({
+      const result = await this.staffService.promoteStaff(context, {
         guildId: testGuildId,
         userId: 'promotion-perf-test',
         promotedBy: adminUserId,
@@ -370,7 +371,7 @@ describe('Performance and Load Testing', () => {
       const startTime = Date.now();
 
       // Setup some data first
-      await staffService.hireStaff({
+      await this.staffService.hireStaff(context, {
         guildId: testGuildId,
         userId: 'concurrent-read-test',
         hiredBy: adminUserId,

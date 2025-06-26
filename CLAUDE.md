@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+Read the initial instructions and all saved serena memories.
+
 ## Development Commands
 
 ### Building and Development
@@ -20,6 +22,7 @@ npm run type-check
 ```
 
 ### Testing
+When testing, opt to run individual tests or test files instead of entire suites for speed.
 ```bash
 # Run all tests
 npm test

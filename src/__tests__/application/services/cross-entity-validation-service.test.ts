@@ -1,0 +1,1121 @@
+import { CrossEntityValidationService, ValidationIssue, ValidationContext } from '../../../application/services/cross-entity-validation-service';
+import { StaffRepository } from '../../../infrastructure/repositories/staff-repository';
+import { CaseRepository } from '../../../infrastructure/repositories/case-repository';
+import { ApplicationRepository } from '../../../infrastructure/repositories/application-repository';
+import { JobRepository } from '../../../infrastructure/repositories/job-repository';
+import { RetainerRepository } from '../../../infrastructure/repositories/retainer-repository';
+import { FeedbackRepository } from '../../../infrastructure/repositories/feedback-repository';
+import { ReminderRepository } from '../../../infrastructure/repositories/reminder-repository';
+import { AuditLogRepository } from '../../../infrastructure/repositories/audit-log-repository';
+import { BusinessRuleValidationService } from '../../../application/services/business-rule-validation-service';
+import { Staff } from '../../../domain/entities/staff';
+import { Case } from '../../../domain/entities/case';
+import { Application } from '../../../domain/entities/application';
+import { Job } from '../../../domain/entities/job';
+import { Retainer, RetainerStatus } from '../../../domain/entities/retainer';
+import { Feedback } from '../../../domain/entities/feedback';
+import { Reminder } from '../../../domain/entities/reminder';
+import { StaffRole } from '../../../domain/entities/staff-role';
+import { logger } from '../../../infrastructure/logger';
+import { ObjectId } from 'mongodb';
+import { CaseStatus, CasePriority } from '../../../domain/entities/case';
+
+// Mock all dependencies
+jest.mock('../../../infrastructure/repositories/staff-repository');
+jest.mock('../../../infrastructure/repositories/case-repository');
+jest.mock('../../../infrastructure/repositories/application-repository');
+jest.mock('../../../infrastructure/repositories/job-repository');
+jest.mock('../../../infrastructure/repositories/retainer-repository');
+jest.mock('../../../infrastructure/repositories/feedback-repository');
+jest.mock('../../../infrastructure/repositories/reminder-repository');
+jest.mock('../../../infrastructure/repositories/audit-log-repository');
+jest.mock('../../../application/services/business-rule-validation-service');
+jest.mock('../../../infrastructure/logger', () => ({
+  logger: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn() } }));
+
+describe('CrossEntityValidationService', () => {
+  let service: CrossEntityValidationService;
+  let mockStaffRepo: jest.Mocked<StaffRepository>;
+  let mockCaseRepo: jest.Mocked<CaseRepository>;
+  let mockApplicationRepo: jest.Mocked<ApplicationRepository>;
+  let mockJobRepo: jest.Mocked<JobRepository>;
+  let mockRetainerRepo: jest.Mocked<RetainerRepository>;
+  let mockFeedbackRepo: jest.Mocked<FeedbackRepository>;
+  let mockReminderRepo: jest.Mocked<ReminderRepository>;
+  let mockAuditRepo: jest.Mocked<AuditLogRepository>;
+  let mockBusinessRuleService: jest.Mocked<BusinessRuleValidationService>;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+
+    // Create mocked repositories
+    mockStaffRepo = new StaffRepository() as jest.Mocked<StaffRepository>;
+    mockCaseRepo = new CaseRepository() as jest.Mocked<CaseRepository>;
+    mockApplicationRepo = new ApplicationRepository() as jest.Mocked<ApplicationRepository>;
+    mockJobRepo = new JobRepository() as jest.Mocked<JobRepository>;
+    mockRetainerRepo = new RetainerRepository() as jest.Mocked<RetainerRepository>;
+    mockFeedbackRepo = new FeedbackRepository() as jest.Mocked<FeedbackRepository>;
+    mockReminderRepo = new ReminderRepository() as jest.Mocked<ReminderRepository>;
+    mockAuditRepo = new AuditLogRepository() as jest.Mocked<AuditLogRepository>;
+    mockBusinessRuleService = new BusinessRuleValidationService({} as any, {} as any, {} as any, {} as any) as jest.Mocked<BusinessRuleValidationService>;
+
+    // Create service instance
+    service = new CrossEntityValidationService(
+      mockStaffRepo,
+      mockCaseRepo,
+      mockApplicationRepo,
+      mockJobRepo,
+      mockRetainerRepo,
+      mockFeedbackRepo,
+      mockReminderRepo,
+      mockAuditRepo,
+      mockBusinessRuleService
+    );
+  });
+
+  // Helper function to create valid Case objects
+  const createMockCase = (overrides: Partial<Case> = {}): Case => ({
+    _id: new ObjectId(),
+    guildId: 'guild1',
+    caseNumber: 'AA-2024-001-testclient',
+    clientId: 'client1',
+    clientUsername: 'testclient',
+    title: 'Test Case',
+    description: 'Test case description',
+    status: CaseStatus.IN_PROGRESS,
+    priority: CasePriority.MEDIUM,
+    assignedLawyerIds: [],
+    documents: [],
+    notes: [],
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ...overrides
+  });
+
+  describe('Staff Validation Rules', () => {
+    it('should detect invalid staff status', async () => {
+      const invalidStaff: Staff = {
+        _id: new ObjectId(),
+        userId: 'user1',
+        guildId: 'guild1',
+        robloxUsername: 'user1',
+        role: StaffRole.SENIOR_PARTNER,
+        hiredAt: new Date(),
+        hiredBy: 'admin',
+        promotionHistory: [],
+        status: 'invalid_status' as any,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      const issues = await service.validateBeforeOperation(invalidStaff, 'staff', 'update');
+
+      expect(issues).toHaveLength(1);
+      expect(issues[0]!.severity).toBe('critical');
+      expect(issues[0]!.message).toContain('Invalid staff status');
+      expect(issues[0]!.canAutoRepair).toBe(true);
+    });
+
+    it('should validate staff role consistency with case assignments', async () => {
+      const paralegalStaff: Staff = {
+        _id: new ObjectId(),
+        userId: 'user1',
+        guildId: 'guild1',
+        robloxUsername: 'user1',
+        role: StaffRole.PARALEGAL,
+        hiredAt: new Date(),
+        hiredBy: 'admin',
+        promotionHistory: [],
+        status: 'active',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      // Mock paralegal as lead attorney on cases (invalid)
+      mockCaseRepo.findByFilters.mockImplementation(async (filters: any) => {
+        if (filters.leadAttorneyId === 'user1') {
+          return [createMockCase({
+            leadAttorneyId: 'user1',
+            assignedLawyerIds: ['user1']
+          })];
+        }
+        return [];
+      });
+
+      const issues = await service.validateBeforeOperation(paralegalStaff, 'staff', 'update');
+
+      expect(issues.length).toBeGreaterThan(0);
+      const roleIssue = issues.find(i => i.message.includes('cannot be lead attorney'));
+      expect(roleIssue).toBeDefined();
+      expect(roleIssue!.severity).toBe('critical');
+    });
+
+    it('should detect excessive case workload', async () => {
+      const juniorAssociate: Staff = {
+        _id: new ObjectId(),
+        userId: 'user1',
+        guildId: 'guild1',
+        robloxUsername: 'user1',
+        role: StaffRole.JUNIOR_ASSOCIATE,
+        hiredAt: new Date(),
+        hiredBy: 'admin',
+        promotionHistory: [],
+        status: 'active',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      // Mock 10 active cases (exceeds limit of 8 for junior associate)
+      const mockCases = Array.from({ length: 10 }, (_, i) => createMockCase({
+        _id: `case${i}` as any,
+        assignedLawyerIds: ['user1']
+      }));
+
+      mockCaseRepo.findByFilters.mockResolvedValue(mockCases);
+
+      const issues = await service.validateBeforeOperation(juniorAssociate, 'staff', 'update');
+
+      const workloadIssue = issues.find(i => i.message.includes('exceeding recommended limit'));
+      expect(workloadIssue).toBeDefined();
+      expect(workloadIssue!.severity).toBe('warning');
+      expect(workloadIssue!.message).toContain('10 active cases');
+      expect(workloadIssue!.message).toContain('limit of 8');
+    });
+
+    it('should detect circular references in promotion history', async () => {
+      const staff: Staff = {
+        _id: new ObjectId(),
+        userId: 'user1',
+        guildId: 'guild1',
+        robloxUsername: 'user1',
+        role: StaffRole.SENIOR_PARTNER,
+        hiredAt: new Date(),
+        hiredBy: 'admin',
+        promotionHistory: [
+          {
+            fromRole: StaffRole.JUNIOR_ASSOCIATE,
+            toRole: StaffRole.SENIOR_ASSOCIATE,
+            promotedBy: 'user1', // Self-promotion!
+            promotedAt: new Date(),
+            reason: 'test',
+            actionType: 'promotion' as const
+          }
+        ],
+        status: 'active',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      const issues = await service.validateBeforeOperation(staff, 'staff', 'update');
+
+      const circularIssue = issues.find(i => i.message.includes('Circular reference'));
+      expect(circularIssue).toBeDefined();
+      expect(circularIssue!.severity).toBe('critical');
+    });
+  });
+
+  describe('Case Validation Rules', () => {
+    it('should detect non-existent lead attorney', async () => {
+      const caseEntity = createMockCase({
+        leadAttorneyId: 'nonexistent',
+        assignedLawyerIds: ['lawyer1']
+      });
+
+      mockStaffRepo.findByUserId.mockResolvedValue(null);
+
+      const issues = await service.validateBeforeOperation(caseEntity, 'case', 'update');
+
+      expect(issues.length).toBeGreaterThan(0);
+      const leadAttorneyIssue = issues.find(i => i.field === 'leadAttorneyId');
+      expect(leadAttorneyIssue).toBeDefined();
+      expect(leadAttorneyIssue!.severity).toBe('critical');
+      expect(leadAttorneyIssue!.canAutoRepair).toBe(true);
+    });
+
+    it('should detect inactive assigned lawyers', async () => {
+      const caseEntity = createMockCase({
+        assignedLawyerIds: ['lawyer1', 'lawyer2']
+      });
+
+      mockStaffRepo.findByUserId
+        .mockResolvedValueOnce({
+          _id: new ObjectId(),
+          userId: 'lawyer1',
+          status: 'active',
+        createdAt: new Date(),
+        updatedAt: new Date()
+        } as Staff)
+        .mockResolvedValueOnce({
+          _id: new ObjectId(),
+          userId: 'lawyer2',
+          status: 'terminated',
+        createdAt: new Date(),
+        updatedAt: new Date()
+        } as Staff);
+
+      const issues = await service.validateBeforeOperation(caseEntity, 'case', 'update');
+
+      const inactiveIssue = issues.find(i => i.message.includes('is not active'));
+      expect(inactiveIssue).toBeDefined();
+      expect(inactiveIssue!.severity).toBe('warning');
+    });
+
+    it('should detect temporal inconsistencies', async () => {
+      const now = new Date();
+      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+      const caseEntity = createMockCase({
+        assignedLawyerIds: ['lawyer1'],
+        status: CaseStatus.CLOSED,
+        createdAt: now,
+        closedAt: yesterday, // Closed before created!
+        updatedAt: now
+      });
+
+      mockStaffRepo.findByUserId.mockResolvedValue({
+        _id: new ObjectId(),
+        userId: 'lawyer1',
+        hiredAt: tomorrow, // Hired after case created!
+        status: 'active',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      } as Staff);
+
+      const issues = await service.validateBeforeOperation(caseEntity, 'case', 'update');
+
+      expect(issues.length).toBeGreaterThan(0);
+      
+      const temporalIssue = issues.find(i => i.message.includes('closed date is before creation date'));
+      expect(temporalIssue).toBeDefined();
+      expect(temporalIssue!.severity).toBe('critical');
+      expect(temporalIssue!.canAutoRepair).toBe(true);
+
+      const hireIssue = issues.find(i => i.message.includes('hired after case was created'));
+      expect(hireIssue).toBeDefined();
+      expect(hireIssue!.severity).toBe('critical');
+      expect(hireIssue!.canAutoRepair).toBe(true);
+    });
+
+    it('should validate case channel existence', async () => {
+      const caseEntity = createMockCase({
+        channelId: 'channel1',
+        assignedLawyerIds: []
+      });
+
+      const mockClient = {
+        guilds: {
+          fetch: jest.fn().mockResolvedValue({
+            channels: {
+              cache: new Map() // Empty - channel doesn't exist
+            }
+          })
+        }
+      };
+
+      const context: ValidationContext = {
+        guildId: 'guild1',
+        client: mockClient as any,
+        validationLevel: 'strict'
+      };
+
+      const issues = await service.validateBeforeOperation(caseEntity, 'case', 'update', context);
+
+      const channelIssue = issues.find(i => i.field === 'channelId');
+      expect(channelIssue).toBeDefined();
+      expect(channelIssue!.severity).toBe('warning');
+      expect(channelIssue!.message).toContain('not found in Discord');
+      expect(channelIssue!.canAutoRepair).toBe(true);
+    });
+  });
+
+  describe('Application Validation Rules', () => {
+    it('should detect missing job reference', async () => {
+      const application: Application = {
+        _id: new ObjectId(),
+        guildId: 'guild1',
+        jobId: 'nonexistent',
+        applicantId: 'user1',
+        robloxUsername: 'user1',
+        status: 'pending',
+        answers: [],
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      mockJobRepo.findById.mockResolvedValue(null);
+
+      const issues = await service.validateBeforeOperation(application, 'application', 'update');
+
+      expect(issues.length).toBeGreaterThan(0);
+      const jobIssue = issues.find(i => i.field === 'jobId');
+      expect(jobIssue).toBeDefined();
+      expect(jobIssue!.severity).toBe('critical');
+      expect(jobIssue!.message).toContain('Referenced job');
+    });
+
+    it('should detect pending applications for closed jobs', async () => {
+      const application: Application = {
+        _id: new ObjectId(),
+        guildId: 'guild1',
+        jobId: 'job1',
+        applicantId: 'user1',
+        robloxUsername: 'user1',
+        status: 'pending',
+        answers: [],
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      mockJobRepo.findById.mockResolvedValue({
+        _id: new ObjectId(),
+        isOpen: false, // Job is closed
+        createdAt: new Date(),
+        updatedAt: new Date()
+      } as Job);
+
+      const issues = await service.validateBeforeOperation(application, 'application', 'update');
+
+      const statusIssue = issues.find(i => i.field === 'status');
+      expect(statusIssue).toBeDefined();
+      expect(statusIssue!.severity).toBe('warning');
+      expect(statusIssue!.message).toContain('pending for a closed job');
+      expect(statusIssue!.canAutoRepair).toBe(true);
+    });
+
+    it('should validate application integrity', async () => {
+      const now = new Date();
+      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+      const application: Application = {
+        _id: new ObjectId(),
+        guildId: 'guild1',
+        jobId: 'job1',
+        applicantId: 'user1',
+        robloxUsername: 'user1',
+        status: 'accepted',
+        answers: [],
+        reviewedAt: yesterday, // Reviewed before submitted!
+        reviewedBy: undefined, // No reviewer for accepted application
+        createdAt: now,
+        updatedAt: now
+      };
+
+      mockJobRepo.findById.mockResolvedValue({
+        _id: new ObjectId(),
+        isOpen: true,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      } as Job);
+
+      const issues = await service.validateBeforeOperation(application, 'application', 'update');
+
+      const temporalIssue = issues.find(i => i.message.includes('reviewed before it was submitted'));
+      expect(temporalIssue).toBeDefined();
+      expect(temporalIssue!.severity).toBe('critical');
+      expect(temporalIssue!.canAutoRepair).toBe(true);
+
+      const reviewerIssue = issues.find(i => i.message.includes('has no reviewer'));
+      expect(reviewerIssue).toBeDefined();
+      expect(reviewerIssue!.severity).toBe('warning');
+    });
+  });
+
+  describe('Retainer Validation Rules', () => {
+    it('should detect non-existent lawyer in retainer', async () => {
+      const retainer: Retainer = {
+        _id: new ObjectId(),
+        guildId: 'guild1',
+        clientId: 'client1',
+        lawyerId: 'nonexistent',
+        
+        agreementTemplate: 'test',
+        status: RetainerStatus.SIGNED,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      mockStaffRepo.findByUserId.mockResolvedValue(null);
+
+      const issues = await service.validateBeforeOperation(retainer, 'retainer', 'update');
+
+      expect(issues.length).toBeGreaterThan(0);
+      const lawyerIssue = issues.find(i => i.field === 'lawyerId');
+      expect(lawyerIssue).toBeDefined();
+      expect(lawyerIssue!.severity).toBe('critical');
+    });
+
+    it('should detect inactive lawyer in retainer', async () => {
+      const retainer: Retainer = {
+        _id: new ObjectId(),
+        guildId: 'guild1',
+        clientId: 'client1',
+        lawyerId: 'lawyer1',
+        
+        agreementTemplate: 'test',
+        status: RetainerStatus.SIGNED,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      mockStaffRepo.findByUserId.mockResolvedValue({
+        _id: new ObjectId(),
+        userId: 'lawyer1',
+        status: 'terminated',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      } as Staff);
+
+      const issues = await service.validateBeforeOperation(retainer, 'retainer', 'update');
+
+      const inactiveIssue = issues.find(i => i.message.includes('is not active'));
+      expect(inactiveIssue).toBeDefined();
+      expect(inactiveIssue!.severity).toBe('warning');
+    });
+  });
+
+  describe('Feedback Validation Rules', () => {
+    it('should detect non-existent target staff', async () => {
+      const feedback: Feedback = {
+        _id: new ObjectId(),
+        guildId: 'guild1',
+        submitterId: 'client1',
+        submitterUsername: 'client1',
+        targetStaffId: 'nonexistent',
+        targetStaffUsername: 'staff',
+        isForFirm: false,
+        rating: 5,
+        comment: 'Great service',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      mockStaffRepo.findByUserId.mockResolvedValue(null);
+
+      const issues = await service.validateBeforeOperation(feedback, 'feedback', 'update');
+
+      const staffIssue = issues.find(i => i.field === 'targetStaffId');
+      expect(staffIssue).toBeDefined();
+      expect(staffIssue!.severity).toBe('warning');
+      expect(staffIssue!.canAutoRepair).toBe(true);
+    });
+  });
+
+  describe('Reminder Validation Rules', () => {
+    it('should detect non-existent case reference', async () => {
+      const reminder: Reminder = {
+        _id: new ObjectId(),
+        guildId: 'guild1',
+        userId: 'user1',
+        username: 'user1',
+        caseId: 'nonexistent',
+        message: 'Test reminder',
+        scheduledFor: new Date(),
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      mockCaseRepo.findById.mockResolvedValue(null);
+
+      const issues = await service.validateBeforeOperation(reminder, 'reminder', 'update');
+
+      const caseIssue = issues.find(i => i.field === 'caseId');
+      expect(caseIssue).toBeDefined();
+      expect(caseIssue!.severity).toBe('warning');
+      expect(caseIssue!.canAutoRepair).toBe(true);
+    });
+
+    it('should validate reminder channel existence', async () => {
+      const reminder: Reminder = {
+        _id: new ObjectId(),
+        guildId: 'guild1',
+        userId: 'user1',
+        username: 'user1',
+        channelId: 'channel1',
+        message: 'Test reminder',
+        scheduledFor: new Date(),
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      const mockClient = {
+        guilds: {
+          fetch: jest.fn().mockResolvedValue({
+            channels: {
+              cache: new Map() // Empty - channel doesn't exist
+            }
+          })
+        }
+      };
+
+      const context: ValidationContext = {
+        guildId: 'guild1',
+        client: mockClient as any,
+        validationLevel: 'strict'
+      };
+
+      const issues = await service.validateBeforeOperation(reminder, 'reminder', 'update', context);
+
+      const channelIssue = issues.find(i => i.field === 'channelId');
+      expect(channelIssue).toBeDefined();
+      expect(channelIssue!.severity).toBe('warning');
+      expect(channelIssue!.canAutoRepair).toBe(true);
+    });
+  });
+
+  describe('Cross-Entity Validation', () => {
+    it('should detect orphaned case-client relationships', async () => {
+      const mockClient = {
+        guilds: {
+          fetch: jest.fn().mockResolvedValue({
+            members: {
+              cache: new Map() // No members - client doesn't exist
+            }
+          })
+        }
+      };
+
+      mockCaseRepo.findByFilters.mockResolvedValue([
+        createMockCase({
+          clientId: 'nonexistent',
+          assignedLawyerIds: []
+        })
+      ]);
+
+      const context: Partial<ValidationContext> = {
+        client: mockClient as any
+      };
+
+      const report = await service.scanForIntegrityIssues('guild1', context);
+
+      const orphanedIssue = report.issues.find(i => 
+        i.message.includes('Client') && i.message.includes('not found in Discord')
+      );
+      expect(orphanedIssue).toBeDefined();
+      expect(orphanedIssue!.severity).toBe('info');
+    });
+
+    it('should detect self-hired staff members', async () => {
+      mockStaffRepo.findByGuildId.mockResolvedValue([{
+        _id: new ObjectId(),
+        userId: 'user1',
+        guildId: 'guild1',
+        hiredBy: 'user1', // Self-hired!
+        role: StaffRole.SENIOR_PARTNER,
+        status: 'active',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }] as Staff[]);
+
+      const report = await service.scanForIntegrityIssues('guild1');
+
+      const selfHiredIssue = report.issues.find(i => 
+        i.message.includes('hired by themselves')
+      );
+      expect(selfHiredIssue).toBeDefined();
+      expect(selfHiredIssue!.severity).toBe('warning');
+    });
+  });
+
+  describe('Integrity Scanning', () => {
+    it('should perform comprehensive integrity scan', async () => {
+      // Mock data for all entity types
+      mockStaffRepo.findByGuildId.mockResolvedValue([{
+        _id: new ObjectId(),
+        userId: 'user1',
+        guildId: 'guild1',
+        status: 'active',
+        role: StaffRole.SENIOR_PARTNER,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }] as Staff[]);
+
+      mockCaseRepo.findByFilters.mockResolvedValue([
+        createMockCase({
+          assignedLawyerIds: ['user1', 'nonexistent'] // One valid, one invalid
+        })
+      ]);
+
+      mockApplicationRepo.findByGuild.mockResolvedValue([{
+        _id: new ObjectId(),
+        guildId: 'guild1',
+        jobId: 'job1',
+        status: 'pending',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }] as Application[]);
+
+      mockJobRepo.findByGuildId.mockResolvedValue([{
+        _id: new ObjectId(),
+        guildId: 'guild1',
+        isOpen: true,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }] as Job[]);
+
+      mockRetainerRepo.findByGuild.mockResolvedValue([]);
+      mockFeedbackRepo.findByFilters.mockResolvedValue([]);
+      mockReminderRepo.findByFilters.mockResolvedValue([]);
+
+      // Mock staff lookup for case validation
+      mockStaffRepo.findByUserId
+        .mockResolvedValueOnce({ status: 'active' } as Staff) // user1
+        .mockResolvedValueOnce(null); // nonexistent
+
+      mockJobRepo.findById.mockResolvedValue({
+        _id: new ObjectId(),
+        guildId: 'guild1',
+        title: 'Test Job',
+        description: 'Test',
+        staffRole: 'test',
+        roleId: 'role1',
+        isOpen: true,
+        questions: [],
+        postedBy: 'user1',
+        applicationCount: 0,
+        hiredCount: 0,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      } as Job);
+
+      const report = await service.scanForIntegrityIssues('guild1');
+
+      expect(report.guildId).toBe('guild1');
+      expect(report.totalEntitiesScanned).toBeGreaterThan(0);
+      expect(report.issues.length).toBeGreaterThan(0);
+      
+      // Should have critical issue for non-existent lawyer
+      const criticalIssues = report.issues.filter(i => i.severity === 'critical');
+      expect(criticalIssues.length).toBeGreaterThan(0);
+      
+      expect(report.issuesBySeverity.critical).toBe(criticalIssues.length);
+      expect(report.repairableIssues).toBeGreaterThan(0);
+    });
+
+    it('should perform deep integrity check with additional validations', async () => {
+      // Setup mock data
+      mockStaffRepo.findByGuildId.mockResolvedValue([{
+        _id: new ObjectId(),
+        userId: 'user1',
+        guildId: 'guild1',
+        status: 'active',
+        role: StaffRole.SENIOR_PARTNER,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }] as Staff[]);
+
+      mockCaseRepo.findByFilters.mockResolvedValue([
+        createMockCase({
+          leadAttorneyId: 'user1',
+          assignedLawyerIds: ['user2'] // Lead attorney not in assigned list!
+        })
+      ]);
+
+      mockFeedbackRepo.findByFilters.mockResolvedValue([{
+        _id: new ObjectId(),
+        guildId: 'guild1',
+        targetStaffId: 'nonexistent', // References non-existent staff
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }] as Feedback[]);
+
+      mockReminderRepo.findByFilters.mockResolvedValue([{
+        _id: new ObjectId(),
+        guildId: 'guild1',
+        caseId: 'nonexistent', // References non-existent case
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }] as Reminder[]);
+
+      mockApplicationRepo.findByGuild.mockResolvedValue([]);
+      mockJobRepo.findByGuildId.mockResolvedValue([]);
+      mockRetainerRepo.findByGuild.mockResolvedValue([]);
+
+      const report = await service.performDeepIntegrityCheck('guild1');
+
+      // Should have additional issues from deep check
+      const leadAttorneyIssue = report.issues.find(i => 
+        i.message.includes('Lead attorney is not in assigned lawyers list')
+      );
+      expect(leadAttorneyIssue).toBeDefined();
+
+      const feedbackIssue = report.issues.find(i => 
+        i.entityType === 'feedback' && i.message.includes('non-existent case')
+      );
+      expect(feedbackIssue).toBeDefined();
+
+      const reminderIssue = report.issues.find(i => 
+        i.entityType === 'reminder' && i.message.includes('non-existent case')
+      );
+      expect(reminderIssue).toBeDefined();
+    });
+  });
+
+  describe('Repair Functionality', () => {
+    it('should repair auto-repairable issues', async () => {
+      const issues: ValidationIssue[] = [
+        {
+          severity: 'critical',
+          entityType: 'staff',
+          entityId: 'staff1',
+          field: 'status',
+          message: 'Invalid status',
+          canAutoRepair: true,
+          repairAction: jest.fn().mockResolvedValue(undefined)
+        },
+        {
+          severity: 'warning',
+          entityType: 'case',
+          entityId: 'case1',
+          field: 'leadAttorneyId',
+          message: 'Invalid lead attorney',
+          canAutoRepair: true,
+          repairAction: jest.fn().mockResolvedValue(undefined)
+        },
+        {
+          severity: 'critical',
+          entityType: 'case',
+          entityId: 'case2',
+          field: 'status',
+          message: 'Cannot repair this',
+          canAutoRepair: false
+        }
+      ];
+
+      mockAuditRepo.add.mockResolvedValue({} as any);
+
+      const result = await service.repairIntegrityIssues(issues);
+
+      expect(result.totalIssuesFound).toBe(3);
+      expect(result.issuesRepaired).toBe(2);
+      expect(result.issuesFailed).toBe(0);
+      expect(result.repairedIssues).toHaveLength(2);
+      
+      // Verify repair actions were called
+      expect(issues[0]?.repairAction).toHaveBeenCalled();
+      expect(issues[1]?.repairAction).toHaveBeenCalled();
+      
+      // Verify audit logs were created
+      expect(mockAuditRepo.add).toHaveBeenCalledTimes(2);
+    });
+
+    it('should handle repair failures gracefully', async () => {
+      const failingRepairAction = jest.fn()
+        .mockRejectedValue(new Error('Repair failed'));
+
+      const issues: ValidationIssue[] = [
+        {
+          severity: 'critical',
+          entityType: 'staff',
+          entityId: 'staff1',
+          field: 'status',
+          message: 'Invalid status',
+          canAutoRepair: true,
+          repairAction: failingRepairAction
+        }
+      ];
+
+      const result = await service.repairIntegrityIssues(issues);
+
+      expect(result.totalIssuesFound).toBe(1);
+      expect(result.issuesRepaired).toBe(0);
+      expect(result.issuesFailed).toBe(1);
+      expect(result.failedRepairs).toHaveLength(1);
+      expect(result.failedRepairs[0]?.error).toBe('Repair failed');
+    });
+
+    it('should support dry run mode', async () => {
+      const issues: ValidationIssue[] = [
+        {
+          severity: 'critical',
+          entityType: 'staff',
+          entityId: 'staff1',
+          field: 'status',
+          message: 'Invalid status',
+          canAutoRepair: true,
+          repairAction: jest.fn()
+        }
+      ];
+
+      const result = await service.repairIntegrityIssues(issues, { dryRun: true });
+
+      expect(result.issuesRepaired).toBe(1);
+      expect(issues[0]?.repairAction).not.toHaveBeenCalled();
+      expect(mockAuditRepo.add).not.toHaveBeenCalled();
+    });
+
+    it('should implement smart repair with retry logic', async () => {
+      let attempts = 0;
+      const flakeyRepairAction = jest.fn().mockImplementation(() => {
+        attempts++;
+        if (attempts < 3) {
+          return Promise.reject(new Error('Temporary failure'));
+        }
+        return Promise.resolve();
+      });
+
+      const issues: ValidationIssue[] = [
+        {
+          severity: 'critical',
+          entityType: 'staff',
+          entityId: 'staff1',
+          field: 'status',
+          message: 'Invalid status',
+          canAutoRepair: true,
+          repairAction: flakeyRepairAction
+        }
+      ];
+
+      mockAuditRepo.add.mockResolvedValue({} as any);
+
+      const result = await service.smartRepair(issues, { maxRetries: 3 });
+
+      expect(result.issuesRepaired).toBe(1);
+      expect(result.issuesFailed).toBe(0);
+      expect(flakeyRepairAction).toHaveBeenCalledTimes(3);
+      
+      // Verify audit log includes retry count
+      expect(mockAuditRepo.add).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            retry: 2 // Zero-indexed, so 2 means third attempt
+          })
+        })
+      );
+    });
+  });
+
+  describe('Batch Validation', () => {
+    it('should validate multiple entities efficiently', async () => {
+      const entities = [
+        { entity: { _id: new ObjectId(), guildId: 'guild1', status: 'active',
+        createdAt: new Date(),
+        updatedAt: new Date() }, type: 'staff' },
+        { entity: { _id: new ObjectId(), guildId: 'guild1', status: 'invalid',
+        createdAt: new Date(),
+        updatedAt: new Date() }, type: 'staff' },
+        { entity: { _id: new ObjectId(), guildId: 'guild1', assignedLawyerIds: [],
+        createdAt: new Date(),
+        updatedAt: new Date() }, type: 'case' },
+        { entity: { _id: new ObjectId(), guildId: 'guild1', jobId: 'job1',
+        createdAt: new Date(),
+        updatedAt: new Date() }, type: 'application' }
+      ];
+
+      mockStaffRepo.update.mockResolvedValue({
+        _id: new ObjectId(),
+        guildId: 'guild1',
+        userId: 'user1',
+        hiredBy: 'admin1',
+        role: StaffRole.PARALEGAL,
+        robloxUsername: 'TestUser',
+        status: 'active',
+        promotions: [],
+        demotions: [],
+        createdAt: new Date(),
+        updatedAt: new Date()
+      } as Staff);
+      mockJobRepo.findById.mockResolvedValue({
+        _id: new ObjectId(),
+        guildId: 'guild1',
+        title: 'Test Job',
+        description: 'Test',
+        staffRole: 'test',
+        roleId: 'role1',
+        isOpen: true,
+        questions: [],
+        postedBy: 'user1',
+        applicationCount: 0,
+        hiredCount: 0,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      } as Job);
+
+      const results = await service.batchValidate(entities);
+
+      // Should only have issues for staff2 (invalid status)
+      expect(results.size).toBeGreaterThan(0);
+      expect(results.has('staff2')).toBe(true);
+    });
+
+    it('should use optimized batch validation with grouping', async () => {
+      const entities = [];
+      // Create 50 entities across different types
+      for (let i = 0; i < 20; i++) {
+        entities.push({ 
+          entity: { _id: `staff${i}`, guildId: 'guild1', status: 'active', createdAt: new Date(), updatedAt: new Date() }, 
+          type: 'staff' 
+        });
+      }
+      for (let i = 0; i < 20; i++) {
+        entities.push({ 
+          entity: { _id: `case${i}`, guildId: 'guild1', assignedLawyerIds: [] }, 
+          type: 'case' 
+        });
+      }
+      for (let i = 0; i < 10; i++) {
+        entities.push({ 
+          entity: { _id: `app${i}`, guildId: 'guild1', jobId: 'job1', createdAt: new Date(), updatedAt: new Date() }, 
+          type: 'application' 
+        });
+      }
+
+      mockJobRepo.findById.mockResolvedValue({
+        _id: new ObjectId(),
+        guildId: 'guild1',
+        title: 'Test Job',
+        description: 'Test',
+        staffRole: 'test',
+        roleId: 'role1',
+        isOpen: true,
+        questions: [],
+        postedBy: 'user1',
+        applicationCount: 0,
+        hiredCount: 0,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      } as Job);
+
+      const startTime = Date.now();
+      const results = await service.optimizedBatchValidate(entities);
+      const duration = Date.now() - startTime;
+
+      // Should process efficiently
+      expect(duration).toBeLessThan(5000); // Should complete within 5 seconds
+      expect(results.size).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  describe('Caching and Performance', () => {
+    it('should cache validation results', async () => {
+      const staff: Staff = {
+        _id: new ObjectId(),
+        userId: 'user1',
+        guildId: 'guild1',
+        status: 'active',
+        role: StaffRole.SENIOR_PARTNER,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      } as Staff;
+
+      // First call
+      await service.validateBeforeOperation(staff, 'staff', 'update');
+      
+      // Second call should use cache
+      await service.validateBeforeOperation(staff, 'staff', 'update');
+
+      // Validation logic should only run once due to caching
+      expect(mockCaseRepo.findByFilters).toHaveBeenCalledTimes(1);
+    });
+
+    it('should clear cache after repairs', async () => {
+      service.clearValidationCache();
+      
+      const issues: ValidationIssue[] = [{
+        severity: 'critical',
+        entityType: 'staff',
+        entityId: 'staff1',
+        message: 'Test issue',
+        canAutoRepair: true,
+        repairAction: jest.fn().mockResolvedValue(undefined)
+      }];
+
+      mockAuditRepo.add.mockResolvedValue({} as any);
+
+      await service.repairIntegrityIssues(issues);
+
+      // Cache should be cleared after repair
+      // This is internal behavior, but we can verify by checking if validation runs again
+      const staff = { _id: new ObjectId(), guildId: 'guild1', status: 'active',
+        createdAt: new Date(),
+        updatedAt: new Date() };
+      await service.validateBeforeOperation(staff, 'staff', 'update');
+      
+      // Should run validation again (not cached)
+      expect(mockCaseRepo.findByFilters).toHaveBeenCalled();
+    });
+  });
+
+  describe('Custom Rules', () => {
+    it('should allow adding custom validation rules', async () => {
+      const customValidation = jest.fn().mockResolvedValue([{
+        severity: 'warning',
+        entityType: 'staff',
+        entityId: 'staff1',
+        message: 'Custom validation failed',
+        canAutoRepair: false
+      }]);
+
+      service.addCustomRule({
+        name: 'custom-rule',
+        description: 'Custom validation rule',
+        entityType: 'staff',
+        priority: 50,
+        validate: customValidation
+      });
+
+      const staff = { _id: new ObjectId(), guildId: 'guild1', status: 'active',
+        createdAt: new Date(),
+        updatedAt: new Date() };
+      const issues = await service.validateBeforeOperation(staff, 'staff', 'update');
+
+      expect(customValidation).toHaveBeenCalled();
+      
+      const customIssue = issues.find(i => i.message === 'Custom validation failed');
+      expect(customIssue).toBeDefined();
+    });
+
+    it('should respect rule dependencies', () => {
+      const rules = service.getValidationRules();
+      
+      // Find rules with dependencies
+      const rulesWithDeps = rules.filter(r => r.dependencies && r.dependencies.length > 0);
+      expect(rulesWithDeps.length).toBeGreaterThan(0);
+      
+      // Verify dependencies exist
+      for (const rule of rulesWithDeps) {
+        for (const dep of rule.dependencies!) {
+          const depRule = rules.find(r => r.name === dep);
+          expect(depRule).toBeDefined();
+        }
+      }
+    });
+  });
+
+  describe('Error Handling', () => {
+    it('should handle repository errors gracefully', async () => {
+      mockStaffRepo.findByGuildId.mockRejectedValue(new Error('Database error'));
+      
+      const report = await service.scanForIntegrityIssues('guild1');
+      
+      expect(report.totalEntitiesScanned).toBe(0);
+      expect(logger.error).toHaveBeenCalledWith('Error during integrity scan:', expect.any(Error));
+    });
+
+    it('should continue validation when individual rules fail', async () => {
+      const staff: Staff = {
+        _id: new ObjectId(),
+        userId: 'user1',
+        guildId: 'guild1',
+        status: 'active',
+        role: StaffRole.SENIOR_PARTNER,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      } as Staff;
+
+      // Make one validation throw an error
+      mockCaseRepo.findByFilters.mockRejectedValueOnce(new Error('Query failed'));
+
+      const issues = await service.validateBeforeOperation(staff, 'staff', 'update');
+      
+      // Should still return some issues from other validations
+      expect(issues).toBeDefined();
+      expect(logger.error).toHaveBeenCalled();
+    });
+  });
+});

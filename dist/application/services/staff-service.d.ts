@@ -3,6 +3,7 @@ import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-
 import { Staff } from '../../domain/entities/staff';
 import { StaffRole } from '../../domain/entities/staff-role';
 import { PermissionService, PermissionContext } from './permission-service';
+import { BusinessRuleValidationService } from './business-rule-validation-service';
 export interface RobloxValidationResult {
     isValid: boolean;
     username: string;
@@ -34,7 +35,8 @@ export declare class StaffService {
     private staffRepository;
     private auditLogRepository;
     private permissionService;
-    constructor(staffRepository: StaffRepository, auditLogRepository: AuditLogRepository, permissionService: PermissionService);
+    private businessRuleValidationService;
+    constructor(staffRepository: StaffRepository, auditLogRepository: AuditLogRepository, permissionService: PermissionService, businessRuleValidationService: BusinessRuleValidationService);
     validateRobloxUsername(username: string): Promise<RobloxValidationResult>;
     hireStaff(context: PermissionContext, request: StaffHireRequest): Promise<{
         success: boolean;

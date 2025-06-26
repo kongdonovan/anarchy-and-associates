@@ -55,7 +55,7 @@ describe('Case Commands Permission Integration Tests', () => {
             clientRoleId: 'client-role-123',
             permissions: {
                 admin: ['admin-role-123'],
-                hr: ['hr-role-123'],
+                'senior-staff': ['hr-role-123'],
                 case: ['case-role-123'],
                 config: ['config-role-123'],
                 retainer: ['retainer-role-123'],
@@ -207,7 +207,7 @@ describe('Case Commands Permission Integration Tests', () => {
                 clientRoleId: 'client-role-123',
                 permissions: {
                     admin: ['admin-role-123'],
-                    hr: ['hr-role-123'],
+                    'senior-staff': ['hr-role-123'],
                     case: [], // Empty case permissions - the role won't be found here
                     config: ['config-role-123'],
                     retainer: ['retainer-role-123'],
@@ -229,7 +229,7 @@ describe('Case Commands Permission Integration Tests', () => {
             await guildConfigRepository.update(testGuildId, {
                 permissions: {
                     admin: [],
-                    hr: [],
+                    'senior-staff': [],
                     case: [],
                     config: [],
                     retainer: [],

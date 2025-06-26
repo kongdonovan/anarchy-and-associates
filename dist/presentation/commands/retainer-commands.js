@@ -48,7 +48,7 @@ let RetainerCommands = class RetainerCommands {
                 clientId,
                 lawyerId
             };
-            const retainer = await this.retainerService.createRetainer(request);
+            const retainer = await this.retainerService.createRetainer(context, request);
             // Send DM to client with retainer agreement
             await this.sendRetainerDM(retainer, client, interaction.user);
             // Confirm to lawyer
@@ -70,9 +70,10 @@ let RetainerCommands = class RetainerCommands {
         }
     }
     async listRetainers(interaction) {
+        const context = await this.getPermissionContext(interaction);
         try {
             const guildId = interaction.guildId;
-            const activeRetainers = await this.retainerService.getActiveRetainers(guildId);
+            const activeRetainers = await this.retainerService.getActiveRetainers(context, guildId);
             const pendingRetainers = await this.retainerService.getPendingRetainers(guildId);
             const stats = await this.retainerService.getRetainerStats(guildId);
             const embed = embed_utils_1.EmbedUtils.createAALegalEmbed({

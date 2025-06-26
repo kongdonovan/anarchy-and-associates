@@ -17,70 +17,52 @@ const discordx_1 = require("discordx");
 const discord_js_1 = require("discord.js");
 const staff_repository_1 = require("../../infrastructure/repositories/staff-repository");
 const audit_log_repository_1 = require("../../infrastructure/repositories/audit-log-repository");
+const case_repository_1 = require("../../infrastructure/repositories/case-repository");
 const staff_service_1 = require("../../application/services/staff-service");
 const discord_role_sync_service_1 = require("../../application/services/discord-role-sync-service");
 const permission_service_1 = require("../../application/services/permission-service");
+const business_rule_validation_service_1 = require("../../application/services/business-rule-validation-service");
+const command_validation_service_1 = require("../../application/services/command-validation-service");
+const cross_entity_validation_service_1 = require("../../application/services/cross-entity-validation-service");
 const guild_config_repository_1 = require("../../infrastructure/repositories/guild-config-repository");
 const staff_role_1 = require("../../domain/entities/staff-role");
+const guild_owner_utils_1 = require("../../infrastructure/utils/guild-owner-utils");
 const logger_1 = require("../../infrastructure/logger");
-let StaffCommands = class StaffCommands {
+const base_command_1 = require("./base-command");
+const validation_decorators_1 = require("../decorators/validation-decorators");
+const application_repository_1 = require("../../infrastructure/repositories/application-repository");
+const job_repository_1 = require("../../infrastructure/repositories/job-repository");
+const retainer_repository_1 = require("../../infrastructure/repositories/retainer-repository");
+const feedback_repository_1 = require("../../infrastructure/repositories/feedback-repository");
+const reminder_repository_1 = require("../../infrastructure/repositories/reminder-repository");
+let StaffCommands = class StaffCommands extends base_command_1.BaseCommand {
     constructor() {
+        super();
         this.staffRepository = new staff_repository_1.StaffRepository();
         this.auditLogRepository = new audit_log_repository_1.AuditLogRepository();
+        this.caseRepository = new case_repository_1.CaseRepository();
         this.guildConfigRepository = new guild_config_repository_1.GuildConfigRepository();
-        this.staffService = new staff_service_1.StaffService(this.staffRepository, this.auditLogRepository);
-        this.roleSyncService = new discord_role_sync_service_1.DiscordRoleSyncService(this.staffRepository, this.auditLogRepository);
+        // Initialize repositories for cross-entity validation
+        const applicationRepository = new application_repository_1.ApplicationRepository();
+        const jobRepository = new job_repository_1.JobRepository();
+        const retainerRepository = new retainer_repository_1.RetainerRepository();
+        const feedbackRepository = new feedback_repository_1.FeedbackRepository();
+        const reminderRepository = new reminder_repository_1.ReminderRepository();
+        // Initialize services
         this.permissionService = new permission_service_1.PermissionService(this.guildConfigRepository);
-    }
-    async getPermissionContext(interaction) {
-        const member = interaction.guild?.members.cache.get(interaction.user.id);
-        const userRoles = member?.roles.cache.map(role => role.id) || [];
-        const isGuildOwner = interaction.guild?.ownerId === interaction.user.id;
-        return {
-            guildId: interaction.guildId,
-            userId: interaction.user.id,
-            userRoles,
-            isGuildOwner,
-        };
-    }
-    createErrorEmbed(message) {
-        return new discord_js_1.EmbedBuilder()
-            .setColor('#FF0000')
-            .setTitle('❌ Error')
-            .setDescription(message)
-            .setTimestamp();
-    }
-    createSuccessEmbed(message) {
-        return new discord_js_1.EmbedBuilder()
-            .setColor('#00FF00')
-            .setTitle('✅ Success')
-            .setDescription(message)
-            .setTimestamp();
-    }
-    createInfoEmbed(title, description) {
-        const embed = new discord_js_1.EmbedBuilder()
-            .setColor('#0099FF')
-            .setTitle(title)
-            .setTimestamp();
-        if (description) {
-            embed.setDescription(description);
-        }
-        return embed;
+        this.businessRuleValidationService = new business_rule_validation_service_1.BusinessRuleValidationService(this.guildConfigRepository, this.staffRepository, this.caseRepository, this.permissionService);
+        this.crossEntityValidationService = new cross_entity_validation_service_1.CrossEntityValidationService(this.staffRepository, this.caseRepository, applicationRepository, jobRepository, retainerRepository, feedbackRepository, reminderRepository, this.auditLogRepository, this.businessRuleValidationService);
+        this.commandValidationService = new command_validation_service_1.CommandValidationService(this.businessRuleValidationService, this.crossEntityValidationService);
+        // Initialize validation services in base class
+        this.initializeValidationServices(this.commandValidationService, this.businessRuleValidationService, this.crossEntityValidationService, this.permissionService);
+        this.staffService = new staff_service_1.StaffService(this.staffRepository, this.auditLogRepository, this.permissionService, this.businessRuleValidationService);
+        this.roleSyncService = new discord_role_sync_service_1.DiscordRoleSyncService(this.staffRepository, this.auditLogRepository);
     }
     async hireStaff(user, role, robloxUsername, reason, interaction) {
         try {
             if (!interaction.guildId || !interaction.guild) {
                 await interaction.reply({
                     embeds: [this.createErrorEmbed('This command can only be used in a server.')],
-                    ephemeral: true,
-                });
-                return;
-            }
-            const context = await this.getPermissionContext(interaction);
-            const hasPermission = await this.permissionService.hasActionPermission(context, 'hr');
-            if (!hasPermission) {
-                await interaction.reply({
-                    embeds: [this.createErrorEmbed('You do not have permission to hire staff members.')],
                     ephemeral: true,
                 });
                 return;
@@ -94,6 +76,7 @@ let StaffCommands = class StaffCommands {
                 });
                 return;
             }
+            const context = await this.getPermissionContext(interaction);
             // Check if user performing the action can hire this role
             const actorStaff = await this.staffRepository.findByUserId(interaction.guildId, interaction.user.id);
             if (actorStaff && !context.isGuildOwner) {
@@ -106,18 +89,35 @@ let StaffCommands = class StaffCommands {
                     return;
                 }
             }
-            const result = await this.staffService.hireStaff({
+            // Validation decorators have already run, so we can proceed with hiring
+            await this.performStaffHiring(interaction, user, role, robloxUsername, reason, context);
+        }
+        catch (error) {
+            logger_1.logger.error('Error in hire staff command:', error);
+            await interaction.reply({
+                embeds: [this.createErrorEmbed('An error occurred while processing the command.')],
+                ephemeral: true,
+            });
+        }
+    }
+    /**
+     * Perform the actual staff hiring (separated for reuse in bypass flow)
+     */
+    async performStaffHiring(interaction, user, role, robloxUsername, reason, context, bypassReason) {
+        try {
+            const result = await this.staffService.hireStaff(context, {
                 guildId: interaction.guildId,
                 userId: user.id,
                 robloxUsername,
-                role: role,
+                role,
                 hiredBy: interaction.user.id,
                 reason,
+                isGuildOwner: context.isGuildOwner
             });
             if (!result.success) {
-                await interaction.reply({
+                const replyMethod = interaction.replied ? 'editReply' : 'reply';
+                await interaction[replyMethod]({
                     embeds: [this.createErrorEmbed(result.error || 'Failed to hire staff member.')],
-                    ephemeral: true,
                 });
                 return;
             }
@@ -125,16 +125,87 @@ let StaffCommands = class StaffCommands {
             if (result.staff) {
                 await this.roleSyncService.syncStaffRole(interaction.guild, result.staff, interaction.user.id);
             }
-            await interaction.reply({
-                embeds: [this.createSuccessEmbed(`Successfully hired ${user.displayName} as ${role}.\nRoblox Username: ${robloxUsername}`)],
+            // Create success message
+            let successMessage = `Successfully hired ${user.displayName} as ${role}.\nRoblox Username: ${robloxUsername}`;
+            if (bypassReason) {
+                successMessage += `\n\n**Guild Owner Bypass Applied**\nReason: ${bypassReason}`;
+            }
+            const replyMethod = interaction.replied ? 'editReply' : 'reply';
+            await interaction[replyMethod]({
+                embeds: [bypassReason ?
+                        guild_owner_utils_1.GuildOwnerUtils.createBypassSuccessEmbed(role, result.staff?.role ? staff_role_1.RoleUtils.getRoleLevel(result.staff.role) : 1, bypassReason) :
+                        this.createSuccessEmbed(successMessage)
+                ],
             });
-            logger_1.logger.info(`Staff hired: ${user.id} as ${role} by ${interaction.user.id} in guild ${interaction.guildId}`);
+            logger_1.logger.info(`Staff hired: ${user.id} as ${role} by ${interaction.user.id} in guild ${interaction.guildId}`, {
+                bypassUsed: !!bypassReason,
+                bypassReason
+            });
         }
         catch (error) {
-            logger_1.logger.error('Error in hire staff command:', error);
+            logger_1.logger.error('Error in performStaffHiring:', error);
+            const replyMethod = interaction.replied ? 'editReply' : 'reply';
+            await interaction[replyMethod]({
+                embeds: [this.createErrorEmbed('An error occurred while processing the hiring.')],
+            });
+        }
+    }
+    /**
+     * Handle guild owner bypass modal submission
+     */
+    async handleRoleLimitBypass(interaction) {
+        try {
+            // Verify this is a valid bypass attempt
+            if (!guild_owner_utils_1.GuildOwnerUtils.isEligibleForBypass(interaction)) {
+                await interaction.reply({
+                    embeds: [guild_owner_utils_1.GuildOwnerUtils.createBypassErrorEmbed('You are not authorized to perform bypass operations.')],
+                    ephemeral: true
+                });
+                return;
+            }
+            // Check if bypass is expired
+            if (guild_owner_utils_1.GuildOwnerUtils.isBypassExpired(interaction.customId)) {
+                await interaction.reply({
+                    embeds: [guild_owner_utils_1.GuildOwnerUtils.createBypassErrorEmbed('Bypass confirmation has expired. Please retry the original command.')],
+                    ephemeral: true
+                });
+                return;
+            }
+            // Validate bypass confirmation
+            const confirmation = guild_owner_utils_1.GuildOwnerUtils.validateBypassConfirmation(interaction);
+            if (!confirmation.confirmed) {
+                await interaction.reply({
+                    embeds: [guild_owner_utils_1.GuildOwnerUtils.createBypassErrorEmbed(confirmation.error || 'Bypass confirmation failed.')],
+                    ephemeral: true
+                });
+                return;
+            }
+            // Parse bypass information from custom ID
+            const bypassInfo = guild_owner_utils_1.GuildOwnerUtils.parseBypassId(interaction.customId);
+            if (!bypassInfo) {
+                await interaction.reply({
+                    embeds: [guild_owner_utils_1.GuildOwnerUtils.createBypassErrorEmbed('Invalid bypass request. Please retry the original command.')],
+                    ephemeral: true
+                });
+                return;
+            }
             await interaction.reply({
-                embeds: [this.createErrorEmbed('An error occurred while processing the command.')],
-                ephemeral: true,
+                embeds: [this.createInfoEmbed('Bypass Confirmed', 'Guild owner bypass has been confirmed. The original operation will now proceed with elevated privileges.\n\n' +
+                        '**Note:** You will need to re-run the original hire command as this confirmation does not automatically execute it.')],
+                ephemeral: true
+            });
+            logger_1.logger.info('Guild owner bypass confirmed', {
+                userId: interaction.user.id,
+                guildId: interaction.guildId,
+                bypassType: bypassInfo.bypassType,
+                reason: confirmation.reason
+            });
+        }
+        catch (error) {
+            logger_1.logger.error('Error handling role limit bypass:', error);
+            await interaction.reply({
+                embeds: [guild_owner_utils_1.GuildOwnerUtils.createBypassErrorEmbed('An error occurred while processing the bypass confirmation.')],
+                ephemeral: true
             });
         }
     }
@@ -148,14 +219,6 @@ let StaffCommands = class StaffCommands {
                 return;
             }
             const context = await this.getPermissionContext(interaction);
-            const hasPermission = await this.permissionService.hasActionPermission(context, 'hr');
-            if (!hasPermission) {
-                await interaction.reply({
-                    embeds: [this.createErrorEmbed('You do not have permission to fire staff members.')],
-                    ephemeral: true,
-                });
-                return;
-            }
             // Check if target exists and get their role
             const targetStaff = await this.staffRepository.findByUserId(interaction.guildId, user.id);
             if (!targetStaff) {
@@ -185,7 +248,7 @@ let StaffCommands = class StaffCommands {
                 });
                 return;
             }
-            const result = await this.staffService.fireStaff({
+            const result = await this.staffService.fireStaff(context, {
                 guildId: interaction.guildId,
                 userId: user.id,
                 terminatedBy: interaction.user.id,
@@ -223,14 +286,6 @@ let StaffCommands = class StaffCommands {
                 return;
             }
             const context = await this.getPermissionContext(interaction);
-            const hasPermission = await this.permissionService.hasActionPermission(context, 'hr');
-            if (!hasPermission) {
-                await interaction.reply({
-                    embeds: [this.createErrorEmbed('You do not have permission to promote staff members.')],
-                    ephemeral: true,
-                });
-                return;
-            }
             // Validate role
             if (!staff_role_1.RoleUtils.isValidRole(role)) {
                 const validRoles = staff_role_1.RoleUtils.getAllRoles().join(', ');
@@ -261,7 +316,7 @@ let StaffCommands = class StaffCommands {
                     return;
                 }
             }
-            const result = await this.staffService.promoteStaff({
+            const result = await this.staffService.promoteStaff(context, {
                 guildId: interaction.guildId,
                 userId: user.id,
                 newRole: role,
@@ -302,14 +357,6 @@ let StaffCommands = class StaffCommands {
                 return;
             }
             const context = await this.getPermissionContext(interaction);
-            const hasPermission = await this.permissionService.hasActionPermission(context, 'hr');
-            if (!hasPermission) {
-                await interaction.reply({
-                    embeds: [this.createErrorEmbed('You do not have permission to demote staff members.')],
-                    ephemeral: true,
-                });
-                return;
-            }
             // Validate role
             if (!staff_role_1.RoleUtils.isValidRole(role)) {
                 const validRoles = staff_role_1.RoleUtils.getAllRoles().join(', ');
@@ -340,7 +387,7 @@ let StaffCommands = class StaffCommands {
                     return;
                 }
             }
-            const result = await this.staffService.demoteStaff({
+            const result = await this.staffService.demoteStaff(context, {
                 guildId: interaction.guildId,
                 userId: user.id,
                 newRole: role,
@@ -443,7 +490,7 @@ let StaffCommands = class StaffCommands {
                 });
                 return;
             }
-            const staff = await this.staffService.getStaffInfo(interaction.guildId, user.id, interaction.user.id);
+            const staff = await this.staffService.getStaffInfo(context, interaction.guildId, user.id, interaction.user.id);
             if (!staff) {
                 await interaction.reply({
                     embeds: [this.createErrorEmbed('User is not a staff member.')],
@@ -480,6 +527,8 @@ let StaffCommands = class StaffCommands {
 exports.StaffCommands = StaffCommands;
 __decorate([
     (0, discordx_1.Slash)({ name: 'hire', description: 'Hire a new staff member' }),
+    (0, validation_decorators_1.ValidatePermissions)('senior-staff'),
+    (0, validation_decorators_1.ValidateBusinessRules)('role_limit'),
     __param(0, (0, discordx_1.SlashOption)({
         name: 'user',
         description: 'User to hire',
@@ -509,7 +558,16 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], StaffCommands.prototype, "hireStaff", null);
 __decorate([
+    (0, discordx_1.ModalComponent)({ id: /role_limit_bypass_.*/ }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [discord_js_1.ModalSubmitInteraction]),
+    __metadata("design:returntype", Promise)
+], StaffCommands.prototype, "handleRoleLimitBypass", null);
+__decorate([
     (0, discordx_1.Slash)({ name: 'fire', description: 'Fire a staff member' }),
+    (0, validation_decorators_1.ValidatePermissions)('senior-staff'),
+    (0, validation_decorators_1.ValidateBusinessRules)('staff_member'),
+    ValidateEntity('staff', 'delete'),
     __param(0, (0, discordx_1.SlashOption)({
         name: 'user',
         description: 'User to fire',
@@ -528,6 +586,9 @@ __decorate([
 ], StaffCommands.prototype, "fireStaff", null);
 __decorate([
     (0, discordx_1.Slash)({ name: 'promote', description: 'Promote a staff member' }),
+    (0, validation_decorators_1.ValidatePermissions)('senior-staff'),
+    (0, validation_decorators_1.ValidateBusinessRules)('staff_member', 'role_limit'),
+    ValidateEntity('staff', 'update'),
     __param(0, (0, discordx_1.SlashOption)({
         name: 'user',
         description: 'User to promote',
@@ -552,6 +613,9 @@ __decorate([
 ], StaffCommands.prototype, "promoteStaff", null);
 __decorate([
     (0, discordx_1.Slash)({ name: 'demote', description: 'Demote a staff member' }),
+    (0, validation_decorators_1.ValidatePermissions)('senior-staff'),
+    (0, validation_decorators_1.ValidateBusinessRules)('staff_member'),
+    ValidateEntity('staff', 'update'),
     __param(0, (0, discordx_1.SlashOption)({
         name: 'user',
         description: 'User to demote',

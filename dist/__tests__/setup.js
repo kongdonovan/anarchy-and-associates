@@ -6,8 +6,11 @@ const dotenv_1 = require("dotenv");
 // Set default test environment variables
 process.env.NODE_ENV = 'test';
 process.env.LOG_LEVEL = 'error';
-process.env.MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/anarchy_associates_test';
-process.env.MONGODB_DB_NAME = process.env.MONGODB_DB_NAME || 'anarchy_associates_test';
+process.env.MONGODB_URI =
+    process.env.MONGODB_URI ||
+        'mongodb://localhost:27017/anarchy_associates_test';
+process.env.MONGODB_DB_NAME =
+    process.env.MONGODB_DB_NAME || 'anarchy_associates_test';
 // Mock Discord client globally
 jest.mock('discord.js', () => ({
     Client: jest.fn().mockImplementation(() => ({
@@ -18,18 +21,18 @@ jest.mock('discord.js', () => ({
         user: { id: 'mock-bot-id' },
         guilds: {
             fetch: jest.fn(),
-            cache: new Map()
-        }
+            cache: new Map(),
+        },
     })),
     GatewayIntentBits: {
         Guilds: 1,
         GuildMembers: 2,
         GuildMessages: 4,
-        MessageContent: 8
+        MessageContent: 8,
     },
     Events: {
         Ready: 'ready',
-        GuildMemberUpdate: 'guildMemberUpdate'
+        GuildMemberUpdate: 'guildMemberUpdate',
     },
     ButtonBuilder: jest.fn(),
     ButtonStyle: {},
@@ -48,10 +51,10 @@ jest.mock('discord.js', () => ({
         setImage: jest.fn().mockReturnThis(),
         setAuthor: jest.fn().mockReturnThis(),
         setURL: jest.fn().mockReturnThis(),
-        toJSON: jest.fn().mockReturnValue({})
+        toJSON: jest.fn().mockReturnValue({}),
     })),
     ChannelType: {},
-    PermissionFlagsBits: {}
+    PermissionFlagsBits: {},
 }));
 // Mock discordx globally
 jest.mock('discordx', () => ({
@@ -61,7 +64,7 @@ jest.mock('discordx', () => ({
     SlashGroup: () => (_target) => _target,
     ButtonComponent: () => (_target, _propertyKey, descriptor) => descriptor,
     ModalComponent: () => (_target, _propertyKey, descriptor) => descriptor,
-    Guard: () => (_target, _propertyKey, descriptor) => descriptor
+    Guard: () => (_target, _propertyKey, descriptor) => descriptor,
 }));
 // Global test timeout
 jest.setTimeout(30000);

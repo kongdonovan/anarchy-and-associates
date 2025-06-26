@@ -42,6 +42,6 @@ export declare const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]>;
  */
 export declare const DEFAULT_CHANNEL_MAPPINGS: Record<string, {
     name: string;
-    type: "GUILD_TEXT" | "GUILD_CATEGORY";
+    type: 'GUILD_TEXT' | 'GUILD_CATEGORY';
 }>;
 //# sourceMappingURL=server-setup.config.d.ts.map

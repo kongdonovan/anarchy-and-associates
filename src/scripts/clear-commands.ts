@@ -30,77 +30,93 @@ async function clearAllCommands(): Promise<void> {
     client.once('ready', async () => {
       try {
         logger.info('Bot connected, clearing all commands...');
-        
+
         // Clear guild commands for all guilds (primary focus)
-        logger.info(`Bot is now using guild-only commands. Clearing commands for ${client.guilds.cache.size} guilds...`);
-        
+        logger.info(
+          `Bot is now using guild-only commands. Clearing commands for ${client.guilds.cache.size} guilds...`
+        );
+
         for (const [guildId, guild] of client.guilds.cache) {
           try {
-            logger.info(`Clearing commands for guild: ${guild.name} (${guildId})`);
+            logger.info(
+              `Clearing commands for guild: ${guild.name} (${guildId})`
+            );
             const guildCommands = await guild.commands.fetch();
-            logger.info(`Found ${guildCommands.size} guild commands in ${guild.name}`);
-            
+            logger.info(
+              `Found ${guildCommands.size} guild commands in ${guild.name}`
+            );
+
             if (guildCommands.size > 0) {
               guildCommands.forEach(cmd => {
                 logger.info(`- Guild command in ${guild.name}: ${cmd.name}`);
               });
-              
+
               await guild.commands.set([]);
               logger.info(`✅ Guild commands cleared for ${guild.name}`);
             }
           } catch (guildError) {
-            logger.error(`Error clearing commands for guild ${guild.name}:`, guildError);
+            logger.error(
+              `Error clearing commands for guild ${guild.name}:`,
+              guildError
+            );
           }
         }
-        
+
         // Clear any remaining global commands (cleanup from previous global setup)
         logger.info('Clearing any remaining global commands as cleanup...');
         try {
           const globalCommands = await client.application?.commands.fetch();
-          logger.info(`Found ${globalCommands?.size || 0} global commands to clear`);
-          
+          logger.info(
+            `Found ${globalCommands?.size || 0} global commands to clear`
+          );
+
           if (globalCommands && globalCommands.size > 0) {
             globalCommands.forEach(cmd => {
               logger.info(`- Legacy global command: ${cmd.name}`);
             });
-            
+
             logger.info('Clearing legacy global commands...');
             await client.application?.commands.set([]);
             logger.info('✅ Legacy global commands cleared');
           } else {
-            logger.info('No global commands found (expected for guild-only setup)');
+            logger.info(
+              'No global commands found (expected for guild-only setup)'
+            );
           }
         } catch (globalError) {
-          logger.warn('Could not clear global commands (this may be expected):', globalError);
+          logger.warn(
+            'Could not clear global commands (this may be expected):',
+            globalError
+          );
         }
-        
+
         // Final verification
         logger.info('Verifying all commands are cleared...');
         const finalGlobalCommands = await client.application?.commands.fetch();
         logger.info(`Final global commands: ${finalGlobalCommands?.size || 0}`);
-        
+
         let totalGuildCommands = 0;
         for (const [, guild] of client.guilds.cache) {
           try {
             const guildCommands = await guild.commands.fetch();
             totalGuildCommands += guildCommands.size;
-          } catch (error) {
-            logger.warn(`Could not verify guild commands for ${guild.name}`);
+          } catch (err) {
+            logger.warn(`Could not verify guild commands for ${guild.name}: ${err}`);
           }
         }
-        logger.info(`Final guild commands across all guilds: ${totalGuildCommands}`);
-        
+        logger.info(
+          `Final guild commands across all guilds: ${totalGuildCommands}`
+        );
+
         logger.info('✅ Command clearing completed');
         await client.destroy();
         process.exit(0);
-        
       } catch (error) {
         logger.error('Error during command clearing:', error);
         await client.destroy();
         process.exit(1);
       }
     });
-
   } catch (error) {
     logger.error('Failed to clear commands:', error);
     process.exit(1);

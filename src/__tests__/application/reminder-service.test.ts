@@ -123,7 +123,9 @@ describe('ReminderService Unit Tests', () => {
       username: testUsername,
       message: 'Test reminder message',
       scheduledFor: new Date(Date.now() + 2 * 60 * 60 * 1000), // 2 hours from now
-      isActive: true
+      isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date()
     });
 
     beforeEach(() => {
@@ -169,7 +171,9 @@ describe('ReminderService Unit Tests', () => {
       const mockCase: Case = TestUtils.generateMockCase({
         _id: TestUtils.generateObjectId(),
         guildId: testGuildId,
-        channelId: testChannelId
+        channelId: testChannelId,
+        createdAt: new Date(),
+        updatedAt: new Date()
       });
 
       const requestWithChannel = {
@@ -350,7 +354,9 @@ describe('ReminderService Unit Tests', () => {
       _id: TestUtils.generateObjectId(),
       userId: testUserId,
       guildId: testGuildId,
-      isActive: true
+      isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date()
     });
 
     const mockCancelledReminder: Reminder = {
@@ -529,7 +535,9 @@ describe('ReminderService Unit Tests', () => {
       const futureReminder = TestUtils.generateMockReminder({
         _id: TestUtils.generateObjectId(),
         scheduledFor: futureTime,
-        isActive: true
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date()
       });
 
       mockStaffRepository.findByFilters.mockResolvedValue([TestUtils.generateMockStaff()]);

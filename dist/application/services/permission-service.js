@@ -78,6 +78,9 @@ class PermissionService {
         // Admin or config permission required
         return await this.isAdmin(context) || await this.hasActionPermission(context, 'config');
     }
+    /**
+     * @deprecated Use hasSeniorStaffPermissionWithContext instead
+     */
     async hasHRPermission(guildId, userId) {
         try {
             // Get user roles from Discord API would be ideal, but for now we'll create a minimal context
@@ -88,7 +91,7 @@ class PermissionService {
                 userRoles: [], // This should be populated with actual Discord roles
                 isGuildOwner: false, // This should be checked against Discord API
             };
-            return await this.isAdmin(context) || await this.hasActionPermission(context, 'hr');
+            return await this.hasSeniorStaffPermissionWithContext(context);
         }
         catch (error) {
             logger_1.logger.error(`Error checking HR permission:`, error);
@@ -96,17 +99,32 @@ class PermissionService {
         }
     }
     /**
-     * Check HR permission with proper context (preferred method)
+     * @deprecated Use hasSeniorStaffPermissionWithContext instead
      */
     async hasHRPermissionWithContext(context) {
         try {
-            return await this.isAdmin(context) || await this.hasActionPermission(context, 'hr');
+            return await this.hasSeniorStaffPermissionWithContext(context);
         }
         catch (error) {
             logger_1.logger.error(`Error checking HR permission:`, error);
             return false;
         }
     }
+    /**
+     * Check senior staff permission (replaces HR permission with broader scope)
+     */
+    async hasSeniorStaffPermissionWithContext(context) {
+        try {
+            return await this.isAdmin(context) || await this.hasActionPermission(context, 'senior-staff');
+        }
+        catch (error) {
+            logger_1.logger.error(`Error checking senior staff permission:`, error);
+            return false;
+        }
+    }
+    /**
+     * @deprecated Use hasLawyerPermissionWithContext instead
+     */
     async hasRetainerPermission(guildId, userId) {
         try {
             // Get user roles from Discord API would be ideal, but for now we'll create a minimal context
@@ -117,7 +135,7 @@ class PermissionService {
                 userRoles: [], // This should be populated with actual Discord roles
                 isGuildOwner: false, // This should be checked against Discord API
             };
-            return await this.isAdmin(context) || await this.hasActionPermission(context, 'retainer');
+            return await this.hasLawyerPermissionWithContext(context);
         }
         catch (error) {
             logger_1.logger.error(`Error checking retainer permission:`, error);
@@ -125,14 +143,38 @@ class PermissionService {
         }
     }
     /**
-     * Check retainer permission with proper context (preferred method)
+     * @deprecated Use hasLawyerPermissionWithContext instead
      */
     async hasRetainerPermissionWithContext(context) {
         try {
-            return await this.isAdmin(context) || await this.hasActionPermission(context, 'retainer');
+            return await this.hasLawyerPermissionWithContext(context);
         }
         catch (error) {
             logger_1.logger.error(`Error checking retainer permission:`, error);
+            return false;
+        }
+    }
+    /**
+     * Check lawyer permission (replaces retainer permission, for legal practice)
+     */
+    async hasLawyerPermissionWithContext(context) {
+        try {
+            return await this.isAdmin(context) || await this.hasActionPermission(context, 'lawyer');
+        }
+        catch (error) {
+            logger_1.logger.error(`Error checking lawyer permission:`, error);
+            return false;
+        }
+    }
+    /**
+     * Check lead attorney permission (for lead attorney assignments)
+     */
+    async hasLeadAttorneyPermissionWithContext(context) {
+        try {
+            return await this.isAdmin(context) || await this.hasActionPermission(context, 'lead-attorney');
+        }
+        catch (error) {
+            logger_1.logger.error(`Error checking lead attorney permission:`, error);
             return false;
         }
     }
@@ -140,10 +182,11 @@ class PermissionService {
         const isAdmin = await this.isAdmin(context);
         const permissions = {
             admin: await this.hasActionPermission(context, 'admin'),
-            hr: await this.hasActionPermission(context, 'hr'),
+            'senior-staff': await this.hasActionPermission(context, 'senior-staff'),
             case: await this.hasActionPermission(context, 'case'),
             config: await this.hasActionPermission(context, 'config'),
-            retainer: await this.hasActionPermission(context, 'retainer'),
+            lawyer: await this.hasActionPermission(context, 'lawyer'),
+            'lead-attorney': await this.hasActionPermission(context, 'lead-attorney'),
             repair: await this.hasActionPermission(context, 'repair'),
         };
         return {

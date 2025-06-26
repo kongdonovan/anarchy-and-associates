@@ -12,6 +12,9 @@ describe('CaseService Unit Tests', () => {
     let mockCaseRepository;
     let mockCaseCounterRepository;
     let mockGuildConfigRepository;
+    let mockPermissionService;
+    let mockBusinessRuleValidationService;
+    let mockPermissionContext;
     // Test data constants
     const testGuildId = '123456789012345678';
     const testClientId = '234567890123456789';
@@ -19,6 +22,13 @@ describe('CaseService Unit Tests', () => {
     const testCaseId = test_utils_1.TestUtils.generateObjectId().toString();
     const currentYear = new Date().getFullYear();
     beforeEach(() => {
+        // Create mock permission context
+        mockPermissionContext = {
+            guildId: testGuildId,
+            userId: testLawyerId,
+            userRoles: [],
+            isGuildOwner: false
+        };
         // Create partial mock repositories with only the methods we need
         mockCaseRepository = {
             add: jest.fn(),
@@ -38,7 +48,17 @@ describe('CaseService Unit Tests', () => {
         mockGuildConfigRepository = {
             findByGuildId: jest.fn()
         };
-        caseService = new case_service_1.CaseService(mockCaseRepository, mockCaseCounterRepository, mockGuildConfigRepository);
+        mockPermissionService = {
+            hasActionPermission: jest.fn(),
+            hasHRPermissionWithContext: jest.fn(),
+            hasPermission: jest.fn()
+        };
+        mockBusinessRuleValidationService = {
+            validateClientCaseLimit: jest.fn(),
+            validateStaffMember: jest.fn(),
+            validatePermission: jest.fn()
+        };
+        caseService = new case_service_1.CaseService(mockCaseRepository, mockCaseCounterRepository, mockGuildConfigRepository, mockPermissionService, mockBusinessRuleValidationService);
         jest.clearAllMocks();
     });
     describe('createCase', () => {
@@ -53,7 +73,9 @@ describe('CaseService Unit Tests', () => {
         const mockCreatedCase = test_utils_1.TestUtils.generateMockCase({
             _id: test_utils_1.TestUtils.generateObjectId(),
             guildId: testGuildId,
-            caseNumber: `${currentYear}-0001-testclient`,
+            caseNumber: '2025-0001-testclient',
+            createdAt: new Date(),
+            updatedAt: new Date(),
             clientId: testClientId,
             clientUsername: 'testclient',
             title: 'Test Case',
@@ -64,7 +86,17 @@ describe('CaseService Unit Tests', () => {
         it('should create a case successfully with all required fields', async () => {
             mockCaseCounterRepository.getNextCaseNumber.mockResolvedValue(1);
             mockCaseRepository.add.mockResolvedValue(mockCreatedCase);
-            const result = await caseService.createCase(mockCaseRequest);
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
+            mockBusinessRuleValidationService.validateClientCaseLimit.mockResolvedValue({
+                valid: true,
+                errors: [],
+                warnings: [],
+                bypassAvailable: false,
+                currentCases: 0,
+                maxCases: 3,
+                clientId: testClientId
+            });
+            const result = await caseService.createCase(mockPermissionContext, mockCaseRequest);
             expect(mockCaseCounterRepository.getNextCaseNumber).toHaveBeenCalledWith(testGuildId);
             expect(mockCaseRepository.add).toHaveBeenCalledWith({
                 guildId: testGuildId,
@@ -89,7 +121,17 @@ describe('CaseService Unit Tests', () => {
                 ...mockCreatedCase,
                 priority: case_1.CasePriority.MEDIUM
             });
-            await caseService.createCase(requestWithoutPriority);
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
+            mockBusinessRuleValidationService.validateClientCaseLimit.mockResolvedValue({
+                valid: true,
+                errors: [],
+                warnings: [],
+                bypassAvailable: false,
+                currentCases: 0,
+                maxCases: 3,
+                clientId: testClientId
+            });
+            await caseService.createCase(mockPermissionContext, requestWithoutPriority);
             expect(mockCaseRepository.add).toHaveBeenCalledWith(expect.objectContaining({
                 priority: case_1.CasePriority.MEDIUM
             }));
@@ -100,7 +142,17 @@ describe('CaseService Unit Tests', () => {
                 ...mockCreatedCase,
                 caseNumber: `${currentYear}-0042-testclient`
             });
-            await caseService.createCase(mockCaseRequest);
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
+            mockBusinessRuleValidationService.validateClientCaseLimit.mockResolvedValue({
+                valid: true,
+                errors: [],
+                warnings: [],
+                bypassAvailable: false,
+                currentCases: 0,
+                maxCases: 3,
+                clientId: testClientId
+            });
+            await caseService.createCase(mockPermissionContext, mockCaseRequest);
             expect(mockCaseRepository.add).toHaveBeenCalledWith(expect.objectContaining({
                 caseNumber: `${currentYear}-0042-testclient`
             }));
@@ -116,21 +168,31 @@ describe('CaseService Unit Tests', () => {
                 clientUsername: 'test-client_123',
                 caseNumber: `${currentYear}-0001-test-client_123`
             });
-            await caseService.createCase(requestWithSpecialChars);
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
+            mockBusinessRuleValidationService.validateClientCaseLimit.mockResolvedValue({
+                valid: true,
+                errors: [],
+                warnings: [],
+                bypassAvailable: false,
+                currentCases: 0,
+                maxCases: 3,
+                clientId: testClientId
+            });
+            await caseService.createCase(mockPermissionContext, requestWithSpecialChars);
             expect(mockCaseRepository.add).toHaveBeenCalledWith(expect.objectContaining({
                 caseNumber: `${currentYear}-0001-test-client_123`
             }));
         });
         it('should throw error when case counter fails', async () => {
             mockCaseCounterRepository.getNextCaseNumber.mockRejectedValue(new Error('Counter service unavailable'));
-            await expect(caseService.createCase(mockCaseRequest))
+            await expect(caseService.createCase(mockPermissionContext, mockCaseRequest))
                 .rejects.toThrow('Counter service unavailable');
             expect(mockCaseRepository.add).not.toHaveBeenCalled();
         });
         it('should throw error when repository add fails', async () => {
             mockCaseCounterRepository.getNextCaseNumber.mockResolvedValue(1);
             mockCaseRepository.add.mockRejectedValue(new Error('Database error'));
-            await expect(caseService.createCase(mockCaseRequest))
+            await expect(caseService.createCase(mockPermissionContext, mockCaseRequest))
                 .rejects.toThrow('Database error');
         });
         it('should handle very long case descriptions', async () => {
@@ -144,7 +206,17 @@ describe('CaseService Unit Tests', () => {
                 ...mockCreatedCase,
                 description: longDescription
             });
-            await caseService.createCase(requestWithLongDescription);
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
+            mockBusinessRuleValidationService.validateClientCaseLimit.mockResolvedValue({
+                valid: true,
+                errors: [],
+                warnings: [],
+                bypassAvailable: false,
+                currentCases: 0,
+                maxCases: 3,
+                clientId: testClientId
+            });
+            await caseService.createCase(mockPermissionContext, requestWithLongDescription);
             expect(mockCaseRepository.add).toHaveBeenCalledWith(expect.objectContaining({
                 description: longDescription
             }));
@@ -159,7 +231,9 @@ describe('CaseService Unit Tests', () => {
         const mockAssignedCase = test_utils_1.TestUtils.generateMockCase({
             _id: test_utils_1.TestUtils.generateObjectId(),
             guildId: testGuildId,
-            caseNumber: `${currentYear}-0001-testclient`,
+            caseNumber: '2025-0001-testclient',
+            createdAt: new Date(),
+            updatedAt: new Date(),
             clientId: testClientId,
             clientUsername: 'testclient',
             title: 'Test Case',
@@ -171,18 +245,19 @@ describe('CaseService Unit Tests', () => {
         });
         it('should assign lawyer successfully', async () => {
             mockCaseRepository.assignLawyer.mockResolvedValue(mockAssignedCase);
-            const result = await caseService.assignLawyer(mockAssignmentRequest);
+            const result = await caseService.assignLawyer(mockPermissionContext, mockAssignmentRequest);
             expect(mockCaseRepository.assignLawyer).toHaveBeenCalledWith(testCaseId, testLawyerId);
             expect(result).toEqual(mockAssignedCase);
         });
         it('should throw error when case not found for assignment', async () => {
             mockCaseRepository.assignLawyer.mockResolvedValue(null);
-            await expect(caseService.assignLawyer(mockAssignmentRequest))
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
+            await expect(caseService.assignLawyer(mockPermissionContext, mockAssignmentRequest))
                 .rejects.toThrow('Case not found or assignment failed');
         });
         it('should throw error when assignment fails in repository', async () => {
             mockCaseRepository.assignLawyer.mockRejectedValue(new Error('Assignment constraint violation'));
-            await expect(caseService.assignLawyer(mockAssignmentRequest))
+            await expect(caseService.assignLawyer(mockPermissionContext, mockAssignmentRequest))
                 .rejects.toThrow('Assignment constraint violation');
         });
     });
@@ -190,7 +265,9 @@ describe('CaseService Unit Tests', () => {
         const mockUnassignedCase = test_utils_1.TestUtils.generateMockCase({
             _id: test_utils_1.TestUtils.generateObjectId(),
             guildId: testGuildId,
-            caseNumber: `${currentYear}-0001-testclient`,
+            caseNumber: '2025-0001-testclient',
+            createdAt: new Date(),
+            updatedAt: new Date(),
             clientId: testClientId,
             clientUsername: 'testclient',
             title: 'Test Case',
@@ -202,18 +279,21 @@ describe('CaseService Unit Tests', () => {
         });
         it('should unassign lawyer successfully', async () => {
             mockCaseRepository.unassignLawyer.mockResolvedValue(mockUnassignedCase);
-            const result = await caseService.unassignLawyer(testCaseId, testLawyerId);
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
+            const result = await caseService.unassignLawyer(mockPermissionContext, testCaseId, testLawyerId);
             expect(mockCaseRepository.unassignLawyer).toHaveBeenCalledWith(testCaseId, testLawyerId);
             expect(result).toEqual(mockUnassignedCase);
         });
         it('should throw error when case not found for unassignment', async () => {
             mockCaseRepository.unassignLawyer.mockResolvedValue(null);
-            await expect(caseService.unassignLawyer(testCaseId, testLawyerId))
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
+            await expect(caseService.unassignLawyer(mockPermissionContext, testCaseId, testLawyerId))
                 .rejects.toThrow('Case not found or unassignment failed');
         });
         it('should handle unassigning lawyer not assigned to case', async () => {
             mockCaseRepository.unassignLawyer.mockResolvedValue(mockUnassignedCase);
-            const result = await caseService.unassignLawyer(testCaseId, 'non-existent-lawyer');
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
+            const result = await caseService.unassignLawyer(mockPermissionContext, testCaseId, 'non-existent-lawyer');
             expect(result).toEqual(mockUnassignedCase);
         });
     });
@@ -223,7 +303,9 @@ describe('CaseService Unit Tests', () => {
         const mockFromCase = test_utils_1.TestUtils.generateMockCase({
             _id: test_utils_1.TestUtils.generateObjectId(),
             guildId: testGuildId,
-            caseNumber: `${currentYear}-0001-testclient`,
+            caseNumber: '2025-0001-testclient',
+            createdAt: new Date(),
+            updatedAt: new Date(),
             clientId: testClientId,
             clientUsername: 'testclient',
             title: 'From Case',
@@ -236,7 +318,9 @@ describe('CaseService Unit Tests', () => {
         const mockToCase = test_utils_1.TestUtils.generateMockCase({
             _id: test_utils_1.TestUtils.generateObjectId(),
             guildId: testGuildId,
-            caseNumber: `${currentYear}-0002-otherclient`,
+            caseNumber: '2025-0002-otherclient',
+            createdAt: new Date(),
+            updatedAt: new Date(),
             clientId: 'other-client',
             clientUsername: 'otherclient',
             title: 'To Case',
@@ -251,14 +335,16 @@ describe('CaseService Unit Tests', () => {
                 fromCase: mockFromCase,
                 toCase: mockToCase
             });
-            const result = await caseService.reassignLawyer(fromCaseId, toCaseId, testLawyerId);
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
+            const result = await caseService.reassignLawyer(mockPermissionContext, fromCaseId, toCaseId, testLawyerId);
             expect(mockCaseRepository.reassignLawyer).toHaveBeenCalledWith(fromCaseId, toCaseId, testLawyerId);
             expect(result.fromCase).toEqual(mockFromCase);
             expect(result.toCase).toEqual(mockToCase);
         });
         it('should throw error when reassignment fails', async () => {
             mockCaseRepository.reassignLawyer.mockRejectedValue(new Error('Reassignment failed: case not found'));
-            await expect(caseService.reassignLawyer(fromCaseId, toCaseId, testLawyerId))
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
+            await expect(caseService.reassignLawyer(mockPermissionContext, fromCaseId, toCaseId, testLawyerId))
                 .rejects.toThrow('Reassignment failed: case not found');
         });
         it('should handle reassigning lawyer between same case', async () => {
@@ -266,7 +352,8 @@ describe('CaseService Unit Tests', () => {
                 fromCase: mockFromCase,
                 toCase: mockFromCase // Same case
             });
-            const result = await caseService.reassignLawyer(fromCaseId, fromCaseId, testLawyerId);
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
+            const result = await caseService.reassignLawyer(mockPermissionContext, fromCaseId, fromCaseId, testLawyerId);
             expect(result.fromCase).toEqual(mockFromCase);
             expect(result.toCase).toEqual(mockFromCase);
         });
@@ -275,7 +362,9 @@ describe('CaseService Unit Tests', () => {
         const mockUpdatedCase = test_utils_1.TestUtils.generateMockCase({
             _id: test_utils_1.TestUtils.generateObjectId(),
             guildId: testGuildId,
-            caseNumber: `${currentYear}-0001-testclient`,
+            caseNumber: '2025-0001-testclient',
+            createdAt: new Date(),
+            updatedAt: new Date(),
             clientId: testClientId,
             clientUsername: 'testclient',
             title: 'Test Case',
@@ -287,7 +376,7 @@ describe('CaseService Unit Tests', () => {
         });
         it('should update case status successfully', async () => {
             mockCaseRepository.update.mockResolvedValue(mockUpdatedCase);
-            const result = await caseService.updateCaseStatus(testCaseId, case_1.CaseStatus.IN_PROGRESS, testLawyerId);
+            const result = await caseService.updateCaseStatus(mockPermissionContext, testCaseId, case_1.CaseStatus.IN_PROGRESS);
             expect(mockCaseRepository.update).toHaveBeenCalledWith(testCaseId, {
                 status: case_1.CaseStatus.IN_PROGRESS
             });
@@ -295,13 +384,14 @@ describe('CaseService Unit Tests', () => {
         });
         it('should throw error when case not found for status update', async () => {
             mockCaseRepository.update.mockResolvedValue(null);
-            await expect(caseService.updateCaseStatus(testCaseId, case_1.CaseStatus.IN_PROGRESS, testLawyerId)).rejects.toThrow('Case not found');
+            await expect(caseService.updateCaseStatus(mockPermissionContext, testCaseId, case_1.CaseStatus.IN_PROGRESS)).rejects.toThrow('Case not found');
         });
         it('should handle invalid status transitions', async () => {
             // Note: Based on requirements, we need to implement PENDING -> IN_PROGRESS -> CLOSED
             // This test assumes business logic validation will be added
             mockCaseRepository.update.mockRejectedValue(new Error('Invalid status transition'));
-            await expect(caseService.updateCaseStatus(testCaseId, case_1.CaseStatus.CLOSED, testLawyerId)).rejects.toThrow('Invalid status transition');
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
+            await expect(caseService.updateCaseStatus(mockPermissionContext, testCaseId, case_1.CaseStatus.CLOSED)).rejects.toThrow('Invalid status transition');
         });
     });
     describe('closeCase', () => {
@@ -314,7 +404,9 @@ describe('CaseService Unit Tests', () => {
         const mockClosedCase = test_utils_1.TestUtils.generateMockCase({
             _id: test_utils_1.TestUtils.generateObjectId(),
             guildId: testGuildId,
-            caseNumber: `${currentYear}-0001-testclient`,
+            caseNumber: '2025-0001-testclient',
+            createdAt: new Date(),
+            updatedAt: new Date(),
             clientId: testClientId,
             clientUsername: 'testclient',
             title: 'Test Case',
@@ -342,7 +434,7 @@ describe('CaseService Unit Tests', () => {
         });
         it('should close case successfully with all details', async () => {
             mockCaseRepository.conditionalUpdate.mockResolvedValue(mockClosedCase);
-            const result = await caseService.closeCase(mockClosureRequest);
+            const result = await caseService.closeCase(mockPermissionContext, mockClosureRequest);
             expect(mockCaseRepository.conditionalUpdate).toHaveBeenCalledWith(testCaseId, { status: case_1.CaseStatus.IN_PROGRESS }, {
                 status: case_1.CaseStatus.CLOSED,
                 result: case_1.CaseResult.WIN,
@@ -361,7 +453,7 @@ describe('CaseService Unit Tests', () => {
                 ...mockClosedCase,
                 resultNotes: undefined
             });
-            await caseService.closeCase(requestWithoutNotes);
+            await caseService.closeCase(mockPermissionContext, requestWithoutNotes);
             expect(mockCaseRepository.conditionalUpdate).toHaveBeenCalledWith(testCaseId, { status: case_1.CaseStatus.IN_PROGRESS }, {
                 status: case_1.CaseStatus.CLOSED,
                 result: case_1.CaseResult.WIN,
@@ -384,13 +476,15 @@ describe('CaseService Unit Tests', () => {
                     ...mockClosedCase,
                     result
                 });
-                await caseService.closeCase(request);
+                await caseService.closeCase(mockPermissionContext, request);
                 expect(mockCaseRepository.conditionalUpdate).toHaveBeenLastCalledWith(testCaseId, { status: case_1.CaseStatus.IN_PROGRESS }, expect.objectContaining({ result }));
             }
         });
         it('should throw error when case not found for closure', async () => {
+            mockCaseRepository.conditionalUpdate.mockResolvedValue(null);
             mockCaseRepository.findById.mockResolvedValue(null);
-            await expect(caseService.closeCase(mockClosureRequest))
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
+            await expect(caseService.closeCase(mockPermissionContext, mockClosureRequest))
                 .rejects.toThrow('Case not found');
             expect(mockCaseRepository.update).not.toHaveBeenCalled();
         });
@@ -399,7 +493,7 @@ describe('CaseService Unit Tests', () => {
                 ...mockClosedCase,
                 status: case_1.CaseStatus.CLOSED
             });
-            await expect(caseService.closeCase(mockClosureRequest))
+            await expect(caseService.closeCase(mockPermissionContext, mockClosureRequest))
                 .rejects.toThrow('Case cannot be closed - current status: closed');
             expect(mockCaseRepository.update).not.toHaveBeenCalled();
         });
@@ -408,13 +502,13 @@ describe('CaseService Unit Tests', () => {
                 ...mockClosedCase,
                 status: case_1.CaseStatus.PENDING
             });
-            await expect(caseService.closeCase(mockClosureRequest))
+            await expect(caseService.closeCase(mockPermissionContext, mockClosureRequest))
                 .rejects.toThrow('Case cannot be closed - current status: pending');
         });
         it('should throw error when update fails', async () => {
             mockCaseRepository.conditionalUpdate.mockResolvedValue(null);
             mockCaseRepository.findById.mockResolvedValue(null);
-            await expect(caseService.closeCase(mockClosureRequest))
+            await expect(caseService.closeCase(mockPermissionContext, mockClosureRequest))
                 .rejects.toThrow('Case not found');
         });
     });
@@ -422,7 +516,9 @@ describe('CaseService Unit Tests', () => {
         const mockAcceptedCase = test_utils_1.TestUtils.generateMockCase({
             _id: test_utils_1.TestUtils.generateObjectId(),
             guildId: testGuildId,
-            caseNumber: `${currentYear}-0001-testclient`,
+            caseNumber: '2025-0001-testclient',
+            createdAt: new Date(),
+            updatedAt: new Date(),
             clientId: testClientId,
             clientUsername: 'testclient',
             title: 'Test Case',
@@ -437,13 +533,15 @@ describe('CaseService Unit Tests', () => {
                 _id: test_utils_1.TestUtils.generateObjectId(),
                 status: case_1.CaseStatus.PENDING,
                 guildId: testGuildId,
-                caseNumber: `${currentYear}-0001-testclient`,
+                caseNumber: '2025-0001-testclient',
+                createdAt: new Date(),
+                updatedAt: new Date(),
                 clientId: testClientId,
                 clientUsername: 'testclient'
             });
             mockCaseRepository.findById.mockResolvedValue(pendingCase);
             mockCaseRepository.conditionalUpdate.mockResolvedValue(mockAcceptedCase);
-            const result = await caseService.acceptCase(testCaseId, testLawyerId);
+            const result = await caseService.acceptCase(mockPermissionContext, testCaseId);
             expect(mockCaseRepository.conditionalUpdate).toHaveBeenCalledWith(testCaseId, { status: case_1.CaseStatus.PENDING }, expect.objectContaining({
                 status: case_1.CaseStatus.IN_PROGRESS,
                 leadAttorneyId: testLawyerId,
@@ -454,7 +552,7 @@ describe('CaseService Unit Tests', () => {
         it('should throw error when case not found', async () => {
             mockCaseRepository.conditionalUpdate.mockResolvedValue(null);
             mockCaseRepository.findById.mockResolvedValue(null);
-            await expect(caseService.acceptCase(testCaseId, testLawyerId))
+            await expect(caseService.acceptCase(mockPermissionContext, testCaseId))
                 .rejects.toThrow('Case not found');
         });
         it('should throw error when case not in pending status', async () => {
@@ -463,7 +561,7 @@ describe('CaseService Unit Tests', () => {
                 ...mockAcceptedCase,
                 status: case_1.CaseStatus.IN_PROGRESS
             });
-            await expect(caseService.acceptCase(testCaseId, testLawyerId))
+            await expect(caseService.acceptCase(mockPermissionContext, testCaseId))
                 .rejects.toThrow('Case cannot be accepted - current status: in-progress');
         });
         it('should handle concurrent acceptance attempts', async () => {
@@ -471,7 +569,9 @@ describe('CaseService Unit Tests', () => {
                 _id: test_utils_1.TestUtils.generateObjectId(),
                 status: case_1.CaseStatus.PENDING,
                 guildId: testGuildId,
-                caseNumber: `${currentYear}-0001-testclient`,
+                caseNumber: '2025-0001-testclient',
+                createdAt: new Date(),
+                updatedAt: new Date(),
                 clientId: testClientId,
                 clientUsername: 'testclient'
             });
@@ -483,9 +583,9 @@ describe('CaseService Unit Tests', () => {
                 ...mockAcceptedCase,
                 status: case_1.CaseStatus.IN_PROGRESS
             });
-            const firstResult = await caseService.acceptCase(testCaseId, testLawyerId);
+            const firstResult = await caseService.acceptCase(mockPermissionContext, testCaseId);
             expect(firstResult).toEqual(mockAcceptedCase);
-            await expect(caseService.acceptCase(testCaseId, 'other-lawyer'))
+            await expect(caseService.acceptCase(mockPermissionContext, testCaseId))
                 .rejects.toThrow('Case cannot be accepted - current status: in-progress');
         });
     });
@@ -493,7 +593,9 @@ describe('CaseService Unit Tests', () => {
         const mockDeclinedCase = test_utils_1.TestUtils.generateMockCase({
             _id: test_utils_1.TestUtils.generateObjectId(),
             guildId: testGuildId,
-            caseNumber: `${currentYear}-0001-testclient`,
+            caseNumber: '2025-0001-testclient',
+            createdAt: new Date(),
+            updatedAt: new Date(),
             clientId: testClientId,
             clientUsername: 'testclient',
             title: 'Test Case',
@@ -508,7 +610,7 @@ describe('CaseService Unit Tests', () => {
         });
         it('should decline case with reason successfully', async () => {
             mockCaseRepository.update.mockResolvedValue(mockDeclinedCase);
-            const result = await caseService.declineCase(testCaseId, testLawyerId, 'Conflict of interest');
+            const result = await caseService.declineCase(mockPermissionContext, testCaseId, 'Conflict of interest');
             expect(mockCaseRepository.update).toHaveBeenCalledWith(testCaseId, {
                 status: case_1.CaseStatus.CLOSED,
                 result: case_1.CaseResult.DISMISSED,
@@ -523,7 +625,7 @@ describe('CaseService Unit Tests', () => {
                 ...mockDeclinedCase,
                 resultNotes: 'Case declined by staff'
             });
-            await caseService.declineCase(testCaseId, testLawyerId);
+            await caseService.declineCase(mockPermissionContext, testCaseId);
             expect(mockCaseRepository.update).toHaveBeenCalledWith(testCaseId, {
                 status: case_1.CaseStatus.CLOSED,
                 result: case_1.CaseResult.DISMISSED,
@@ -534,7 +636,7 @@ describe('CaseService Unit Tests', () => {
         });
         it('should throw error when decline update fails', async () => {
             mockCaseRepository.update.mockResolvedValue(null);
-            await expect(caseService.declineCase(testCaseId, testLawyerId))
+            await expect(caseService.declineCase(mockPermissionContext, testCaseId))
                 .rejects.toThrow('Case not found or decline failed');
         });
     });
@@ -542,7 +644,9 @@ describe('CaseService Unit Tests', () => {
         const mockCase = test_utils_1.TestUtils.generateMockCase({
             _id: test_utils_1.TestUtils.generateObjectId(),
             guildId: testGuildId,
-            caseNumber: `${currentYear}-0001-testclient`,
+            caseNumber: '2025-0001-testclient',
+            createdAt: new Date(),
+            updatedAt: new Date(),
             clientId: testClientId,
             clientUsername: 'testclient',
             title: 'Test Case',
@@ -554,18 +658,18 @@ describe('CaseService Unit Tests', () => {
         });
         it('should retrieve case by ID successfully', async () => {
             mockCaseRepository.findById.mockResolvedValue(mockCase);
-            const result = await caseService.getCaseById(testCaseId);
+            const result = await caseService.getCaseById(mockPermissionContext, testCaseId);
             expect(mockCaseRepository.findById).toHaveBeenCalledWith(testCaseId);
             expect(result).toEqual(mockCase);
         });
         it('should return null when case not found', async () => {
             mockCaseRepository.findById.mockResolvedValue(null);
-            const result = await caseService.getCaseById('non-existent-id');
+            const result = await caseService.getCaseById(mockPermissionContext, 'non-existent-id');
             expect(result).toBeNull();
         });
         it('should handle invalid case ID format', async () => {
             mockCaseRepository.findById.mockRejectedValue(new Error('Invalid ObjectId format'));
-            await expect(caseService.getCaseById('invalid-id'))
+            await expect(caseService.getCaseById(mockPermissionContext, 'invalid-id'))
                 .rejects.toThrow('Invalid ObjectId format');
         });
     });
@@ -573,7 +677,9 @@ describe('CaseService Unit Tests', () => {
         const mockCaseWithDocument = test_utils_1.TestUtils.generateMockCase({
             _id: test_utils_1.TestUtils.generateObjectId(),
             guildId: testGuildId,
-            caseNumber: `${currentYear}-0001-testclient`,
+            caseNumber: '2025-0001-testclient',
+            createdAt: new Date(),
+            updatedAt: new Date(),
             clientId: testClientId,
             clientUsername: 'testclient',
             title: 'Test Case',
@@ -592,7 +698,7 @@ describe('CaseService Unit Tests', () => {
         });
         it('should add document successfully', async () => {
             mockCaseRepository.addDocument.mockResolvedValue(mockCaseWithDocument);
-            const result = await caseService.addDocument(testCaseId, 'Test Document', 'Document content', testLawyerId);
+            const result = await caseService.addDocument(mockPermissionContext, testCaseId, 'Test Document', 'Document content');
             expect(mockCaseRepository.addDocument).toHaveBeenCalledWith(testCaseId, {
                 id: expect.any(String),
                 title: 'Test Document',
@@ -604,12 +710,12 @@ describe('CaseService Unit Tests', () => {
         });
         it('should throw error when case not found for document addition', async () => {
             mockCaseRepository.addDocument.mockResolvedValue(null);
-            await expect(caseService.addDocument(testCaseId, 'Test Document', 'Document content', testLawyerId)).rejects.toThrow('Case not found');
+            await expect(caseService.addDocument(mockPermissionContext, testCaseId, 'Test Document', 'Document content')).rejects.toThrow('Case not found');
         });
         it('should handle very long document content', async () => {
             const longContent = 'A'.repeat(100000);
             mockCaseRepository.addDocument.mockResolvedValue(mockCaseWithDocument);
-            await caseService.addDocument(testCaseId, 'Long Document', longContent, testLawyerId);
+            await caseService.addDocument(mockPermissionContext, testCaseId, 'Long Document', longContent);
             expect(mockCaseRepository.addDocument).toHaveBeenCalledWith(testCaseId, expect.objectContaining({
                 content: longContent
             }));
@@ -619,7 +725,9 @@ describe('CaseService Unit Tests', () => {
         const mockCaseWithNote = test_utils_1.TestUtils.generateMockCase({
             _id: test_utils_1.TestUtils.generateObjectId(),
             guildId: testGuildId,
-            caseNumber: `${currentYear}-0001-testclient`,
+            caseNumber: '2025-0001-testclient',
+            createdAt: new Date(),
+            updatedAt: new Date(),
             clientId: testClientId,
             clientUsername: 'testclient',
             title: 'Test Case',
@@ -638,7 +746,7 @@ describe('CaseService Unit Tests', () => {
         });
         it('should add internal note successfully', async () => {
             mockCaseRepository.addNote.mockResolvedValue(mockCaseWithNote);
-            const result = await caseService.addNote(testCaseId, 'Internal case note', testLawyerId, true);
+            const result = await caseService.addNote(mockPermissionContext, testCaseId, 'Internal case note', true);
             expect(mockCaseRepository.addNote).toHaveBeenCalledWith(testCaseId, {
                 id: expect.any(String),
                 content: 'Internal case note',
@@ -660,21 +768,21 @@ describe('CaseService Unit Tests', () => {
                     }]
             };
             mockCaseRepository.addNote.mockResolvedValue(mockCaseWithPublicNote);
-            await caseService.addNote(testCaseId, 'Public case note', testLawyerId, false);
+            await caseService.addNote(mockPermissionContext, testCaseId, 'Public case note', false);
             expect(mockCaseRepository.addNote).toHaveBeenCalledWith(testCaseId, expect.objectContaining({
                 isInternal: false
             }));
         });
         it('should default to internal note when not specified', async () => {
             mockCaseRepository.addNote.mockResolvedValue(mockCaseWithNote);
-            await caseService.addNote(testCaseId, 'Default note', testLawyerId);
+            await caseService.addNote(mockPermissionContext, testCaseId, 'Default note');
             expect(mockCaseRepository.addNote).toHaveBeenCalledWith(testCaseId, expect.objectContaining({
                 isInternal: false
             }));
         });
         it('should throw error when case not found for note addition', async () => {
             mockCaseRepository.addNote.mockResolvedValue(null);
-            await expect(caseService.addNote(testCaseId, 'Test note', testLawyerId, true)).rejects.toThrow('Case not found');
+            await expect(caseService.addNote(mockPermissionContext, testCaseId, 'Test note', true)).rejects.toThrow('Case not found');
         });
     });
     describe('searchCases', () => {
@@ -682,7 +790,9 @@ describe('CaseService Unit Tests', () => {
             test_utils_1.TestUtils.generateMockCase({
                 _id: test_utils_1.TestUtils.generateObjectId(),
                 guildId: testGuildId,
-                caseNumber: `${currentYear}-0001-testclient`,
+                caseNumber: '2025-0001-testclient',
+                createdAt: new Date(),
+                updatedAt: new Date(),
                 clientId: testClientId,
                 clientUsername: 'testclient',
                 title: 'Test Case',
@@ -696,7 +806,7 @@ describe('CaseService Unit Tests', () => {
         it('should search cases with filters', async () => {
             const filters = { guildId: testGuildId, status: case_1.CaseStatus.IN_PROGRESS };
             mockCaseRepository.searchCases.mockResolvedValue(mockSearchResults);
-            const result = await caseService.searchCases(filters);
+            const result = await caseService.searchCases(mockPermissionContext, filters);
             expect(mockCaseRepository.searchCases).toHaveBeenCalledWith(filters, undefined, undefined);
             expect(result).toEqual(mockSearchResults);
         });
@@ -705,12 +815,12 @@ describe('CaseService Unit Tests', () => {
             const sort = { field: 'createdAt', direction: 'desc' };
             const pagination = { limit: 10, skip: 0 };
             mockCaseRepository.searchCases.mockResolvedValue(mockSearchResults);
-            await caseService.searchCases(filters, sort, pagination);
+            await caseService.searchCases(mockPermissionContext, filters, sort, pagination);
             expect(mockCaseRepository.searchCases).toHaveBeenCalledWith(filters, sort, pagination);
         });
         it('should return empty array when no cases match', async () => {
             mockCaseRepository.searchCases.mockResolvedValue([]);
-            const result = await caseService.searchCases({ guildId: 'non-existent' });
+            const result = await caseService.searchCases(mockPermissionContext, { guildId: 'non-existent' });
             expect(result).toEqual([]);
         });
     });
@@ -768,7 +878,7 @@ describe('CaseService Unit Tests', () => {
     describe('Error Handling', () => {
         it('should handle repository connection failures', async () => {
             mockCaseRepository.findById.mockRejectedValue(new Error('Database connection lost'));
-            await expect(caseService.getCaseById(testCaseId))
+            await expect(caseService.getCaseById(mockPermissionContext, testCaseId))
                 .rejects.toThrow('Database connection lost');
         });
         it('should handle malformed case data', async () => {
@@ -780,12 +890,12 @@ describe('CaseService Unit Tests', () => {
                 title: '',
                 description: ''
             };
-            await expect(caseService.createCase(invalidRequest))
+            await expect(caseService.createCase(mockPermissionContext, invalidRequest))
                 .rejects.toThrow();
         });
         it('should handle concurrent modification errors', async () => {
             mockCaseRepository.update.mockRejectedValue(new Error('Document was modified by another operation'));
-            await expect(caseService.updateCaseStatus(testCaseId, case_1.CaseStatus.CLOSED, testLawyerId)).rejects.toThrow('Document was modified by another operation');
+            await expect(caseService.updateCaseStatus(mockPermissionContext, testCaseId, case_1.CaseStatus.CLOSED)).rejects.toThrow('Document was modified by another operation');
         });
     });
 });

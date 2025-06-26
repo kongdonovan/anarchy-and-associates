@@ -32,6 +32,15 @@ import { DEFAULT_JOB_QUESTIONS } from '../../domain/entities/job';
 import { Job } from '../../domain/entities/job';
 import { Application, ApplicationAnswer } from '../../domain/entities/application';
 import { logger } from '../../infrastructure/logger';
+import { BaseCommand } from './base-command';
+import { ValidateCommand, ValidatePermissions, ValidateBusinessRules, ValidateEntity } from '../decorators/validation-decorators';
+import { BusinessRuleValidationService } from '../../application/services/business-rule-validation-service';
+import { CommandValidationService } from '../../application/services/command-validation-service';
+import { CrossEntityValidationService } from '../../application/services/cross-entity-validation-service';
+import { CaseRepository } from '../../infrastructure/repositories/case-repository';
+import { RetainerRepository } from '../../infrastructure/repositories/retainer-repository';
+import { FeedbackRepository } from '../../infrastructure/repositories/feedback-repository';
+import { ReminderRepository } from '../../infrastructure/repositories/reminder-repository';
 
 @Discord()
 @SlashGroup({ description: 'Job management and application commands', name: 'jobs' })
@@ -189,7 +198,7 @@ import { logger } from '../../infrastructure/logger';
     await next();
   }
 )
-export class JobsCommands {
+export class JobsCommands extends BaseCommand {
   private jobService: JobService;
   private questionService: JobQuestionService;
   private cleanupService: JobCleanupService;
@@ -198,12 +207,18 @@ export class JobsCommands {
   private guildConfigRepository: GuildConfigRepository;
 
   constructor() {
+    super();
+    
     const jobRepository = new JobRepository();
     const auditLogRepository = new AuditLogRepository();
     const staffRepository = new StaffRepository();
     const applicationRepository = new ApplicationRepository();
     const robloxService = RobloxService.getInstance();
     const guildConfigRepository = new GuildConfigRepository();
+    const caseRepository = new CaseRepository();
+    const retainerRepository = new RetainerRepository();
+    const feedbackRepository = new FeedbackRepository();
+    const reminderRepository = new ReminderRepository();
 
     this.jobService = new JobService(jobRepository, auditLogRepository, staffRepository);
     this.questionService = new JobQuestionService();
@@ -216,6 +231,38 @@ export class JobsCommands {
     );
     this.jobRepository = jobRepository;
     this.guildConfigRepository = guildConfigRepository;
+    
+    // Initialize services for validation
+    this.permissionService = new PermissionService(guildConfigRepository);
+    this.businessRuleValidationService = new BusinessRuleValidationService(
+      guildConfigRepository,
+      staffRepository,
+      caseRepository,
+      this.permissionService
+    );
+    this.crossEntityValidationService = new CrossEntityValidationService(
+      staffRepository,
+      caseRepository,
+      applicationRepository,
+      jobRepository,
+      retainerRepository,
+      feedbackRepository,
+      reminderRepository,
+      auditLogRepository,
+      this.businessRuleValidationService
+    );
+    this.commandValidationService = new CommandValidationService(
+      this.businessRuleValidationService,
+      this.crossEntityValidationService
+    );
+    
+    // Initialize validation services in base class
+    this.initializeValidationServices(
+      this.commandValidationService,
+      this.businessRuleValidationService,
+      this.crossEntityValidationService,
+      this.permissionService
+    );
   }
 
   @Slash({
@@ -223,6 +270,7 @@ export class JobsCommands {
     name: 'apply'
   })
   async apply(interaction: CommandInteraction): Promise<void> {
+      const context = await this.getPermissionContext(interaction);
     try {
       const guildId = interaction.guildId!;
       
@@ -280,6 +328,7 @@ export class JobsCommands {
   }
 
   @Slash({ name: 'list', description: 'List all jobs with filtering and pagination' })
+  @ValidatePermissions('senior-staff')
   async list(
     @SlashOption({
       description: 'Filter by job status (open/closed/all)',
@@ -412,6 +461,9 @@ export class JobsCommands {
   }
 
   @Slash({ name: 'add', description: 'Create a new job posting' })
+  @ValidatePermissions('senior-staff')
+  @ValidateBusinessRules('role_limit')
+  @ValidateEntity('job', 'create')
   async add(
     @SlashOption({
       description: 'Job title',
@@ -464,7 +516,7 @@ export class JobsCommands {
         postedBy: interaction.user.id,
       };
 
-      const result = await this.jobService.createJob(request);
+      const result = await this.jobService.createJob(context, request);
 
       if (!result.success) {
         await interaction.followUp({
@@ -501,6 +553,8 @@ export class JobsCommands {
   }
 
   @Slash({ name: 'edit', description: 'Edit an existing job posting' })
+  @ValidatePermissions('senior-staff')
+  @ValidateEntity('job', 'update')
   async edit(
     @SlashOption({
       description: 'Job ID to edit',
@@ -620,6 +674,7 @@ export class JobsCommands {
   }
 
   @Slash({ name: 'info', description: 'View detailed information about a specific job' })
+  @ValidatePermissions('senior-staff')
   async info(
     @SlashOption({
       description: 'Job ID to view',
@@ -634,7 +689,7 @@ export class JobsCommands {
       await interaction.deferReply();
 
       const guildId = interaction.guildId!;
-      const job = await this.jobService.getJobDetails(guildId, jobId, interaction.user.id);
+      const job = await this.jobService.getJobDetails(context, guildId, jobId, interaction.user.id);
 
       if (!job) {
         await interaction.followUp({
@@ -686,6 +741,8 @@ export class JobsCommands {
   }
 
   @Slash({ name: 'close', description: 'Close a job posting (keeps it in database)' })
+  @ValidatePermissions('senior-staff')
+  @ValidateEntity('job', 'update')
   async close(
     @SlashOption({
       description: 'Job ID to close',
@@ -736,6 +793,8 @@ export class JobsCommands {
   }
 
   @Slash({ name: 'remove', description: 'Remove a job posting permanently from database' })
+  @ValidatePermissions('senior-staff')
+  @ValidateEntity('job', 'delete')
   async remove(
     @SlashOption({
       description: 'Job ID to remove',
@@ -752,7 +811,7 @@ export class JobsCommands {
       const guildId = interaction.guildId!;
       
       // Get job info before deletion for confirmation
-      const job = await this.jobService.getJobDetails(guildId, jobId, interaction.user.id);
+      const job = await this.jobService.getJobDetails(context, guildId, jobId, interaction.user.id);
       if (!job) {
         await interaction.followUp({
           content: '❌ Job not found.',
@@ -875,6 +934,7 @@ export class JobsCommands {
   }
 
   @Slash({ name: 'questions', description: 'List available question templates for jobs' })
+  @ValidatePermissions('senior-staff')
   async questions(
     @SlashOption({
       description: 'Filter by category',
@@ -948,6 +1008,7 @@ export class JobsCommands {
   }
 
   @Slash({ name: 'question-preview', description: 'Preview a specific question template' })
+  @ValidatePermissions('senior-staff')
   async question_preview(
     @SlashOption({
       description: 'Template ID to preview',
@@ -1004,6 +1065,7 @@ export class JobsCommands {
   }
 
   @Slash({ name: 'add-questions', description: 'Add custom questions to a job using templates' })
+  @ValidatePermissions('senior-staff')
   async add_questions(
     @SlashOption({
       description: 'Job ID to add questions to',
@@ -1034,7 +1096,7 @@ export class JobsCommands {
       const guildId = interaction.guildId!;
       
       // Get existing job
-      const existingJob = await this.jobService.getJobDetails(guildId, jobId, interaction.user.id);
+      const existingJob = await this.jobService.getJobDetails(context, guildId, jobId, interaction.user.id);
       if (!existingJob) {
         await interaction.followUp({
           content: '❌ Job not found.',
@@ -1143,6 +1205,7 @@ export class JobsCommands {
   }
 
   @Slash({ name: 'cleanup-roles', description: 'Clean up Discord roles for closed jobs' })
+  @ValidatePermissions('senior-staff')
   async cleanup_roles(
     @SlashOption({
       description: 'Perform dry run without making changes',
@@ -1208,8 +1271,10 @@ export class JobsCommands {
   }
 
   @Slash({ name: 'cleanup-report', description: 'Get cleanup report for jobs and roles' })
+  @ValidatePermissions('senior-staff')
   async cleanup_report(interaction: CommandInteraction) {
     try {
+      const context = await this.getPermissionContext(interaction);
       await interaction.deferReply();
 
       const guildId = interaction.guildId!;
@@ -1274,6 +1339,7 @@ export class JobsCommands {
   }
 
   @Slash({ name: 'cleanup-expired', description: 'Automatically close expired jobs (30+ days old)' })
+  @ValidatePermissions('senior-staff')
   async cleanup_expired(
     @SlashOption({
       description: 'Maximum days a job can stay open (default: 30)',
@@ -1605,7 +1671,7 @@ export class JobsCommands {
       const applicationId = interaction.customId.replace('app_accept_', '');
       
       // Review the application
-      const application = await this.applicationService.reviewApplication({
+      const application = await this.applicationService.reviewApplication(context, {
         applicationId,
         reviewerId: interaction.user.id,
         approved: true
@@ -1763,7 +1829,7 @@ export class JobsCommands {
       const reason = interaction.fields.getTextInputValue('decline_reason') || undefined;
       
       // Review the application
-      const application = await this.applicationService.reviewApplication({
+      const application = await this.applicationService.reviewApplication(context, {
         applicationId,
         reviewerId: interaction.user.id,
         approved: false,

@@ -11,6 +11,9 @@ export interface RoleChangeEvent {
 export declare class RoleTrackingService {
     private staffRepository;
     private auditLogRepository;
+    private channelPermissionManager;
+    private roleChangeCascadeService;
+    private roleSynchronizationEnhancementService;
     private readonly STAFF_ROLE_MAPPING;
     private readonly STAFF_ROLES_HIERARCHY;
     constructor();

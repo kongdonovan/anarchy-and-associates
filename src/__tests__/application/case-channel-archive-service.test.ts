@@ -5,9 +5,10 @@ import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-
 import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
 import { PermissionService, PermissionContext } from '../../application/services/permission-service';
 import { BusinessRuleValidationService } from '../../application/services/business-rule-validation-service';
-import { Case, CaseStatus } from '../../domain/entities/case';
+import { Case, CaseStatus, CasePriority } from '../../domain/entities/case';
 import { ChannelType } from 'discord.js';
 import { ObjectId } from 'mongodb';
+
 
 // Mock all dependencies
 jest.mock('../../infrastructure/repositories/case-repository');
@@ -34,7 +35,6 @@ describe('CaseChannelArchiveService', () => {
 
   const testGuildId = 'test_guild_123';
   const testChannelId = 'channel_123';
-  const testCaseId = 'case_123';
   const testUserId = 'user_123';
 
   beforeEach(() => {
@@ -139,7 +139,7 @@ describe('CaseChannelArchiveService', () => {
         title: 'Test Case',
         description: 'Test case description',
         status: CaseStatus.CLOSED,
-        priority: 'medium' as any,
+        priority: CasePriority.MEDIUM,
         assignedLawyerIds: [],
         documents: [],
         notes: [],
@@ -149,7 +149,7 @@ describe('CaseChannelArchiveService', () => {
         updatedAt: new Date()
       } as Case;
 
-      const result = await archiveService.archiveCaseChannel(mockGuild, caseData, mockContext);
+      const result = await archiveService.archiveCaseChannel(mockGuild, caseData as Case, mockContext);
 
       expect(result.success).toBe(true);
       expect(result.channelId).toBe(testChannelId);
@@ -174,10 +174,12 @@ describe('CaseChannelArchiveService', () => {
         title: 'Test Case',
         description: 'Test case description',
         status: CaseStatus.CLOSED,
-        priority: 'medium' as any,
+        priority: CasePriority.MEDIUM,
         assignedLawyerIds: [],
         documents: [],
-        notes: []
+        notes: [],
+        createdAt: new Date(),
+        updatedAt: new Date()
         // No channelId
       };
 
@@ -197,11 +199,13 @@ describe('CaseChannelArchiveService', () => {
         title: 'Test Case',
         description: 'Test case description',
         status: CaseStatus.CLOSED,
-        priority: 'medium' as any,
+        priority: CasePriority.MEDIUM,
         assignedLawyerIds: [],
         documents: [],
         notes: [],
-        channelId: 'nonexistent_channel'
+        channelId: 'nonexistent_channel',
+        createdAt: new Date(),
+        updatedAt: new Date()
       };
 
       const result = await archiveService.archiveCaseChannel(mockGuild, caseData, mockContext);
@@ -222,11 +226,13 @@ describe('CaseChannelArchiveService', () => {
         title: 'Test Case',
         description: 'Test case description',
         status: CaseStatus.CLOSED,
-        priority: 'medium' as any,
+        priority: CasePriority.MEDIUM,
         assignedLawyerIds: [],
         documents: [],
         notes: [],
-        channelId: testChannelId
+        channelId: testChannelId,
+        createdAt: new Date(),
+        updatedAt: new Date()
       };
 
       await expect(archiveService.archiveCaseChannel(mockGuild, caseData, mockContext))
@@ -241,20 +247,22 @@ describe('CaseChannelArchiveService', () => {
         guildId: testGuildId,
         // No caseArchiveCategoryId
         permissions: {
-          admin: [],
-          'senior-staff': [],
-          case: [],
-          config: [],
-          lawyer: [],
-          'lead-attorney': [],
-          repair: []
-        },
+        admin: [],
+        'senior-staff': [],
+        case: [],
+        config: [],
+        lawyer: [],
+        'lead-attorney': [],
+        repair: []
+      },
         adminRoles: [],
-        adminUsers: []
+        adminUsers: [],
+        createdAt: new Date(),
+        updatedAt: new Date()
       });
 
       const caseData: Case = {
-        _id: testCaseId,
+        _id: new ObjectId('507f1f77bcf86cd799439017'),
         guildId: testGuildId,
         caseNumber: 'AA-2024-123',
         clientId: 'client_123',
@@ -262,11 +270,13 @@ describe('CaseChannelArchiveService', () => {
         title: 'Test Case',
         description: 'Test case description',
         status: CaseStatus.CLOSED,
-        priority: 'medium' as any,
+        priority: CasePriority.MEDIUM,
         assignedLawyerIds: [],
         documents: [],
         notes: [],
-        channelId: testChannelId
+        channelId: testChannelId,
+        createdAt: new Date(),
+        updatedAt: new Date()
       };
 
       const result = await archiveService.archiveCaseChannel(mockGuild, caseData, mockContext);
@@ -284,7 +294,7 @@ describe('CaseChannelArchiveService', () => {
     it('should archive multiple closed case channels', async () => {
       const closedCases: Case[] = [
         {
-          _id: 'case_1',
+          _id: new ObjectId('507f1f77bcf86cd799439001'),
           guildId: testGuildId,
           caseNumber: 'AA-2024-001',
           clientId: 'client_1',
@@ -292,15 +302,17 @@ describe('CaseChannelArchiveService', () => {
           title: 'Case 1',
           description: 'Description 1',
           status: CaseStatus.CLOSED,
-          priority: 'medium' as any,
+          priority: CasePriority.MEDIUM,
           assignedLawyerIds: [],
           documents: [],
           notes: [],
           channelId: 'channel_1',
-          closedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000) // 8 days ago
+          closedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000), // 8 days ago
+          createdAt: new Date(),
+          updatedAt: new Date()
         },
         {
-          _id: 'case_2',
+          _id: new ObjectId('507f1f77bcf86cd799439002'),
           guildId: testGuildId,
           caseNumber: 'AA-2024-002',
           clientId: 'client_2',
@@ -308,12 +320,14 @@ describe('CaseChannelArchiveService', () => {
           title: 'Case 2',
           description: 'Description 2',
           status: CaseStatus.CLOSED,
-          priority: 'medium' as any,
+          priority: CasePriority.MEDIUM,
           assignedLawyerIds: [],
           documents: [],
           notes: [],
           channelId: 'channel_2',
-          closedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000) // 1 day ago (too recent)
+          closedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000), // 1 day ago (too recent)
+          createdAt: new Date(),
+          updatedAt: new Date()
         }
       ];
 
@@ -334,8 +348,8 @@ describe('CaseChannelArchiveService', () => {
       const results = await archiveService.archiveClosedCaseChannels(mockGuild, mockContext);
 
       expect(results).toHaveLength(1); // Only case_1 should be archived (case_2 is too recent)
-      expect(results[0].success).toBe(true);
-      expect(results[0].channelId).toBe('channel_1');
+      expect(results[0]!.success).toBe(true);
+      expect(results[0]!.channelId).toBe('channel_1');
     });
 
     it('should handle permission check failure', async () => {
@@ -473,11 +487,13 @@ describe('CaseChannelArchiveService', () => {
         title: 'Test Case',
         description: 'Test case description',
         status: CaseStatus.CLOSED,
-        priority: 'medium' as any,
+        priority: CasePriority.MEDIUM,
         assignedLawyerIds: [],
         documents: [],
         notes: [],
-        channelId: testChannelId
+        channelId: testChannelId,
+        createdAt: new Date(),
+        updatedAt: new Date()
       };
 
       await expect(archiveService.archiveCaseChannel(mockGuild, caseData, mockContext))
@@ -496,11 +512,13 @@ describe('CaseChannelArchiveService', () => {
         title: 'Test Case',
         description: 'Test case description',
         status: CaseStatus.CLOSED,
-        priority: 'medium' as any,
+        priority: CasePriority.MEDIUM,
         assignedLawyerIds: [],
         documents: [],
         notes: [],
-        channelId: testChannelId
+        channelId: testChannelId,
+        createdAt: new Date(),
+        updatedAt: new Date()
       };
 
       // Should still succeed despite audit log failure
@@ -522,12 +540,14 @@ describe('CaseChannelArchiveService', () => {
         title: 'Test Case',
         description: 'Test case description',
         status: CaseStatus.CLOSED,
-        priority: 'medium' as any,
+        priority: CasePriority.MEDIUM,
         assignedLawyerIds: [],
         documents: [],
         notes: [],
         channelId: testChannelId,
-        closedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000) // 8 days ago
+        closedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000), // 8 days ago,
+        createdAt: new Date(),
+        updatedAt: new Date()
       };
 
       const result = await archiveService.archiveCaseChannel(mockGuild, caseData, mockContext);
@@ -546,11 +566,13 @@ describe('CaseChannelArchiveService', () => {
         title: 'Test Case',
         description: 'Test case description',
         status: CaseStatus.CLOSED,
-        priority: 'medium' as any,
+        priority: CasePriority.MEDIUM,
         assignedLawyerIds: [],
         documents: [],
         notes: [],
-        channelId: testChannelId
+        channelId: testChannelId,
+        createdAt: new Date(),
+        updatedAt: new Date()
       };
 
       // Should fallback to default config

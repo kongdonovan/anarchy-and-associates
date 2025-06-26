@@ -9,6 +9,8 @@ import { AuditAction } from '../../domain/entities/audit-log';
 import { PermissionService } from './permission-service';
 import { BusinessRuleValidationService } from './business-rule-validation-service';
 import { ChannelPermissionManager } from './channel-permission-manager';
+import { RoleChangeCascadeService, RoleChangeType } from './role-change-cascade-service';
+import { RoleSynchronizationEnhancementService } from './role-synchronization-enhancement-service';
 import { logger } from '../../infrastructure/logger';
 
 export interface RoleChangeEvent {
@@ -25,6 +27,8 @@ export class RoleTrackingService {
   private staffRepository: StaffRepository;
   private auditLogRepository: AuditLogRepository;
   private channelPermissionManager: ChannelPermissionManager;
+  private roleChangeCascadeService: RoleChangeCascadeService;
+  private roleSynchronizationEnhancementService: RoleSynchronizationEnhancementService;
   
   // Map Discord role names to staff roles based on Anarchy config
   private readonly STAFF_ROLE_MAPPING: Record<string, StaffRole> = {
@@ -69,6 +73,12 @@ export class RoleTrackingService {
       permissionService,
       businessRuleValidationService
     );
+    
+    // Initialize the cascade service
+    this.roleChangeCascadeService = new RoleChangeCascadeService();
+    
+    // Initialize the role synchronization enhancement service
+    this.roleSynchronizationEnhancementService = new RoleSynchronizationEnhancementService();
   }
 
   /**
@@ -82,6 +92,9 @@ export class RoleTrackingService {
         logger.error('Error handling role change:', error);
       }
     });
+
+    // Initialize the cascade service with the Discord client
+    this.roleChangeCascadeService.initialize(client);
 
     logger.info('Role tracking service initialized');
   }
@@ -100,6 +113,36 @@ export class RoleTrackingService {
 
     const guildId = newMember.guild.id;
     const userId = newMember.user.id;
+
+    // Check for role conflicts before processing
+    const conflictCheck = await this.roleSynchronizationEnhancementService.checkRoleChangeForConflicts(
+      newMember,
+      oldMember.roles.cache.map(r => r.name),
+      newMember.roles.cache.map(r => r.name)
+    );
+
+    if (conflictCheck.shouldPrevent) {
+      logger.warn(`Preventing role change for ${newMember.displayName}: ${conflictCheck.preventionReason}`);
+      // In a real implementation, we might want to revert the role change here
+      // For now, we'll just log and return
+      return;
+    }
+
+    // If there's a conflict but it shouldn't be prevented, handle it
+    if (conflictCheck.hasConflict && conflictCheck.conflict) {
+      logger.info(`Role conflict detected for ${newMember.displayName}, auto-resolving...`);
+      await this.roleSynchronizationEnhancementService.resolveConflict(
+        newMember,
+        conflictCheck.conflict,
+        true // notify user
+      );
+      // After resolution, re-evaluate the roles
+      const updatedMember = await newMember.guild.members.fetch(userId);
+      const updatedStaffRoles = this.getStaffRoles(updatedMember.roles.cache.map(r => r.name));
+      // Update newStaffRoles to reflect the resolved state
+      newStaffRoles.length = 0;
+      newStaffRoles.push(...updatedStaffRoles);
+    }
     
     // Determine the highest role (most senior) in each state
     const oldHighestRole = this.getHighestStaffRole(oldStaffRoles);
@@ -156,7 +199,7 @@ export class RoleTrackingService {
       if (existingStaff) {
         // Reactivate existing staff member
         await this.staffRepository.update(existingStaff._id!.toString(), {
-          status: 'active',
+          status: RetainerStatus.ACTIVE,
           role: staffRole,
           hiredAt: new Date() // Update hire date for rehiring
         });
@@ -179,7 +222,7 @@ export class RoleTrackingService {
             reason: 'Initial hiring via Discord role assignment',
             actionType: 'hire'
           }],
-          status: 'active',
+          status: RetainerStatus.ACTIVE,
           discordRoleId: this.findDiscordRoleId(member.guild, role)
         };
 
@@ -212,6 +255,15 @@ export class RoleTrackingService {
         newRole: role,
         changedBy: 'System',
         timestamp: new Date()
+      });
+
+      // Handle cascading effects (in this case, hiring doesn't require cascade handling)
+      // but we call it for consistency
+      await this.roleChangeCascadeService.handleRoleChange({
+        member,
+        oldRole: undefined,
+        newRole: staffRole,
+        changeType: 'hire'
       });
 
     } catch (error) {
@@ -263,6 +315,16 @@ export class RoleTrackingService {
         changedBy: 'System',
         timestamp: new Date()
       });
+
+      // Handle cascading effects (unassign from cases, remove permissions)
+      if (oldStaffRole) {
+        await this.roleChangeCascadeService.handleRoleChange({
+          member,
+          oldRole: oldStaffRole,
+          newRole: undefined,
+          changeType: 'fire'
+        });
+      }
 
     } catch (error) {
       logger.error(`Error handling firing for user ${userId}:`, error);
@@ -329,6 +391,19 @@ export class RoleTrackingService {
         timestamp: new Date()
       });
 
+      // Handle cascading effects (generally promotions grant more permissions, no cascade needed)
+      // but we call it for consistency
+      const oldStaffRoleForCascade = this.mapDiscordRoleToStaffRole(oldRole);
+      const newStaffRoleForCascade = this.mapDiscordRoleToStaffRole(newRole);
+      if (oldStaffRoleForCascade && newStaffRoleForCascade) {
+        await this.roleChangeCascadeService.handleRoleChange({
+          member,
+          oldRole: oldStaffRoleForCascade,
+          newRole: newStaffRoleForCascade,
+          changeType: 'promotion'
+        });
+      }
+
     } catch (error) {
       logger.error(`Error handling promotion for user ${userId}:`, error);
     }
@@ -393,6 +468,18 @@ export class RoleTrackingService {
         changedBy: 'System',
         timestamp: new Date()
       });
+
+      // Handle cascading effects (may lose case permissions)
+      const oldStaffRoleForCascade = this.mapDiscordRoleToStaffRole(oldRole);
+      const newStaffRoleForCascade = this.mapDiscordRoleToStaffRole(newRole);
+      if (oldStaffRoleForCascade && newStaffRoleForCascade) {
+        await this.roleChangeCascadeService.handleRoleChange({
+          member,
+          oldRole: oldStaffRoleForCascade,
+          newRole: newStaffRoleForCascade,
+          changeType: 'demotion'
+        });
+      }
 
     } catch (error) {
       logger.error(`Error handling demotion for user ${userId}:`, error);

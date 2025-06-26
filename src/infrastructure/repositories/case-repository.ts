@@ -1,5 +1,6 @@
 import { Case, CaseStatus, CasePriority, CaseResult } from '../../domain/entities/case';
 import { BaseMongoRepository } from './base-mongo-repository';
+import { ObjectId } from 'mongodb';
 
 export interface CaseSearchFilters {
   guildId?: string;
@@ -265,7 +266,11 @@ export class CaseRepository extends BaseMongoRepository<Case> {
     updates: Partial<Case>
   ): Promise<Case | null> {
     try {
-      const query = { _id: this.toObjectId(caseId), ...conditions };
+      if (!ObjectId.isValid(caseId)) {
+        return null;
+      }
+      
+      const query = { _id: new ObjectId(caseId), ...conditions };
       const updateDoc = { $set: { ...updates, updatedAt: new Date() } };
       
       const result = await this.collection.findOneAndUpdate(

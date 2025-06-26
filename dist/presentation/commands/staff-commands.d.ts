@@ -1,17 +1,25 @@
-import { User, CommandInteraction } from 'discord.js';
-export declare class StaffCommands {
+import { User, CommandInteraction, ModalSubmitInteraction } from 'discord.js';
+import { BaseCommand } from './base-command';
+export declare class StaffCommands extends BaseCommand {
     private staffRepository;
     private auditLogRepository;
+    private caseRepository;
     private guildConfigRepository;
     private staffService;
     private roleSyncService;
     private permissionService;
+    private businessRuleValidationService;
     constructor();
-    private getPermissionContext;
-    private createErrorEmbed;
-    private createSuccessEmbed;
-    private createInfoEmbed;
+    private crossEntityValidationService;
     hireStaff(user: User, role: string, robloxUsername: string, reason: string, interaction: CommandInteraction): Promise<void>;
+    /**
+     * Perform the actual staff hiring (separated for reuse in bypass flow)
+     */
+    private performStaffHiring;
+    /**
+     * Handle guild owner bypass modal submission
+     */
+    handleRoleLimitBypass(interaction: ModalSubmitInteraction): Promise<void>;
     fireStaff(user: User, reason: string, interaction: CommandInteraction): Promise<void>;
     promoteStaff(user: User, role: string, reason: string, interaction: CommandInteraction): Promise<void>;
     demoteStaff(user: User, role: string, reason: string, interaction: CommandInteraction): Promise<void>;

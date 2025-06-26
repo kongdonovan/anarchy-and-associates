@@ -21,7 +21,7 @@ COMMANDS:
 - Validates job limits and availability
 - Automatically assigns Discord role
 - Adds user to staff database
-- Requires 'hr' permission
+- Requires 'senior-staff' permission
 - Includes audit logging
 
 /staff fire [user]
@@ -29,7 +29,7 @@ COMMANDS:
 - Validates hierarchical permissions (cannot fire equal/higher role)
 - Removes all job-related Discord roles
 - Updates staff database status
-- Requires 'hr' permission
+- Requires 'senior-staff' permission
 - Includes audit logging
 
 /staff promote [user] [role] [roblox_username]
@@ -37,14 +37,14 @@ COMMANDS:
 - Validates role hierarchy and permissions
 - Removes lower-level roles, adds new role
 - Updates staff database record
-- Requires 'hr' permission
+- Requires 'senior-staff' permission
 - Includes audit logging
 
 /staff demote [user] [role]
 - Demote staff to lower role
 - Similar validation as promotion but in reverse
 - Maintains role hierarchy integrity
-- Requires 'hr' permission
+- Requires 'senior-staff' permission
 - Includes audit logging
 
 /staff info [user]
@@ -77,7 +77,7 @@ COMMANDS:
 - Optional position limit enforcement
 - Custom application questions in JSON format
 - Automatic status tracking
-- Requires 'hr' permission
+- Requires 'senior-staff' permission
 
 /job edit [jobid] [title] [description] [limit] [open] [role] [questions]
 - Modify existing job
@@ -85,7 +85,7 @@ COMMANDS:
 - Change open/closed status
 - Automatically removes roles when job closes
 - Maintains application history
-- Requires 'hr' permission
+- Requires 'senior-staff' permission
 
 FEATURES:
 - Custom application questions with multiple input types (short, paragraph, number, choice)
@@ -210,7 +210,7 @@ COMMANDS:
 
 PERMISSION ACTIONS SUPPORTED:
 - admin: Administrative functions
-- hr: Human resources (hiring, firing, promotions)
+- senior-staff: Senior staff management (hiring, firing, promotions)
 - case: Case management operations
 - config: Server configuration changes
 - retainer: Retainer agreement management

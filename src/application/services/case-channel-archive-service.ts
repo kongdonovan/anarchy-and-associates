@@ -4,8 +4,7 @@ import {
   CategoryChannel, 
   ChannelType, 
   PermissionFlagsBits,
-  Collection,
-  GuildMember
+  Collection
 } from 'discord.js';
 import { CaseRepository } from '../../infrastructure/repositories/case-repository';
 import { GuildConfigRepository } from '../../infrastructure/repositories/guild-config-repository';
@@ -15,6 +14,7 @@ import { BusinessRuleValidationService } from './business-rule-validation-servic
 import { Case, CaseStatus } from '../../domain/entities/case';
 import { AuditAction } from '../../domain/entities/audit-log';
 import { logger } from '../../infrastructure/logger';
+import { CaseStatus, CasePriority } from '../../domain/entities/case';
 
 export interface ChannelArchiveConfig {
   archiveCategoryId?: string;
@@ -52,7 +52,7 @@ export class CaseChannelArchiveService {
   private guildConfigRepository: GuildConfigRepository;
   private auditLogRepository: AuditLogRepository;
   private permissionService: PermissionService;
-  private businessRuleValidationService: BusinessRuleValidationService;
+  // private _businessRuleValidationService: BusinessRuleValidationService;
 
   // Default archive configuration
   private readonly DEFAULT_CONFIG: ChannelArchiveConfig = {
@@ -74,13 +74,13 @@ export class CaseChannelArchiveService {
     guildConfigRepository: GuildConfigRepository,
     auditLogRepository: AuditLogRepository,
     permissionService: PermissionService,
-    businessRuleValidationService: BusinessRuleValidationService
+    _businessRuleValidationService: BusinessRuleValidationService
   ) {
     this.caseRepository = caseRepository;
     this.guildConfigRepository = guildConfigRepository;
     this.auditLogRepository = auditLogRepository;
     this.permissionService = permissionService;
-    this.businessRuleValidationService = businessRuleValidationService;
+    // this._businessRuleValidationService = businessRuleValidationService;
   }
 
   /**
@@ -146,7 +146,7 @@ export class CaseChannelArchiveService {
       }
 
       // Store original category for audit purposes
-      const originalCategoryId = channel.parentId;
+      // const _originalCategoryId = channel.parentId;
 
       // Update channel for archiving
       const archiveResult = await this.performChannelArchive(
@@ -657,7 +657,7 @@ export class CaseChannelArchiveService {
     guildId: string,
     actorId: string,
     archiveResult: ChannelArchiveResult,
-    caseData?: Case
+    _caseData?: Case
   ): Promise<void> {
     try {
       await this.auditLogRepository.add({

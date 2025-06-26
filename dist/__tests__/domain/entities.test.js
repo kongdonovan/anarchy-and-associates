@@ -1,7 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const entities_1 = require("../../domain/entities");
+const retainer_1 = require("../../domain/entities/retainer");
 const mongodb_1 = require("mongodb");
+const case_1 = require("../../domain/entities/case");
 describe('Domain Entities', () => {
     describe('GuildConfig', () => {
         it('should have correct structure', () => {
@@ -12,10 +14,10 @@ describe('Domain Entities', () => {
                 updatedAt: new Date(),
                 permissions: {
                     admin: ['role1'],
-                    hr: ['role2'],
+                    'senior-staff': ['role2'],
                     case: ['role3'],
                     config: ['role4'],
-                    retainer: ['role5'],
+                    lawyer: ['role5'],
                     repair: ['role6'],
                 },
                 adminRoles: ['admin_role'],
@@ -38,7 +40,7 @@ describe('Domain Entities', () => {
                 hiredAt: new Date(),
                 hiredBy: 'hr_user',
                 promotionHistory: [],
-                status: 'active',
+                status: retainer_1.RetainerStatus.ACTIVE,
                 createdAt: new Date(),
                 updatedAt: new Date(),
             };
@@ -78,7 +80,7 @@ describe('Domain Entities', () => {
                 applicantId: 'user123',
                 robloxUsername: 'TestApplicant',
                 answers: [],
-                status: 'pending',
+                status: case_1.CaseStatus.PENDING,
                 createdAt: new Date(),
                 updatedAt: new Date(),
             };

@@ -251,7 +251,7 @@ class AnarchyServerSetupService {
                         clientRoleId: undefined,
                         permissions: {
                             admin: [],
-                            hr: [],
+                            'senior-staff': [],
                             case: [],
                             config: [],
                             retainer: [],
@@ -436,7 +436,7 @@ class AnarchyServerSetupService {
                 clientRoleId: roleMap.get('Client'),
                 permissions: {
                     admin: [],
-                    hr: [],
+                    'senior-staff': [],
                     case: [],
                     config: [],
                     retainer: [],

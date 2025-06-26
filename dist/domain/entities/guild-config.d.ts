@@ -10,13 +10,25 @@ export interface GuildConfig extends BaseEntity {
     clientRoleId?: string;
     permissions: {
         admin: string[];
-        hr: string[];
+        'senior-staff': string[];
         case: string[];
         config: string[];
-        retainer: string[];
+        lawyer: string[];
+        'lead-attorney': string[];
         repair: string[];
     };
     adminRoles: string[];
     adminUsers: string[];
+    channelCleanupConfig?: {
+        scanInterval: number;
+        inactivityThreshold: number;
+        archiveThreshold: number;
+        deleteThreshold: number;
+        batchSize: number;
+        enableAutoCleanup: boolean;
+        notificationChannelId?: string;
+        excludedCategories: string[];
+        excludedChannels: string[];
+    };
 }
 //# sourceMappingURL=guild-config.d.ts.map

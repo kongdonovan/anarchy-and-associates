@@ -6,6 +6,7 @@ import { StaffRepository } from '../../infrastructure/repositories/staff-reposit
 import { RobloxService } from '../../infrastructure/external/roblox-service';
 import { PermissionService, PermissionContext } from './permission-service';
 import { logger } from '../../infrastructure/logger';
+import { CaseStatus, CasePriority } from '../../domain/entities/case';
 
 export interface ApplicationSubmissionRequest {
   guildId: string;
@@ -57,7 +58,7 @@ export class ApplicationService {
       applicantId: request.applicantId,
       robloxUsername: request.robloxUsername,
       answers: request.answers,
-      status: 'pending'
+      status: CaseStatus.PENDING
     };
 
     const createdApplication = await this.applicationRepository.add(application);

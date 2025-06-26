@@ -42,7 +42,7 @@ describe('PermissionService', () => {
     it('should grant permission to guild owner', async () => {
       const ownerContext = { ...testContext, isGuildOwner: true };
       
-      const result = await permissionService.hasActionPermission(ownerContext, 'hr');
+      const result = await permissionService.hasActionPermission(ownerContext, 'senior-staff');
       
       expect(result).toBe(true);
     });
@@ -50,7 +50,7 @@ describe('PermissionService', () => {
     it('should not grant unrelated permission to user', async () => {
       const adminContext = { ...testContext, userId: 'admin_user_1' };
       
-      const result = await permissionService.hasActionPermission(adminContext, 'hr');
+      const result = await permissionService.hasActionPermission(adminContext, 'senior-staff');
       
       expect(result).toBe(false);
     });
@@ -80,7 +80,7 @@ describe('PermissionService', () => {
     it('should handle repository errors gracefully', async () => {
       mockRepository.ensureGuildConfig.mockRejectedValue(new Error('Database error'));
       
-      const result = await permissionService.hasActionPermission(testContext, 'hr');
+      const result = await permissionService.hasActionPermission(testContext, 'senior-staff');
       
       expect(result).toBe(false);
     });
@@ -126,7 +126,7 @@ describe('PermissionService', () => {
       expect(summary.isGuildOwner).toBe(false);
       expect(summary.permissions).toBeDefined();
       expect(summary.permissions.admin).toBe(false);
-      expect(summary.permissions.hr).toBe(false);
+      expect(summary.permissions['senior-staff']).toBe(false);
     });
 
     it('should return admin summary for admin user', async () => {

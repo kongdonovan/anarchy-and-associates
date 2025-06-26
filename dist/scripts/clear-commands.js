@@ -75,8 +75,8 @@ async function clearAllCommands() {
                         const guildCommands = await guild.commands.fetch();
                         totalGuildCommands += guildCommands.size;
                     }
-                    catch (error) {
-                        logger_1.logger.warn(`Could not verify guild commands for ${guild.name}`);
+                    catch (err) {
+                        logger_1.logger.warn(`Could not verify guild commands for ${guild.name}: ${err}`);
                     }
                 }
                 logger_1.logger.info(`Final guild commands across all guilds: ${totalGuildCommands}`);

@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ApplicationService = void 0;
 const crypto_1 = require("crypto");
 const logger_1 = require("../../infrastructure/logger");
+const case_1 = require("../../domain/entities/case");
 class ApplicationService {
     constructor(applicationRepository, jobRepository, staffRepository, robloxService, permissionService) {
         this.applicationRepository = applicationRepository;
@@ -29,7 +30,7 @@ class ApplicationService {
             applicantId: request.applicantId,
             robloxUsername: request.robloxUsername,
             answers: request.answers,
-            status: 'pending'
+            status: case_1.CaseStatus.PENDING
         };
         const createdApplication = await this.applicationRepository.add(application);
         logger_1.logger.info('Application submitted successfully', {

@@ -111,11 +111,11 @@ export class MetricsService {
         allFeedback
       ] = await Promise.all([
         this.staffRepository.findByFilters({ guildId: guild.id }),
-        this.staffRepository.findByFilters({ guildId: guild.id, status: 'active' }),
+        this.staffRepository.findByFilters({ guildId: guild.id, status: RetainerStatus.ACTIVE }),
         this.caseRepository.findByFilters({ guildId: guild.id }),
         this.caseRepository.findByFilters({ guildId: guild.id, status: CaseStatus.IN_PROGRESS }),
         this.applicationRepository.findByFilters({ guildId: guild.id }),
-        this.applicationRepository.findByFilters({ guildId: guild.id, status: 'pending' }),
+        this.applicationRepository.findByFilters({ guildId: guild.id, status: CaseStatus.PENDING }),
         this.jobRepository.findByFilters({ guildId: guild.id }),
         this.jobRepository.findByFilters({ guildId: guild.id, isOpen: true }),
         this.retainerRepository.findByFilters({ guildId: guild.id }),
@@ -182,7 +182,7 @@ export class MetricsService {
     const staffRecord = await this.staffRepository.findByFilters({ 
       guildId: guild.id, 
       userId: userId,
-      status: 'active'
+      status: RetainerStatus.ACTIVE
     });
 
     if (staffRecord.length === 0) {
@@ -232,7 +232,7 @@ export class MetricsService {
     // Get all active staff
     const allStaff = await this.staffRepository.findByFilters({ 
       guildId: guild.id, 
-      status: 'active' 
+      status: RetainerStatus.ACTIVE 
     });
 
 

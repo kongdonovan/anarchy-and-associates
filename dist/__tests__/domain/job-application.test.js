@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const job_1 = require("../../domain/entities/job");
 const staff_role_1 = require("../../domain/entities/staff-role");
 const test_utils_1 = require("../helpers/test-utils");
+const case_1 = require("../../domain/entities/case");
 describe('Job and Application Entities', () => {
     describe('Job Entity', () => {
         describe('Job Creation and Validation', () => {
@@ -309,7 +310,7 @@ describe('Job and Application Entities', () => {
             });
             it('should handle applications without review details', () => {
                 const pendingApplication = test_utils_1.TestUtils.generateMockApplication({
-                    status: 'pending'
+                    status: case_1.CaseStatus.PENDING
                 });
                 expect(pendingApplication.reviewedBy).toBeUndefined();
                 expect(pendingApplication.reviewedAt).toBeUndefined();
@@ -357,7 +358,7 @@ describe('Job and Application Entities', () => {
             });
             const application = test_utils_1.TestUtils.generateMockApplication({
                 jobId: closedJob._id.toString(),
-                status: 'pending'
+                status: case_1.CaseStatus.PENDING
             });
             expect(closedJob.isOpen).toBe(false);
             expect(application.status).toBe('pending'); // Application status independent of job status

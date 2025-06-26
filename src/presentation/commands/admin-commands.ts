@@ -321,6 +321,7 @@ export class AdminCommands {
 
   @Slash({ name: 'admins', description: 'Display all current admins and admin roles' })
   async listAdmins(interaction: CommandInteraction): Promise<void> {
+      const context = await this.getPermissionContext(interaction);
     try {
       if (!interaction.guildId) {
         await interaction.reply({
@@ -397,7 +398,7 @@ export class AdminCommands {
       type: ApplicationCommandOptionType.String,
       required: true,
     })
-    action: 'admin' | 'hr' | 'case' | 'config' | 'retainer' | 'repair',
+    action: 'admin' | 'senior-staff' | 'case' | 'config' | 'retainer' | 'repair',
     @SlashOption({
       name: 'role',
       description: 'Role to grant permissions to',
@@ -586,6 +587,7 @@ export class AdminCommands {
 
   @Slash({ name: 'debug_wipe_collections', description: 'Emergency database wipe (DANGEROUS)' })
   async debugWipeCollections(interaction: CommandInteraction): Promise<void> {
+      const context = await this.getPermissionContext(interaction);
     try {
       if (!interaction.guildId) {
         await interaction.reply({
@@ -730,6 +732,7 @@ export class AdminCommands {
 
   @Slash({ name: 'setupserver', description: 'COMPLETE SERVER WIPE + SETUP (DESTROYS ALL CHANNELS/ROLES)' })
   async setupServer(interaction: CommandInteraction): Promise<void> {
+      const context = await this.getPermissionContext(interaction);
     try {
       if (!interaction.guildId) {
         await interaction.reply({

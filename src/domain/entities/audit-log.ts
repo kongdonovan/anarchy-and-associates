@@ -29,6 +29,12 @@ export enum AuditAction {
   // Lead Attorney Actions  
   LEAD_ATTORNEY_CHANGED = 'lead_attorney_changed',
   LEAD_ATTORNEY_REMOVED = 'lead_attorney_removed',
+  // Channel Cleanup Actions
+  CHANNEL_CLEANUP_SCAN = 'channel_cleanup_scan',
+  CHANNEL_CLEANUP_PERFORMED = 'channel_cleanup_performed',
+  ORPHANED_CHANNEL_DELETED = 'orphaned_channel_deleted',
+  // System Maintenance Actions
+  SystemRepair = 'system_repair',
 }
 
 export interface AuditLog extends BaseEntity {

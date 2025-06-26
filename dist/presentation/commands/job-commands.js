@@ -31,22 +31,44 @@ const permission_utils_1 = require("../../infrastructure/utils/permission-utils"
 const staff_role_1 = require("../../domain/entities/staff-role");
 const job_1 = require("../../domain/entities/job");
 const logger_1 = require("../../infrastructure/logger");
-let JobsCommands = class JobsCommands {
+const base_command_1 = require("./base-command");
+const validation_decorators_1 = require("../decorators/validation-decorators");
+const business_rule_validation_service_1 = require("../../application/services/business-rule-validation-service");
+const command_validation_service_1 = require("../../application/services/command-validation-service");
+const cross_entity_validation_service_1 = require("../../application/services/cross-entity-validation-service");
+const case_repository_1 = require("../../infrastructure/repositories/case-repository");
+const retainer_repository_1 = require("../../infrastructure/repositories/retainer-repository");
+const feedback_repository_1 = require("../../infrastructure/repositories/feedback-repository");
+const reminder_repository_1 = require("../../infrastructure/repositories/reminder-repository");
+let JobsCommands = class JobsCommands extends base_command_1.BaseCommand {
     constructor() {
+        super();
         const jobRepository = new job_repository_1.JobRepository();
         const auditLogRepository = new audit_log_repository_1.AuditLogRepository();
         const staffRepository = new staff_repository_1.StaffRepository();
         const applicationRepository = new application_repository_1.ApplicationRepository();
         const robloxService = roblox_service_1.RobloxService.getInstance();
         const guildConfigRepository = new guild_config_repository_1.GuildConfigRepository();
+        const caseRepository = new case_repository_1.CaseRepository();
+        const retainerRepository = new retainer_repository_1.RetainerRepository();
+        const feedbackRepository = new feedback_repository_1.FeedbackRepository();
+        const reminderRepository = new reminder_repository_1.ReminderRepository();
         this.jobService = new job_service_1.JobService(jobRepository, auditLogRepository, staffRepository);
         this.questionService = new job_question_service_1.JobQuestionService();
         this.cleanupService = new job_cleanup_service_1.JobCleanupService(jobRepository, auditLogRepository);
         this.applicationService = new application_service_1.ApplicationService(applicationRepository, jobRepository, staffRepository, robloxService);
         this.jobRepository = jobRepository;
         this.guildConfigRepository = guildConfigRepository;
+        // Initialize services for validation
+        this.permissionService = new permission_service_1.PermissionService(guildConfigRepository);
+        this.businessRuleValidationService = new business_rule_validation_service_1.BusinessRuleValidationService(guildConfigRepository, staffRepository, caseRepository, this.permissionService);
+        this.crossEntityValidationService = new cross_entity_validation_service_1.CrossEntityValidationService(staffRepository, caseRepository, applicationRepository, jobRepository, retainerRepository, feedbackRepository, reminderRepository, auditLogRepository, this.businessRuleValidationService);
+        this.commandValidationService = new command_validation_service_1.CommandValidationService(this.businessRuleValidationService, this.crossEntityValidationService);
+        // Initialize validation services in base class
+        this.initializeValidationServices(this.commandValidationService, this.businessRuleValidationService, this.crossEntityValidationService, this.permissionService);
     }
     async apply(interaction) {
+        const context = await this.getPermissionContext(interaction);
         try {
             const guildId = interaction.guildId;
             // Get open jobs
@@ -186,7 +208,7 @@ let JobsCommands = class JobsCommands {
                 roleId: discordRole,
                 postedBy: interaction.user.id,
             };
-            const result = await this.jobService.createJob(request);
+            const result = await this.jobService.createJob(context, request);
             if (!result.success) {
                 await interaction.followUp({
                     content: `❌ Failed to create job: ${result.error}`,
@@ -276,7 +298,7 @@ let JobsCommands = class JobsCommands {
         try {
             await interaction.deferReply();
             const guildId = interaction.guildId;
-            const job = await this.jobService.getJobDetails(guildId, jobId, interaction.user.id);
+            const job = await this.jobService.getJobDetails(context, guildId, jobId, interaction.user.id);
             if (!job) {
                 await interaction.followUp({
                     content: '❌ Job not found.',
@@ -340,7 +362,7 @@ let JobsCommands = class JobsCommands {
             await interaction.deferReply();
             const guildId = interaction.guildId;
             // Get job info before deletion for confirmation
-            const job = await this.jobService.getJobDetails(guildId, jobId, interaction.user.id);
+            const job = await this.jobService.getJobDetails(context, guildId, jobId, interaction.user.id);
             if (!job) {
                 await interaction.followUp({
                     content: '❌ Job not found.',
@@ -529,7 +551,7 @@ let JobsCommands = class JobsCommands {
             await interaction.deferReply();
             const guildId = interaction.guildId;
             // Get existing job
-            const existingJob = await this.jobService.getJobDetails(guildId, jobId, interaction.user.id);
+            const existingJob = await this.jobService.getJobDetails(context, guildId, jobId, interaction.user.id);
             if (!existingJob) {
                 await interaction.followUp({
                     content: '❌ Job not found.',
@@ -659,6 +681,7 @@ let JobsCommands = class JobsCommands {
     }
     async cleanup_report(interaction) {
         try {
+            const context = await this.getPermissionContext(interaction);
             await interaction.deferReply();
             const guildId = interaction.guildId;
             const report = await this.cleanupService.getCleanupReport(guildId);
@@ -946,7 +969,7 @@ let JobsCommands = class JobsCommands {
         try {
             const applicationId = interaction.customId.replace('app_accept_', '');
             // Review the application
-            const application = await this.applicationService.reviewApplication({
+            const application = await this.applicationService.reviewApplication(context, {
                 applicationId,
                 reviewerId: interaction.user.id,
                 approved: true
@@ -1072,7 +1095,7 @@ let JobsCommands = class JobsCommands {
             const applicationId = interaction.customId.replace('decline_reason_', '');
             const reason = interaction.fields.getTextInputValue('decline_reason') || undefined;
             // Review the application
-            const application = await this.applicationService.reviewApplication({
+            const application = await this.applicationService.reviewApplication(context, {
                 applicationId,
                 reviewerId: interaction.user.id,
                 approved: false,
@@ -1119,6 +1142,7 @@ __decorate([
 ], JobsCommands.prototype, "apply", null);
 __decorate([
     (0, discordx_1.Slash)({ name: 'list', description: 'List all jobs with filtering and pagination' }),
+    (0, validation_decorators_1.ValidatePermissions)('senior-staff'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Filter by job status (open/closed/all)',
         name: 'status',
@@ -1150,6 +1174,9 @@ __decorate([
 ], JobsCommands.prototype, "list", null);
 __decorate([
     (0, discordx_1.Slash)({ name: 'add', description: 'Create a new job posting' }),
+    (0, validation_decorators_1.ValidatePermissions)('senior-staff'),
+    (0, validation_decorators_1.ValidateBusinessRules)('role_limit'),
+    (0, validation_decorators_1.ValidateEntity)('job', 'create'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Job title',
         name: 'title',
@@ -1180,6 +1207,8 @@ __decorate([
 ], JobsCommands.prototype, "add", null);
 __decorate([
     (0, discordx_1.Slash)({ name: 'edit', description: 'Edit an existing job posting' }),
+    (0, validation_decorators_1.ValidatePermissions)('senior-staff'),
+    (0, validation_decorators_1.ValidateEntity)('job', 'update'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Job ID to edit',
         name: 'job_id',
@@ -1222,6 +1251,7 @@ __decorate([
 ], JobsCommands.prototype, "edit", null);
 __decorate([
     (0, discordx_1.Slash)({ name: 'info', description: 'View detailed information about a specific job' }),
+    (0, validation_decorators_1.ValidatePermissions)('senior-staff'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Job ID to view',
         name: 'job_id',
@@ -1234,6 +1264,8 @@ __decorate([
 ], JobsCommands.prototype, "info", null);
 __decorate([
     (0, discordx_1.Slash)({ name: 'close', description: 'Close a job posting (keeps it in database)' }),
+    (0, validation_decorators_1.ValidatePermissions)('senior-staff'),
+    (0, validation_decorators_1.ValidateEntity)('job', 'update'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Job ID to close',
         name: 'job_id',
@@ -1246,6 +1278,8 @@ __decorate([
 ], JobsCommands.prototype, "close", null);
 __decorate([
     (0, discordx_1.Slash)({ name: 'remove', description: 'Remove a job posting permanently from database' }),
+    (0, validation_decorators_1.ValidatePermissions)('senior-staff'),
+    (0, validation_decorators_1.ValidateEntity)('job', 'delete'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Job ID to remove',
         name: 'job_id',
@@ -1264,6 +1298,7 @@ __decorate([
 ], JobsCommands.prototype, "handleListPagination", null);
 __decorate([
     (0, discordx_1.Slash)({ name: 'questions', description: 'List available question templates for jobs' }),
+    (0, validation_decorators_1.ValidatePermissions)('senior-staff'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Filter by category',
         name: 'category',
@@ -1276,6 +1311,7 @@ __decorate([
 ], JobsCommands.prototype, "questions", null);
 __decorate([
     (0, discordx_1.Slash)({ name: 'question-preview', description: 'Preview a specific question template' }),
+    (0, validation_decorators_1.ValidatePermissions)('senior-staff'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Template ID to preview',
         name: 'template_id',
@@ -1288,6 +1324,7 @@ __decorate([
 ], JobsCommands.prototype, "question_preview", null);
 __decorate([
     (0, discordx_1.Slash)({ name: 'add-questions', description: 'Add custom questions to a job using templates' }),
+    (0, validation_decorators_1.ValidatePermissions)('senior-staff'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Job ID to add questions to',
         name: 'job_id',
@@ -1312,6 +1349,7 @@ __decorate([
 ], JobsCommands.prototype, "add_questions", null);
 __decorate([
     (0, discordx_1.Slash)({ name: 'cleanup-roles', description: 'Clean up Discord roles for closed jobs' }),
+    (0, validation_decorators_1.ValidatePermissions)('senior-staff'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Perform dry run without making changes',
         name: 'dry_run',
@@ -1324,12 +1362,14 @@ __decorate([
 ], JobsCommands.prototype, "cleanup_roles", null);
 __decorate([
     (0, discordx_1.Slash)({ name: 'cleanup-report', description: 'Get cleanup report for jobs and roles' }),
+    (0, validation_decorators_1.ValidatePermissions)('senior-staff'),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [discord_js_1.CommandInteraction]),
     __metadata("design:returntype", Promise)
 ], JobsCommands.prototype, "cleanup_report", null);
 __decorate([
     (0, discordx_1.Slash)({ name: 'cleanup-expired', description: 'Automatically close expired jobs (30+ days old)' }),
+    (0, validation_decorators_1.ValidatePermissions)('senior-staff'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Maximum days a job can stay open (default: 30)',
         name: 'max_days',

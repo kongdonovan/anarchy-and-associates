@@ -164,6 +164,7 @@ let MetricsCommands = class MetricsCommands {
         return embed;
     }
     async metrics(interaction) {
+        const context = await this.getPermissionContext(interaction);
         try {
             if (!interaction.guild) {
                 await interaction.reply({

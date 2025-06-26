@@ -1,5 +1,7 @@
 import { GuildConfig, Staff, Job, Application, StaffRole } from '../../domain/entities';
+import { RetainerStatus } from '../../domain/entities/retainer';
 import { ObjectId } from 'mongodb';
+import { CaseStatus, CasePriority } from '../../domain/entities/case';
 
 describe('Domain Entities', () => {
   describe('GuildConfig', () => {
@@ -11,10 +13,10 @@ describe('Domain Entities', () => {
         updatedAt: new Date(),
         permissions: {
           admin: ['role1'],
-          hr: ['role2'],
+          'senior-staff': ['role2'],
           case: ['role3'],
           config: ['role4'],
-          retainer: ['role5'],
+          lawyer: ['role5'],
           repair: ['role6'],
         },
         adminRoles: ['admin_role'],
@@ -39,7 +41,7 @@ describe('Domain Entities', () => {
         hiredAt: new Date(),
         hiredBy: 'hr_user',
         promotionHistory: [],
-        status: 'active',
+        status: RetainerStatus.ACTIVE,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -83,7 +85,7 @@ describe('Domain Entities', () => {
         applicantId: 'user123',
         robloxUsername: 'TestApplicant',
         answers: [],
-        status: 'pending',
+        status: CaseStatus.PENDING,
         createdAt: new Date(),
         updatedAt: new Date(),
       };

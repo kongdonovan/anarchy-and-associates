@@ -19,15 +19,24 @@ import { StaffService } from '../../application/services/staff-service';
 import { DiscordRoleSyncService } from '../../application/services/discord-role-sync-service';
 import { PermissionService, PermissionContext } from '../../application/services/permission-service';
 import { BusinessRuleValidationService } from '../../application/services/business-rule-validation-service';
+import { CommandValidationService } from '../../application/services/command-validation-service';
+import { CrossEntityValidationService } from '../../application/services/cross-entity-validation-service';
 import { GuildConfigRepository } from '../../infrastructure/repositories/guild-config-repository';
 import { StaffRole, RoleUtils } from '../../domain/entities/staff-role';
 import { GuildOwnerUtils } from '../../infrastructure/utils/guild-owner-utils';
 import { logger } from '../../infrastructure/logger';
+import { BaseCommand } from './base-command';
+import { ValidateCommand, ValidatePermissions, ValidateBusinessRules } from '../decorators/validation-decorators';
+import { ApplicationRepository } from '../../infrastructure/repositories/application-repository';
+import { JobRepository } from '../../infrastructure/repositories/job-repository';
+import { RetainerRepository } from '../../infrastructure/repositories/retainer-repository';
+import { FeedbackRepository } from '../../infrastructure/repositories/feedback-repository';
+import { ReminderRepository } from '../../infrastructure/repositories/reminder-repository';
 
 @Discord()
 @SlashGroup({ name: 'staff', description: 'Staff management commands' })
 @SlashGroup('staff')
-export class StaffCommands {
+export class StaffCommands extends BaseCommand {
   private staffRepository: StaffRepository;
   private auditLogRepository: AuditLogRepository;
   private caseRepository: CaseRepository;
@@ -38,67 +47,69 @@ export class StaffCommands {
   private businessRuleValidationService: BusinessRuleValidationService;
 
   constructor() {
+    super();
     this.staffRepository = new StaffRepository();
     this.auditLogRepository = new AuditLogRepository();
     this.caseRepository = new CaseRepository();
     this.guildConfigRepository = new GuildConfigRepository();
+    
+    // Initialize repositories for cross-entity validation
+    const applicationRepository = new ApplicationRepository();
+    const jobRepository = new JobRepository();
+    const retainerRepository = new RetainerRepository();
+    const feedbackRepository = new FeedbackRepository();
+    const reminderRepository = new ReminderRepository();
+    
+    // Initialize services
     this.permissionService = new PermissionService(this.guildConfigRepository);
-    this.staffService = new StaffService(this.staffRepository, this.auditLogRepository, this.permissionService, this.businessRuleValidationService);
-    this.roleSyncService = new DiscordRoleSyncService(
-      this.staffRepository,
-      this.auditLogRepository
-    );
     this.businessRuleValidationService = new BusinessRuleValidationService(
       this.guildConfigRepository,
       this.staffRepository,
       this.caseRepository,
       this.permissionService
     );
-  }
-
-  private async getPermissionContext(interaction: CommandInteraction): Promise<PermissionContext> {
-    const member = interaction.guild?.members.cache.get(interaction.user.id);
-    const userRoles = member?.roles.cache.map(role => role.id) || [];
-    const isGuildOwner = interaction.guild?.ownerId === interaction.user.id;
-
-    return {
-      guildId: interaction.guildId!,
-      userId: interaction.user.id,
-      userRoles,
-      isGuildOwner,
-    };
-  }
-
-  private createErrorEmbed(message: string): EmbedBuilder {
-    return new EmbedBuilder()
-      .setColor('#FF0000')
-      .setTitle('❌ Error')
-      .setDescription(message)
-      .setTimestamp();
-  }
-
-  private createSuccessEmbed(message: string): EmbedBuilder {
-    return new EmbedBuilder()
-      .setColor('#00FF00')
-      .setTitle('✅ Success')
-      .setDescription(message)
-      .setTimestamp();
-  }
-
-  private createInfoEmbed(title: string, description?: string): EmbedBuilder {
-    const embed = new EmbedBuilder()
-      .setColor('#0099FF')
-      .setTitle(title)
-      .setTimestamp();
+    this.crossEntityValidationService = new CrossEntityValidationService(
+      this.staffRepository,
+      this.caseRepository,
+      applicationRepository,
+      jobRepository,
+      retainerRepository,
+      feedbackRepository,
+      reminderRepository,
+      this.auditLogRepository,
+      this.businessRuleValidationService
+    );
+    this.commandValidationService = new CommandValidationService(
+      this.businessRuleValidationService,
+      this.crossEntityValidationService
+    );
     
-    if (description) {
-      embed.setDescription(description);
-    }
+    // Initialize validation services in base class
+    this.initializeValidationServices(
+      this.commandValidationService,
+      this.businessRuleValidationService,
+      this.crossEntityValidationService,
+      this.permissionService
+    );
     
-    return embed;
+    this.staffService = new StaffService(
+      this.staffRepository,
+      this.auditLogRepository,
+      this.permissionService,
+      this.businessRuleValidationService
+    );
+    this.roleSyncService = new DiscordRoleSyncService(
+      this.staffRepository,
+      this.auditLogRepository
+    );
   }
+
+  // Add reference to cross-entity validation service
+  private crossEntityValidationService: CrossEntityValidationService;
 
   @Slash({ name: 'hire', description: 'Hire a new staff member' })
+  @ValidatePermissions('senior-staff')
+  @ValidateBusinessRules('role_limit')
   async hireStaff(
     @SlashOption({
       name: 'user',
@@ -139,17 +150,6 @@ export class StaffCommands {
         return;
       }
 
-      const context = await this.getPermissionContext(interaction);
-      const hasPermission = await this.permissionService.hasSeniorStaffPermissionWithContext(context);
-
-      if (!hasPermission) {
-        await interaction.reply({
-          embeds: [this.createErrorEmbed('You do not have permission to hire staff members.')],
-          ephemeral: true,
-        });
-        return;
-      }
-
       // Validate role
       if (!RoleUtils.isValidRole(role)) {
         const validRoles = RoleUtils.getAllRoles().join(', ');
@@ -159,6 +159,8 @@ export class StaffCommands {
         });
         return;
       }
+
+      const context = await this.getPermissionContext(interaction);
 
       // Check if user performing the action can hire this role
       const actorStaff = await this.staffRepository.findByUserId(interaction.guildId, interaction.user.id);
@@ -173,59 +175,7 @@ export class StaffCommands {
         }
       }
 
-      // Validate role limits using business rule validation service
-      const roleLimitValidation = await this.businessRuleValidationService.validateRoleLimit(
-        context,
-        role as StaffRole
-      );
-
-      // If role limit exceeded and user is guild owner, show bypass modal
-      if (!roleLimitValidation.valid && roleLimitValidation.bypassAvailable && context.isGuildOwner) {
-        const bypassModal = GuildOwnerUtils.createRoleLimitBypassModal(
-          interaction.user.id,
-          roleLimitValidation
-        );
-
-        const bypassEmbed = GuildOwnerUtils.createBypassConfirmationEmbed(roleLimitValidation);
-
-        await interaction.reply({
-          embeds: [bypassEmbed],
-          ephemeral: true
-        });
-
-        await interaction.followUp({
-          embeds: [this.createInfoEmbed(
-            'Bypass Required', 
-            'Please complete the confirmation modal to proceed with hiring beyond normal limits.'
-          )],
-          ephemeral: true
-        });
-
-        await interaction.user.send({ components: [] }).catch(() => {
-          // Ignore DM failures
-        });
-
-        try {
-          await interaction.showModal(bypassModal);
-        } catch (error) {
-          logger.error('Error showing bypass modal:', error);
-          await interaction.editReply({
-            embeds: [this.createErrorEmbed('Failed to show bypass confirmation modal.')],
-          });
-        }
-        return;
-      }
-
-      // If role limit exceeded and no bypass available, deny
-      if (!roleLimitValidation.valid && !roleLimitValidation.bypassAvailable) {
-        await interaction.reply({
-          embeds: [this.createErrorEmbed(roleLimitValidation.errors.join('\n'))],
-          ephemeral: true,
-        });
-        return;
-      }
-
-      // Proceed with hiring (either no limits exceeded or bypass was handled elsewhere)
+      // Validation decorators have already run, so we can proceed with hiring
       await this.performStaffHiring(interaction, user, role as StaffRole, robloxUsername, reason, context);
     } catch (error) {
       logger.error('Error in hire staff command:', error);
@@ -369,6 +319,9 @@ export class StaffCommands {
   }
 
   @Slash({ name: 'fire', description: 'Fire a staff member' })
+  @ValidatePermissions('senior-staff')
+  @ValidateBusinessRules('staff_member')
+  @ValidateEntity('staff', 'delete')
   async fireStaff(
     @SlashOption({
       name: 'user',
@@ -396,15 +349,6 @@ export class StaffCommands {
       }
 
       const context = await this.getPermissionContext(interaction);
-      const hasPermission = await this.permissionService.hasSeniorStaffPermissionWithContext(context);
-
-      if (!hasPermission) {
-        await interaction.reply({
-          embeds: [this.createErrorEmbed('You do not have permission to fire staff members.')],
-          ephemeral: true,
-        });
-        return;
-      }
 
       // Check if target exists and get their role
       const targetStaff = await this.staffRepository.findByUserId(interaction.guildId, user.id);
@@ -438,7 +382,7 @@ export class StaffCommands {
         return;
       }
 
-      const result = await this.staffService.fireStaff({
+      const result = await this.staffService.fireStaff(context, {
         guildId: interaction.guildId,
         userId: user.id,
         terminatedBy: interaction.user.id,
@@ -473,6 +417,9 @@ export class StaffCommands {
   }
 
   @Slash({ name: 'promote', description: 'Promote a staff member' })
+  @ValidatePermissions('senior-staff')
+  @ValidateBusinessRules('staff_member', 'role_limit')
+  @ValidateEntity('staff', 'update')
   async promoteStaff(
     @SlashOption({
       name: 'user',
@@ -507,15 +454,6 @@ export class StaffCommands {
       }
 
       const context = await this.getPermissionContext(interaction);
-      const hasPermission = await this.permissionService.hasSeniorStaffPermissionWithContext(context);
-
-      if (!hasPermission) {
-        await interaction.reply({
-          embeds: [this.createErrorEmbed('You do not have permission to promote staff members.')],
-          ephemeral: true,
-        });
-        return;
-      }
 
       // Validate role
       if (!RoleUtils.isValidRole(role)) {
@@ -550,7 +488,7 @@ export class StaffCommands {
         }
       }
 
-      const result = await this.staffService.promoteStaff({
+      const result = await this.staffService.promoteStaff(context, {
         guildId: interaction.guildId,
         userId: user.id,
         newRole: role as StaffRole,
@@ -588,6 +526,9 @@ export class StaffCommands {
   }
 
   @Slash({ name: 'demote', description: 'Demote a staff member' })
+  @ValidatePermissions('senior-staff')
+  @ValidateBusinessRules('staff_member')
+  @ValidateEntity('staff', 'update')
   async demoteStaff(
     @SlashOption({
       name: 'user',
@@ -622,15 +563,6 @@ export class StaffCommands {
       }
 
       const context = await this.getPermissionContext(interaction);
-      const hasPermission = await this.permissionService.hasSeniorStaffPermissionWithContext(context);
-
-      if (!hasPermission) {
-        await interaction.reply({
-          embeds: [this.createErrorEmbed('You do not have permission to demote staff members.')],
-          ephemeral: true,
-        });
-        return;
-      }
 
       // Validate role
       if (!RoleUtils.isValidRole(role)) {
@@ -665,7 +597,7 @@ export class StaffCommands {
         }
       }
 
-      const result = await this.staffService.demoteStaff({
+      const result = await this.staffService.demoteStaff(context, {
         guildId: interaction.guildId,
         userId: user.id,
         newRole: role as StaffRole,
@@ -816,7 +748,7 @@ export class StaffCommands {
         return;
       }
 
-      const staff = await this.staffService.getStaffInfo(
+      const staff = await this.staffService.getStaffInfo(context, 
         interaction.guildId,
         user.id,
         interaction.user.id

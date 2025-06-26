@@ -59,7 +59,9 @@ describe('FeedbackService Unit Tests', () => {
             targetStaffUsername: 'teststaff',
             rating: feedback_1.FeedbackRating.FOUR_STAR,
             comment: 'Great service and very professional!',
-            isForFirm: false
+            isForFirm: false,
+            createdAt: new Date(),
+            updatedAt: new Date()
         });
         it('should submit feedback successfully with all required fields', async () => {
             mockStaffRepository.findByFilters.mockResolvedValueOnce([]); // Submitter is not staff
@@ -508,7 +510,9 @@ describe('FeedbackService Unit Tests', () => {
     describe('getFeedbackById', () => {
         const mockFeedback = test_utils_1.TestUtils.generateMockFeedback({
             _id: test_utils_1.TestUtils.generateObjectId(),
-            guildId: testGuildId
+            guildId: testGuildId,
+            createdAt: new Date(),
+            updatedAt: new Date()
         });
         it('should get feedback by ID successfully', async () => {
             mockFeedbackRepository.findById.mockResolvedValue(mockFeedback);

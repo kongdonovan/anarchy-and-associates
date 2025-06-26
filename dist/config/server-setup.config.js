@@ -9,256 +9,282 @@ exports.DEFAULT_CHANNEL_MAPPINGS = exports.DEFAULT_ROLE_PERMISSIONS = exports.AN
 const discord_js_1 = require("discord.js");
 // Category and channel definitions
 const INFORMATION_CATEGORY = {
-    name: "Information",
+    name: 'Information',
     channels: [
-        { name: "welcome", type: discord_js_1.ChannelType.GuildText },
-        { name: "rules", type: discord_js_1.ChannelType.GuildText },
-        { name: "faq", type: discord_js_1.ChannelType.GuildText },
-        { name: "announcements", type: discord_js_1.ChannelType.GuildText }
-    ]
+        { name: 'welcome', type: discord_js_1.ChannelType.GuildText },
+        { name: 'rules', type: discord_js_1.ChannelType.GuildText },
+        { name: 'faq', type: discord_js_1.ChannelType.GuildText },
+        { name: 'announcements', type: discord_js_1.ChannelType.GuildText },
+    ],
 };
 const CLIENT_SERVICES_CATEGORY = {
-    name: "Client Services",
+    name: 'Client Services',
     channels: [
-        { name: "client-lobby", type: discord_js_1.ChannelType.GuildText },
-        { name: "bot-commands", type: discord_js_1.ChannelType.GuildText },
-        { name: "feedback", type: discord_js_1.ChannelType.GuildText },
-        { name: "client-voice", type: discord_js_1.ChannelType.GuildVoice }
-    ]
+        { name: 'client-lobby', type: discord_js_1.ChannelType.GuildText },
+        { name: 'bot-commands', type: discord_js_1.ChannelType.GuildText },
+        { name: 'feedback', type: discord_js_1.ChannelType.GuildText },
+        { name: 'client-voice', type: discord_js_1.ChannelType.GuildVoice },
+    ],
 };
 const CASE_REVIEWS_CATEGORY = {
-    name: "Case Reviews",
-    channels: []
+    name: 'Case Reviews',
+    channels: [],
 };
 const CASE_ARCHIVES_CATEGORY = {
-    name: "Case Archives",
-    channels: []
+    name: 'Case Archives',
+    channels: [],
 };
 const LEGAL_TEAM_CATEGORY = {
-    name: "Legal Team",
+    name: 'Legal Team',
     channels: [
-        { name: "lawyer-lounge", type: discord_js_1.ChannelType.GuildText },
-        { name: "paralegal-hub", type: discord_js_1.ChannelType.GuildText },
-        { name: "team-voice", type: discord_js_1.ChannelType.GuildVoice }
-    ]
+        { name: 'lawyer-lounge', type: discord_js_1.ChannelType.GuildText },
+        { name: 'paralegal-hub', type: discord_js_1.ChannelType.GuildText },
+        { name: 'team-voice', type: discord_js_1.ChannelType.GuildVoice },
+    ],
 };
 const STAFF_CATEGORY = {
-    name: "Staff",
+    name: 'Staff',
     channels: [
-        { name: "staff-announcements", type: discord_js_1.ChannelType.GuildText },
-        { name: "staff-chat", type: discord_js_1.ChannelType.GuildText },
-        { name: "applications", type: discord_js_1.ChannelType.GuildText },
-        { name: "signed-retainers", type: discord_js_1.ChannelType.GuildText },
-        { name: "staff-voice", type: discord_js_1.ChannelType.GuildVoice }
-    ]
+        { name: 'staff-announcements', type: discord_js_1.ChannelType.GuildText },
+        { name: 'staff-chat', type: discord_js_1.ChannelType.GuildText },
+        { name: 'applications', type: discord_js_1.ChannelType.GuildText },
+        { name: 'signed-retainers', type: discord_js_1.ChannelType.GuildText },
+        { name: 'staff-voice', type: discord_js_1.ChannelType.GuildVoice },
+    ],
 };
 const ADMINISTRATION_CATEGORY = {
-    name: "Administration",
+    name: 'Administration',
     channels: [
-        { name: "modlog", type: discord_js_1.ChannelType.GuildText },
-        { name: "admin-chat", type: discord_js_1.ChannelType.GuildText },
-        { name: "admin-voice", type: discord_js_1.ChannelType.GuildVoice }
-    ]
+        { name: 'modlog', type: discord_js_1.ChannelType.GuildText },
+        { name: 'admin-chat', type: discord_js_1.ChannelType.GuildText },
+        { name: 'admin-voice', type: discord_js_1.ChannelType.GuildVoice },
+    ],
 };
 // Role definitions
 const ROLES = [
     {
-        name: "Managing Partner",
-        color: "DarkRed",
+        name: 'Managing Partner',
+        color: 'DarkRed',
         permissions: [discord_js_1.PermissionFlagsBits.Administrator],
         hoist: true,
         mentionable: true,
-        maxCount: 1
+        maxCount: 1,
     },
     {
-        name: "Senior Partner",
-        color: "Red",
-        permissions: [discord_js_1.PermissionFlagsBits.ManageChannels, discord_js_1.PermissionFlagsBits.ManageMessages, discord_js_1.PermissionFlagsBits.ViewChannel, discord_js_1.PermissionFlagsBits.SendMessages],
+        name: 'Senior Partner',
+        color: 'Red',
+        permissions: [
+            discord_js_1.PermissionFlagsBits.ManageChannels,
+            discord_js_1.PermissionFlagsBits.ManageMessages,
+            discord_js_1.PermissionFlagsBits.ViewChannel,
+            discord_js_1.PermissionFlagsBits.SendMessages,
+        ],
         hoist: true,
         mentionable: true,
-        maxCount: 3
+        maxCount: 3,
     },
     {
-        name: "Partner",
-        color: "Red",
-        permissions: [discord_js_1.PermissionFlagsBits.ManageChannels, discord_js_1.PermissionFlagsBits.ManageMessages, discord_js_1.PermissionFlagsBits.ViewChannel, discord_js_1.PermissionFlagsBits.SendMessages],
+        name: 'Partner',
+        color: 'Red',
+        permissions: [
+            discord_js_1.PermissionFlagsBits.ManageChannels,
+            discord_js_1.PermissionFlagsBits.ManageMessages,
+            discord_js_1.PermissionFlagsBits.ViewChannel,
+            discord_js_1.PermissionFlagsBits.SendMessages,
+        ],
         hoist: true,
         mentionable: true,
-        maxCount: 5
+        maxCount: 5,
     },
     {
-        name: "Senior Associate",
-        color: "Blue",
-        permissions: [discord_js_1.PermissionFlagsBits.ManageMessages, discord_js_1.PermissionFlagsBits.ViewChannel, discord_js_1.PermissionFlagsBits.SendMessages],
+        name: 'Senior Associate',
+        color: 'Blue',
+        permissions: [
+            discord_js_1.PermissionFlagsBits.ManageMessages,
+            discord_js_1.PermissionFlagsBits.ViewChannel,
+            discord_js_1.PermissionFlagsBits.SendMessages,
+        ],
         hoist: true,
         mentionable: true,
-        maxCount: 10
+        maxCount: 10,
     },
     {
-        name: "Associate",
-        color: "Aqua",
-        permissions: [discord_js_1.PermissionFlagsBits.ViewChannel, discord_js_1.PermissionFlagsBits.SendMessages],
+        name: 'Associate',
+        color: 'Aqua',
+        permissions: [
+            discord_js_1.PermissionFlagsBits.ViewChannel,
+            discord_js_1.PermissionFlagsBits.SendMessages,
+        ],
         hoist: true,
         mentionable: true,
-        maxCount: 10
+        maxCount: 10,
     },
     {
-        name: "Paralegal",
-        color: "Purple",
-        permissions: [discord_js_1.PermissionFlagsBits.ViewChannel, discord_js_1.PermissionFlagsBits.SendMessages],
+        name: 'Paralegal',
+        color: 'Purple',
+        permissions: [
+            discord_js_1.PermissionFlagsBits.ViewChannel,
+            discord_js_1.PermissionFlagsBits.SendMessages,
+        ],
         hoist: true,
         mentionable: true,
-        maxCount: 10
+        maxCount: 10,
     },
     {
-        name: "Client",
-        color: "Green",
-        permissions: [discord_js_1.PermissionFlagsBits.ViewChannel, discord_js_1.PermissionFlagsBits.SendMessages],
-        hoist: true,
-        mentionable: true
-    },
-    {
-        name: "Hiring Staff",
-        color: "Orange",
-        permissions: [discord_js_1.PermissionFlagsBits.ViewChannel, discord_js_1.PermissionFlagsBits.SendMessages],
+        name: 'Client',
+        color: 'Green',
+        permissions: [
+            discord_js_1.PermissionFlagsBits.ViewChannel,
+            discord_js_1.PermissionFlagsBits.SendMessages,
+        ],
         hoist: true,
         mentionable: true,
-        maxCount: 5
-    }
+    },
+    {
+        name: 'Hiring Staff',
+        color: 'Orange',
+        permissions: [
+            discord_js_1.PermissionFlagsBits.ViewChannel,
+            discord_js_1.PermissionFlagsBits.SendMessages,
+        ],
+        hoist: true,
+        mentionable: true,
+        maxCount: 5,
+    },
 ];
 // Job definitions
 const DEFAULT_JOBS = [
     {
-        title: "Managing Partner",
-        description: "Firm leader setting strategy & culture.",
-        roleName: "Managing Partner",
+        title: 'Managing Partner',
+        description: 'Firm leader setting strategy & culture.',
+        roleName: 'Managing Partner',
         isOpenByDefault: false,
         autoCreateOnSetup: true,
         customQuestions: [
             {
-                id: "leadership",
-                question: "Outline your leadership vision.",
-                type: "paragraph",
+                id: 'leadership',
+                question: 'Outline your leadership vision.',
+                type: 'paragraph',
                 required: true,
-                maxLength: 1000
+                maxLength: 1000,
             },
             {
-                id: "growth",
-                question: "How will you grow the firm?",
-                type: "paragraph",
+                id: 'growth',
+                question: 'How will you grow the firm?',
+                type: 'paragraph',
                 required: true,
-                maxLength: 1000
-            }
-        ]
+                maxLength: 1000,
+            },
+        ],
     },
     {
-        title: "Senior Partner",
-        description: "Heads practice groups and mentors partners.",
-        roleName: "Senior Partner",
+        title: 'Senior Partner',
+        description: 'Heads practice groups and mentors partners.',
+        roleName: 'Senior Partner',
         isOpenByDefault: true,
         autoCreateOnSetup: true,
         customQuestions: [
             {
-                id: "wins",
-                question: "Share a major litigation win.",
-                type: "paragraph",
+                id: 'wins',
+                question: 'Share a major litigation win.',
+                type: 'paragraph',
                 required: true,
-                maxLength: 1000
+                maxLength: 1000,
             },
             {
-                id: "mentorship",
-                question: "How do you mentor partners?",
-                type: "paragraph",
+                id: 'mentorship',
+                question: 'How do you mentor partners?',
+                type: 'paragraph',
                 required: true,
-                maxLength: 1000
-            }
-        ]
+                maxLength: 1000,
+            },
+        ],
     },
     {
-        title: "Partner",
-        description: "Leads cases, manages clients and teams.",
-        roleName: "Partner",
+        title: 'Partner',
+        description: 'Leads cases, manages clients and teams.',
+        roleName: 'Partner',
         isOpenByDefault: true,
         autoCreateOnSetup: true,
         customQuestions: [
             {
-                id: "exp",
-                question: "Describe your leadership experience.",
-                type: "paragraph",
+                id: 'exp',
+                question: 'Describe your leadership experience.',
+                type: 'paragraph',
                 required: true,
-                maxLength: 1000
+                maxLength: 1000,
             },
             {
-                id: "vision",
-                question: "What is your vision for the firm?",
-                type: "paragraph",
+                id: 'vision',
+                question: 'What is your vision for the firm?',
+                type: 'paragraph',
                 required: true,
-                maxLength: 1000
-            }
-        ]
+                maxLength: 1000,
+            },
+        ],
     },
     {
-        title: "Senior Associate",
-        description: "Handles complex research and key briefs.",
-        roleName: "Senior Associate",
+        title: 'Senior Associate',
+        description: 'Handles complex research and key briefs.',
+        roleName: 'Senior Associate',
         isOpenByDefault: true,
         autoCreateOnSetup: true,
         customQuestions: [
             {
-                id: "research",
-                question: "How good are you at legal research?",
-                type: "paragraph",
+                id: 'research',
+                question: 'How good are you at legal research?',
+                type: 'paragraph',
                 required: true,
-                maxLength: 1000
+                maxLength: 1000,
             },
             {
-                id: "coach",
-                question: "How do you coach associates?",
-                type: "paragraph",
+                id: 'coach',
+                question: 'How do you coach associates?',
+                type: 'paragraph',
                 required: true,
-                maxLength: 1000
-            }
-        ]
+                maxLength: 1000,
+            },
+        ],
     },
     {
-        title: "Associate",
-        description: "Entry‑level lawyer assisting on matters.",
-        roleName: "Associate",
+        title: 'Associate',
+        description: 'Entry‑level lawyer assisting on matters.',
+        roleName: 'Associate',
         isOpenByDefault: true,
         autoCreateOnSetup: true,
         customQuestions: [
             {
-                id: "exp",
-                question: "How well do you work in a team?",
-                type: "paragraph",
+                id: 'exp',
+                question: 'How well do you work in a team?',
+                type: 'paragraph',
                 required: true,
-                maxLength: 1000
-            }
-        ]
+                maxLength: 1000,
+            },
+        ],
     },
     {
-        title: "Paralegal",
-        description: "Supports attorneys with documents & filings.",
-        roleName: "Paralegal",
+        title: 'Paralegal',
+        description: 'Supports attorneys with documents & filings.',
+        roleName: 'Paralegal',
         isOpenByDefault: true,
         autoCreateOnSetup: true,
         customQuestions: [
             {
-                id: "skills",
-                question: "How much attention to detail do you have?",
-                type: "paragraph",
+                id: 'skills',
+                question: 'How much attention to detail do you have?',
+                type: 'paragraph',
                 required: true,
-                maxLength: 1000
+                maxLength: 1000,
             },
             {
-                id: "tools",
-                question: "How well do you work in a team?",
-                type: "paragraph",
+                id: 'tools',
+                question: 'How well do you work in a team?',
+                type: 'paragraph',
                 required: true,
-                maxLength: 1000
-            }
-        ]
-    }
+                maxLength: 1000,
+            },
+        ],
+    },
 ];
 // Compose SERVER_SETUP from extracted constants for maintainability.
 exports.ANARCHY_SERVER_CONFIG = {
@@ -269,23 +295,23 @@ exports.ANARCHY_SERVER_CONFIG = {
         CASE_ARCHIVES_CATEGORY,
         LEGAL_TEAM_CATEGORY,
         STAFF_CATEGORY,
-        ADMINISTRATION_CATEGORY
+        ADMINISTRATION_CATEGORY,
     ],
     roles: ROLES,
-    defaultJobs: DEFAULT_JOBS
+    defaultJobs: DEFAULT_JOBS,
 };
 /**
  * Default permission actions to assign to each role during server setup.
  * Key: role name, Value: array of permission actions
  */
 exports.DEFAULT_ROLE_PERMISSIONS = {
-    "Managing Partner": ["admin", "config", "case", "hr", "retainer", "repair"],
-    "Senior Partner": ["case", "hr", "retainer"],
-    "Partner": ["case", "hr", "retainer"],
-    "Senior Associate": ["case", "retainer"],
-    "Associate": ["case", "retainer"],
-    "Paralegal": ["case", "retainer"],
-    "Hiring Staff": ["hr"],
+    'Managing Partner': ['admin', 'config', 'case', 'senior-staff', 'retainer', 'repair'],
+    'Senior Partner': ['case', 'senior-staff', 'retainer'],
+    Partner: ['case', 'senior-staff', 'retainer'],
+    'Senior Associate': ['case', 'retainer'],
+    Associate: ['case', 'retainer'],
+    Paralegal: ['case', 'retainer'],
+    'Hiring Staff': ['senior-staff'],
     // "Client": [] // Clients get no elevated permissions
 };
 /**
@@ -293,11 +319,11 @@ exports.DEFAULT_ROLE_PERMISSIONS = {
  * Change this mapping to update which channels/categories are used for each config key.
  */
 exports.DEFAULT_CHANNEL_MAPPINGS = {
-    feedbackChannelId: { name: "feedback", type: "GUILD_TEXT" },
-    caseReviewCategoryId: { name: "Case Reviews", type: "GUILD_CATEGORY" },
-    modlogChannelId: { name: "modlog", type: "GUILD_TEXT" },
-    applicationChannelId: { name: "applications", type: "GUILD_TEXT" },
-    retainerChannelId: { name: "signed-retainers", type: "GUILD_TEXT" },
-    caseArchiveCategoryId: { name: "Case Archives", type: "GUILD_CATEGORY" },
+    feedbackChannelId: { name: 'feedback', type: 'GUILD_TEXT' },
+    caseReviewCategoryId: { name: 'Case Reviews', type: 'GUILD_CATEGORY' },
+    modlogChannelId: { name: 'modlog', type: 'GUILD_TEXT' },
+    applicationChannelId: { name: 'applications', type: 'GUILD_TEXT' },
+    retainerChannelId: { name: 'signed-retainers', type: 'GUILD_TEXT' },
+    caseArchiveCategoryId: { name: 'Case Archives', type: 'GUILD_CATEGORY' },
 };
 //# sourceMappingURL=server-setup.config.js.map

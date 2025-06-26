@@ -6,6 +6,7 @@ import { BusinessRuleValidationService } from '../../application/services/busine
 import { GuildConfigRepository } from '../../infrastructure/repositories/guild-config-repository';
 import { CaseRepository } from '../../infrastructure/repositories/case-repository';
 import { StaffRole } from '../../domain/entities/staff-role';
+import { ObjectId } from 'mongodb';
 
 // Mock the repositories and services
 jest.mock('../../infrastructure/repositories/staff-repository');
@@ -28,13 +29,11 @@ describe('StaffService', () => {
     guildId: 'guild123',
     userId: 'admin123',
     userRoles: ['admin_role'],
-    isGuildOwner: false,
-  };
+    isGuildOwner: false };
 
   const guildOwnerContext: PermissionContext = {
     ...testContext,
-    isGuildOwner: true,
-  };
+    isGuildOwner: true };
 
   beforeEach(() => {
     mockStaffRepository = new StaffRepository() as jest.Mocked<StaffRepository>;
@@ -113,8 +112,7 @@ describe('StaffService', () => {
       role: StaffRole.PARALEGAL,
       hiredBy: 'admin123',
       reason: 'Test hire',
-      isGuildOwner: false,
-    };
+      isGuildOwner: false };
 
     beforeEach(() => {
       mockStaffRepository.findByUserId.mockResolvedValue(null);
@@ -127,21 +125,19 @@ describe('StaffService', () => {
         currentCount: 3,
         maxCount: 10,
         roleName: StaffRole.PARALEGAL,
-        metadata: {},
-      });
+        metadata: {} });
       mockAuditLogRepository.logAction.mockResolvedValue({} as any);
     });
 
     it('should successfully hire a new staff member', async () => {
       const mockStaff = {
-        _id: {} as any,
+        _id: new ObjectId(),
         ...hireRequest,
         hiredAt: new Date(),
         promotionHistory: [],
         status: 'active' as const,
         createdAt: new Date(),
-        updatedAt: new Date(),
-      };
+        updatedAt: new Date() };
 
       mockStaffRepository.add.mockResolvedValue(mockStaff);
 
@@ -158,8 +154,7 @@ describe('StaffService', () => {
           userId: hireRequest.userId,
           role: hireRequest.role,
           robloxUsername: hireRequest.robloxUsername,
-          status: 'active',
-        })
+          status: 'active' })
       );
       expect(mockAuditLogRepository.logAction).toHaveBeenCalled();
     });
@@ -186,8 +181,7 @@ describe('StaffService', () => {
 
     it('should reject if user is already staff', async () => {
       mockStaffRepository.findByUserId.mockResolvedValue({
-        status: 'active',
-      } as any);
+        status: 'active' } as any);
 
       const result = await staffService.hireStaff(testContext, hireRequest);
 
@@ -215,8 +209,7 @@ describe('StaffService', () => {
         currentCount: 10,
         maxCount: 10,
         roleName: StaffRole.PARALEGAL,
-        metadata: {},
-      });
+        metadata: {} });
 
       const result = await staffService.hireStaff(testContext, hireRequest);
 
@@ -235,19 +228,17 @@ describe('StaffService', () => {
         currentCount: 1,
         maxCount: 1,
         roleName: StaffRole.MANAGING_PARTNER,
-        metadata: {},
-      });
+        metadata: {} });
 
       const mockStaff = {
-        _id: {} as any,
+        _id: new ObjectId(),
         ...hireRequest,
         role: StaffRole.MANAGING_PARTNER,
         hiredAt: new Date(),
         promotionHistory: [],
         status: 'active' as const,
         createdAt: new Date(),
-        updatedAt: new Date(),
-      };
+        updatedAt: new Date() };
 
       mockStaffRepository.add.mockResolvedValue(mockStaff);
       mockAuditLogRepository.logRoleLimitBypass.mockResolvedValue({} as any);
@@ -275,11 +266,10 @@ describe('StaffService', () => {
       userId: 'user123',
       newRole: StaffRole.JUNIOR_ASSOCIATE,
       promotedBy: 'admin123',
-      reason: 'Good performance',
-    };
+      reason: 'Good performance' };
 
     const mockStaff = {
-      _id: {} as any,
+      _id: new ObjectId(),
       userId: 'user123',
       guildId: 'guild123',
       role: StaffRole.PARALEGAL,
@@ -289,8 +279,7 @@ describe('StaffService', () => {
       hiredBy: 'admin123',
       promotionHistory: [],
       createdAt: new Date(),
-      updatedAt: new Date(),
-    };
+      updatedAt: new Date() };
 
     beforeEach(() => {
       mockStaffRepository.findByUserId.mockResolvedValue(mockStaff);
@@ -302,7 +291,7 @@ describe('StaffService', () => {
       const updatedStaff = { ...mockStaff, role: promotionRequest.newRole };
       mockStaffRepository.updateStaffRole.mockResolvedValue(updatedStaff);
 
-      const result = await staffService.promoteStaff(promotionRequest);
+      const result = await staffService.promoteStaff(testContext, promotionRequest);
 
       expect(result.success).toBe(true);
       expect(result.staff?.role).toBe(promotionRequest.newRole);
@@ -319,7 +308,7 @@ describe('StaffService', () => {
     it('should reject if staff member not found', async () => {
       mockStaffRepository.findByUserId.mockResolvedValue(null);
 
-      const result = await staffService.promoteStaff(promotionRequest);
+      const result = await staffService.promoteStaff(testContext, promotionRequest);
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('not found or inactive');
@@ -329,7 +318,7 @@ describe('StaffService', () => {
     it('should reject if new role is not higher', async () => {
       const invalidRequest = { ...promotionRequest, newRole: StaffRole.PARALEGAL };
 
-      const result = await staffService.promoteStaff(invalidRequest);
+      const result = await staffService.promoteStaff(testContext, invalidRequest);
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('must be higher than current role');
@@ -339,7 +328,7 @@ describe('StaffService', () => {
     it('should reject if role limit reached for new role', async () => {
       mockStaffRepository.canHireRole.mockResolvedValue(false);
 
-      const result = await staffService.promoteStaff(promotionRequest);
+      const result = await staffService.promoteStaff(testContext, promotionRequest);
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('Maximum limit');

@@ -11,8 +11,8 @@ class RetainerService {
         this.permissionService = permissionService;
     }
     async createRetainer(context, request) {
-        // Check retainer permission
-        const hasPermission = await this.permissionService.hasRetainerPermissionWithContext(context);
+        // Check lawyer permission (updated from retainer permission)
+        const hasPermission = await this.permissionService.hasLawyerPermissionWithContext(context);
         if (!hasPermission) {
             throw new Error('You do not have permission to create retainer agreements');
         }
@@ -90,8 +90,8 @@ class RetainerService {
         return signedRetainer;
     }
     async cancelRetainer(context, retainerId) {
-        // Check retainer permission
-        const hasPermission = await this.permissionService.hasRetainerPermissionWithContext(context);
+        // Check lawyer permission (updated from retainer permission)
+        const hasPermission = await this.permissionService.hasLawyerPermissionWithContext(context);
         if (!hasPermission) {
             throw new Error('You do not have permission to cancel retainer agreements');
         }
@@ -119,33 +119,33 @@ class RetainerService {
         return cancelledRetainer;
     }
     async getActiveRetainers(context) {
-        // Check retainer permission
-        const hasPermission = await this.permissionService.hasRetainerPermissionWithContext(context);
+        // Check lawyer permission (updated from retainer permission)
+        const hasPermission = await this.permissionService.hasLawyerPermissionWithContext(context);
         if (!hasPermission) {
             throw new Error('You do not have permission to view retainer agreements');
         }
         return this.retainerRepository.findActiveRetainers(context.guildId);
     }
     async getPendingRetainers(context) {
-        // Check retainer permission
-        const hasPermission = await this.permissionService.hasRetainerPermissionWithContext(context);
+        // Check lawyer permission (updated from retainer permission)
+        const hasPermission = await this.permissionService.hasLawyerPermissionWithContext(context);
         if (!hasPermission) {
             throw new Error('You do not have permission to view pending retainer agreements');
         }
         return this.retainerRepository.findPendingRetainers(context.guildId);
     }
     async getClientRetainers(context, clientId, includeAll = false) {
-        // Users can view their own retainers, or staff with retainer permission can view any
+        // Users can view their own retainers, or staff with lawyer permission can view any
         const isOwnRetainers = context.userId === clientId;
-        const hasRetainerPermission = await this.permissionService.hasRetainerPermissionWithContext(context);
-        if (!isOwnRetainers && !hasRetainerPermission) {
+        const hasLawyerPermission = await this.permissionService.hasLawyerPermissionWithContext(context);
+        if (!isOwnRetainers && !hasLawyerPermission) {
             throw new Error('You do not have permission to view these retainer agreements');
         }
         return this.retainerRepository.findClientRetainers(clientId, includeAll);
     }
     async getRetainerStats(context) {
-        // Check retainer permission
-        const hasPermission = await this.permissionService.hasRetainerPermissionWithContext(context);
+        // Check lawyer permission (updated from retainer permission)
+        const hasPermission = await this.permissionService.hasLawyerPermissionWithContext(context);
         if (!hasPermission) {
             throw new Error('You do not have permission to view retainer statistics');
         }

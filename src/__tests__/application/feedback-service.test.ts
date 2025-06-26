@@ -82,7 +82,9 @@ describe('FeedbackService Unit Tests', () => {
       targetStaffUsername: 'teststaff',
       rating: FeedbackRating.FOUR_STAR,
       comment: 'Great service and very professional!',
-      isForFirm: false
+      isForFirm: false,
+        createdAt: new Date(),
+        updatedAt: new Date()
     });
 
     it('should submit feedback successfully with all required fields', async () => {
@@ -646,7 +648,9 @@ describe('FeedbackService Unit Tests', () => {
   describe('getFeedbackById', () => {
     const mockFeedback = TestUtils.generateMockFeedback({
       _id: TestUtils.generateObjectId(),
-      guildId: testGuildId
+      guildId: testGuildId,
+        createdAt: new Date(),
+        updatedAt: new Date()
     });
 
     it('should get feedback by ID successfully', async () => {

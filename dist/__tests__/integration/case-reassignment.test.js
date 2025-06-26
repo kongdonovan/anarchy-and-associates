@@ -40,7 +40,7 @@ describe('Case Reassignment Integration Tests', () => {
         let case2;
         beforeEach(async () => {
             // Create two test cases
-            case1 = await caseService.createCase({
+            case1 = await this.caseService.createCase(context, {
                 guildId: testGuildId,
                 clientId,
                 clientUsername: 'testclient',
@@ -48,7 +48,7 @@ describe('Case Reassignment Integration Tests', () => {
                 description: 'First test case',
                 priority: case_1.CasePriority.HIGH
             });
-            case2 = await caseService.createCase({
+            case2 = await this.caseService.createCase(context, {
                 guildId: testGuildId,
                 clientId: 'client-456',
                 clientUsername: 'otherclient',
@@ -64,8 +64,8 @@ describe('Case Reassignment Integration Tests', () => {
             const fromCaseId = case1._id.toString();
             const toCaseId = case2._id.toString();
             // Verify initial state
-            const initialCase1 = await caseService.getCaseById(fromCaseId);
-            const initialCase2 = await caseService.getCaseById(toCaseId);
+            const initialCase1 = await this.caseService.getCaseById(context, fromCaseId);
+            const initialCase2 = await this.caseService.getCaseById(context, toCaseId);
             expect(initialCase1?.assignedLawyerIds).toContain(lawyer1Id);
             expect(initialCase1?.leadAttorneyId).toBe(lawyer1Id);
             expect(initialCase2?.assignedLawyerIds).toContain(lawyer2Id);
@@ -83,8 +83,8 @@ describe('Case Reassignment Integration Tests', () => {
             expect(result.toCase?.assignedLawyerIds).toContain(lawyer1Id);
             expect(result.toCase?.assignedLawyerIds).toContain(lawyer2Id); // Original lawyer should remain
             // Check database state
-            const finalCase1 = await caseService.getCaseById(fromCaseId);
-            const finalCase2 = await caseService.getCaseById(toCaseId);
+            const finalCase1 = await this.caseService.getCaseById(context, fromCaseId);
+            const finalCase2 = await this.caseService.getCaseById(context, toCaseId);
             expect(finalCase1?.assignedLawyerIds).not.toContain(lawyer1Id);
             expect(finalCase2?.assignedLawyerIds).toContain(lawyer1Id);
             expect(finalCase2?.assignedLawyerIds).toContain(lawyer2Id);
@@ -93,13 +93,13 @@ describe('Case Reassignment Integration Tests', () => {
             const fromCaseId = case1._id.toString();
             const toCaseId = case2._id.toString();
             // Add another lawyer to case1 first
-            await caseService.assignLawyer({
+            await this.caseService.assignLawyer(context, {
                 caseId: fromCaseId,
                 lawyerId: lawyer3Id,
                 assignedBy: 'admin-123'
             });
             // Verify lawyer1 is still lead attorney
-            const beforeReassign = await caseService.getCaseById(fromCaseId);
+            const beforeReassign = await this.caseService.getCaseById(context, fromCaseId);
             expect(beforeReassign?.leadAttorneyId).toBe(lawyer1Id);
             expect(beforeReassign?.assignedLawyerIds).toHaveLength(2);
             // Reassign the lead attorney (lawyer1)
@@ -115,7 +115,7 @@ describe('Case Reassignment Integration Tests', () => {
         });
         it('should handle reassignment when target case has no assigned lawyers', async () => {
             // Create a third case with no assigned lawyers
-            const case3 = await caseService.createCase({
+            const case3 = await this.caseService.createCase(context, {
                 guildId: testGuildId,
                 clientId: 'client-789',
                 clientUsername: 'newclient',
@@ -154,7 +154,7 @@ describe('Case Reassignment Integration Tests', () => {
             const fromCaseId = case1._id.toString();
             const toCaseId = case2._id.toString();
             // Verify case1 has only lawyer1
-            const beforeReassign = await caseService.getCaseById(fromCaseId);
+            const beforeReassign = await this.caseService.getCaseById(context, fromCaseId);
             expect(beforeReassign?.assignedLawyerIds).toHaveLength(1);
             expect(beforeReassign?.leadAttorneyId).toBe(lawyer1Id);
             // Reassign the only lawyer
@@ -171,7 +171,7 @@ describe('Case Reassignment Integration Tests', () => {
         let testCase;
         beforeEach(async () => {
             // Create and setup a test case with multiple lawyers
-            testCase = await caseService.createCase({
+            testCase = await this.caseService.createCase(context, {
                 guildId: testGuildId,
                 clientId,
                 clientUsername: 'testclient',
@@ -181,12 +181,12 @@ describe('Case Reassignment Integration Tests', () => {
             });
             // Accept case and assign multiple lawyers
             await caseService.acceptCase(testCase._id.toString(), lawyer1Id);
-            await caseService.assignLawyer({
+            await this.caseService.assignLawyer(context, {
                 caseId: testCase._id.toString(),
                 lawyerId: lawyer2Id,
                 assignedBy: 'admin-123'
             });
-            await caseService.assignLawyer({
+            await this.caseService.assignLawyer(context, {
                 caseId: testCase._id.toString(),
                 lawyerId: lawyer3Id,
                 assignedBy: 'admin-123'
@@ -195,7 +195,7 @@ describe('Case Reassignment Integration Tests', () => {
         it('should successfully unassign non-lead lawyer', async () => {
             const caseId = testCase._id.toString();
             // Verify initial state
-            const beforeUnassign = await caseService.getCaseById(caseId);
+            const beforeUnassign = await this.caseService.getCaseById(context, caseId);
             expect(beforeUnassign?.assignedLawyerIds).toHaveLength(3);
             expect(beforeUnassign?.leadAttorneyId).toBe(lawyer1Id);
             expect(beforeUnassign?.assignedLawyerIds).toContain(lawyer2Id);
@@ -212,7 +212,7 @@ describe('Case Reassignment Integration Tests', () => {
         it('should reassign lead attorney when unassigning current lead', async () => {
             const caseId = testCase._id.toString();
             // Verify lawyer1 is lead attorney
-            const beforeUnassign = await caseService.getCaseById(caseId);
+            const beforeUnassign = await this.caseService.getCaseById(context, caseId);
             expect(beforeUnassign?.leadAttorneyId).toBe(lawyer1Id);
             expect(beforeUnassign?.assignedLawyerIds).toHaveLength(3);
             // Unassign the lead attorney
@@ -231,7 +231,7 @@ describe('Case Reassignment Integration Tests', () => {
             await caseService.unassignLawyer(caseId, lawyer2Id);
             await caseService.unassignLawyer(caseId, lawyer3Id);
             // Verify only lawyer1 remains
-            const beforeFinalUnassign = await caseService.getCaseById(caseId);
+            const beforeFinalUnassign = await this.caseService.getCaseById(context, caseId);
             expect(beforeFinalUnassign?.assignedLawyerIds).toHaveLength(1);
             expect(beforeFinalUnassign?.leadAttorneyId).toBe(lawyer1Id);
             // Unassign the last lawyer
@@ -264,7 +264,7 @@ describe('Case Reassignment Integration Tests', () => {
             // Create multiple cases for complex assignment tracking
             multiCaseScenario = [];
             for (let i = 1; i <= 3; i++) {
-                const testCase = await caseService.createCase({
+                const testCase = await this.caseService.createCase(context, {
                     guildId: testGuildId,
                     clientId: `client-${i}`,
                     clientUsername: `client${i}`,
@@ -279,7 +279,7 @@ describe('Case Reassignment Integration Tests', () => {
         it('should track lawyer assignments across multiple cases', async () => {
             // Verify lawyer1 is assigned to all 3 cases
             for (const testCase of multiCaseScenario) {
-                const caseData = await caseService.getCaseById(testCase._id.toString());
+                const caseData = await this.caseService.getCaseById(context, testCase._id.toString());
                 expect(caseData?.assignedLawyerIds).toContain(lawyer1Id);
                 expect(caseData?.leadAttorneyId).toBe(lawyer1Id);
             }
@@ -288,9 +288,9 @@ describe('Case Reassignment Integration Tests', () => {
             const case2Id = multiCaseScenario[1]._id.toString();
             await caseService.reassignLawyer(case1Id, case2Id, lawyer1Id);
             // Verify final assignments
-            const finalCase1 = await caseService.getCaseById(case1Id);
-            const finalCase2 = await caseService.getCaseById(case2Id);
-            const finalCase3 = await caseService.getCaseById(multiCaseScenario[2]._id.toString());
+            const finalCase1 = await this.caseService.getCaseById(context, case1Id);
+            const finalCase2 = await this.caseService.getCaseById(context, case2Id);
+            const finalCase3 = await this.caseService.getCaseById(context, multiCaseScenario[2]._id.toString());
             expect(finalCase1?.assignedLawyerIds).not.toContain(lawyer1Id);
             expect(finalCase2?.assignedLawyerIds).toContain(lawyer1Id);
             expect(finalCase3?.assignedLawyerIds).toContain(lawyer1Id);
@@ -303,12 +303,12 @@ describe('Case Reassignment Integration Tests', () => {
             const case2Id = multiCaseScenario[1]._id.toString();
             const case3Id = multiCaseScenario[2]._id.toString();
             // Add lawyer2 to case2 and lawyer3 to case3
-            await caseService.assignLawyer({
+            await this.caseService.assignLawyer(context, {
                 caseId: case2Id,
                 lawyerId: lawyer2Id,
                 assignedBy: 'admin-123'
             });
-            await caseService.assignLawyer({
+            await this.caseService.assignLawyer(context, {
                 caseId: case3Id,
                 lawyerId: lawyer3Id,
                 assignedBy: 'admin-123'
@@ -317,9 +317,9 @@ describe('Case Reassignment Integration Tests', () => {
             await caseService.reassignLawyer(case1Id, case2Id, lawyer1Id);
             await caseService.reassignLawyer(case2Id, case3Id, lawyer2Id);
             // Verify final state
-            const finalCase1 = await caseService.getCaseById(case1Id);
-            const finalCase2 = await caseService.getCaseById(case2Id);
-            const finalCase3 = await caseService.getCaseById(case3Id);
+            const finalCase1 = await this.caseService.getCaseById(context, case1Id);
+            const finalCase2 = await this.caseService.getCaseById(context, case2Id);
+            const finalCase3 = await this.caseService.getCaseById(context, case3Id);
             expect(finalCase1?.assignedLawyerIds).toHaveLength(0);
             expect(finalCase2?.assignedLawyerIds).toContain(lawyer1Id);
             expect(finalCase2?.assignedLawyerIds).not.toContain(lawyer2Id);

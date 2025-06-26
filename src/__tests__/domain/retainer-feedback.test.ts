@@ -12,7 +12,7 @@ describe('Retainer and Feedback Entities', () => {
           clientId: 'client123',
           lawyerId: 'lawyer123',
           agreementTemplate: 'This is a legal retainer agreement...',
-          status: RetainerStatus.PENDING,
+          status: 'pending',
           createdAt: new Date(),
           updatedAt: new Date()
         };
@@ -21,16 +21,16 @@ describe('Retainer and Feedback Entities', () => {
         expect(retainer.clientId).toBeTruthy();
         expect(retainer.lawyerId).toBeTruthy();
         expect(retainer.agreementTemplate).toBeTruthy();
-        expect(retainer.status).toBe(RetainerStatus.PENDING);
+        expect(retainer.status).toBe('pending');
         expect(retainer.createdAt).toBeInstanceOf(Date);
         expect(retainer.updatedAt).toBeInstanceOf(Date);
       });
 
       it('should handle all valid retainer statuses', () => {
         const validStatuses = [
-          RetainerStatus.PENDING,
-          RetainerStatus.SIGNED,
-          RetainerStatus.CANCELLED
+          'pending',
+          'signed',
+          'cancelled'
         ];
 
         validStatuses.forEach(status => {
@@ -59,7 +59,7 @@ describe('Retainer and Feedback Entities', () => {
             clientId: 'client123',
               lawyerId: 'lawyer123',
             agreementTemplate: 'Test agreement',
-            status: RetainerStatus.PENDING,
+            status: 'pending',
             createdAt: new Date(),
             updatedAt: new Date()
           };
@@ -81,7 +81,7 @@ describe('Retainer and Feedback Entities', () => {
           clientId: 'client123',
           lawyerId: 'lawyer123',
           agreementTemplate: 'Test agreement',
-          status: RetainerStatus.SIGNED,
+          status: 'signed',
           signedAt: signedDate,
           clientRobloxUsername: robloxUsername,
           digitalSignature: robloxUsername,
@@ -89,7 +89,7 @@ describe('Retainer and Feedback Entities', () => {
           updatedAt: signedDate
         };
 
-        expect(signedRetainer.status).toBe(RetainerStatus.SIGNED);
+        expect(signedRetainer.status).toBe('signed');
         expect(signedRetainer.signedAt).toBe(signedDate);
         expect(signedRetainer.clientRobloxUsername).toBe(robloxUsername);
         expect(signedRetainer.updatedAt).toBe(signedDate);
@@ -104,12 +104,12 @@ describe('Retainer and Feedback Entities', () => {
           clientId: 'client123',
           lawyerId: 'lawyer123',
           agreementTemplate: 'Test agreement',
-          status: RetainerStatus.CANCELLED,
+          status: 'cancelled',
           createdAt: new Date(),
           updatedAt: cancelledDate
         };
 
-        expect(cancelledRetainer.status).toBe(RetainerStatus.CANCELLED);
+        expect(cancelledRetainer.status).toBe('cancelled');
         expect(cancelledRetainer.signedAt).toBeUndefined();
         expect(cancelledRetainer.digitalSignature).toBeUndefined();
       });
@@ -159,7 +159,7 @@ describe('Retainer and Feedback Entities', () => {
           clientId,
           lawyerId: 'lawyer1',
           agreementTemplate: 'Pending agreement',
-          status: RetainerStatus.PENDING,
+          status: 'pending',
           createdAt: new Date(),
           updatedAt: new Date()
         };
@@ -170,7 +170,7 @@ describe('Retainer and Feedback Entities', () => {
           clientId,
           lawyerId: 'lawyer2',
           agreementTemplate: 'Active agreement',
-          status: RetainerStatus.SIGNED,
+          status: 'signed',
           signedAt: new Date(),
           clientRobloxUsername: 'TestUser123',
           digitalSignature: 'TestUser123',
@@ -180,8 +180,8 @@ describe('Retainer and Feedback Entities', () => {
 
         // Both retainers for same client but different status
         expect(pendingRetainer.clientId).toBe(activeRetainer.clientId);
-        expect(pendingRetainer.status).toBe(RetainerStatus.PENDING);
-        expect(activeRetainer.status).toBe(RetainerStatus.SIGNED);
+        expect(pendingRetainer.status).toBe('pending');
+        expect(activeRetainer.status).toBe('signed');
         expect(pendingRetainer.lawyerId).not.toBe(activeRetainer.lawyerId);
       });
 
@@ -209,7 +209,7 @@ describe('Retainer and Feedback Entities', () => {
           clientId: 'client123',
           lawyerId: 'lawyer123',
           agreementTemplate: longAgreementText,
-          status: RetainerStatus.PENDING,
+          status: 'pending',
           createdAt: new Date(),
           updatedAt: new Date()
         };
@@ -234,7 +234,7 @@ describe('Retainer and Feedback Entities', () => {
           clientId: 'client123',
           lawyerId: 'lawyer123',
           agreementTemplate: specialAgreementText,
-          status: RetainerStatus.PENDING,
+          status: 'pending',
           createdAt: new Date(),
           updatedAt: new Date()
         };
@@ -590,7 +590,7 @@ describe('Retainer and Feedback Entities', () => {
           clientId: 'client123',
           lawyerId: 'lawyer1',
           agreementTemplate: 'Guild 1 retainer',
-          status: RetainerStatus.PENDING,
+          status: 'pending',
           createdAt: new Date(),
           updatedAt: new Date()
         },
@@ -600,7 +600,7 @@ describe('Retainer and Feedback Entities', () => {
           clientId: 'client123',
           lawyerId: 'lawyer2',
           agreementTemplate: 'Guild 2 retainer',
-          status: RetainerStatus.SIGNED,
+          status: 'signed',
           signedAt: new Date(),
           clientRobloxUsername: 'TestUser123',
           digitalSignature: 'TestUser123',

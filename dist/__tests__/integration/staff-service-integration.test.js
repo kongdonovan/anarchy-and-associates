@@ -29,7 +29,7 @@ describe('StaffService Integration Tests', () => {
             const userId = 'user-123';
             const hiredBy = 'admin-123';
             const robloxUsername = 'TestRobloxUser';
-            const result = await staffService.hireStaff({
+            const result = await this.staffService.hireStaff({
                 guildId,
                 userId,
                 hiredBy,
@@ -63,7 +63,7 @@ describe('StaffService Integration Tests', () => {
             const guildId = 'test-guild-123';
             const hiredBy = 'admin-123';
             // First hire should succeed
-            const firstHire = await staffService.hireStaff({
+            const firstHire = await this.staffService.hireStaff({
                 guildId,
                 userId: 'user-1',
                 hiredBy,
@@ -72,7 +72,7 @@ describe('StaffService Integration Tests', () => {
             });
             expect(firstHire.success).toBe(true);
             // Try to hire second Managing Partner (limit is 1)
-            const secondHire = await staffService.hireStaff({
+            const secondHire = await this.staffService.hireStaff({
                 guildId,
                 userId: 'user-2',
                 hiredBy,
@@ -90,7 +90,7 @@ describe('StaffService Integration Tests', () => {
             const userId = 'user-123';
             const hiredBy = 'admin-123';
             // First hire should succeed
-            const firstHire = await staffService.hireStaff({
+            const firstHire = await this.staffService.hireStaff({
                 guildId,
                 userId,
                 hiredBy,
@@ -99,7 +99,7 @@ describe('StaffService Integration Tests', () => {
             });
             expect(firstHire.success).toBe(true);
             // Second hire of same user should fail
-            const secondHire = await staffService.hireStaff({
+            const secondHire = await this.staffService.hireStaff({
                 guildId,
                 userId,
                 hiredBy,
@@ -114,7 +114,7 @@ describe('StaffService Integration Tests', () => {
             const hiredBy = 'admin-123';
             const robloxUsername = 'ConflictUser';
             // First hire with Roblox username
-            const firstHire = await staffService.hireStaff({
+            const firstHire = await this.staffService.hireStaff({
                 guildId,
                 userId: 'user-1',
                 hiredBy,
@@ -123,7 +123,7 @@ describe('StaffService Integration Tests', () => {
             });
             expect(firstHire.success).toBe(true);
             // Second hire with same Roblox username should fail
-            const secondHire = await staffService.hireStaff({
+            const secondHire = await this.staffService.hireStaff({
                 guildId,
                 userId: 'user-2',
                 hiredBy,
@@ -137,7 +137,7 @@ describe('StaffService Integration Tests', () => {
     describe('Staff Promotion Integration', () => {
         beforeEach(async () => {
             // Create initial staff member for promotion tests
-            await staffService.hireStaff({
+            await this.staffService.hireStaff({
                 guildId: 'test-guild-123',
                 userId: 'user-123',
                 hiredBy: 'admin-123',
@@ -149,7 +149,7 @@ describe('StaffService Integration Tests', () => {
             const guildId = 'test-guild-123';
             const userId = 'user-123';
             const promotedBy = 'manager-123';
-            const result = await staffService.promoteStaff({
+            const result = await this.staffService.promoteStaff({
                 guildId,
                 userId,
                 promotedBy,
@@ -180,7 +180,7 @@ describe('StaffService Integration Tests', () => {
             const userId = 'user-123';
             const promotedBy = 'manager-123';
             // Try to promote to same role
-            const sameRoleResult = await staffService.promoteStaff({
+            const sameRoleResult = await this.staffService.promoteStaff({
                 guildId,
                 userId,
                 promotedBy,
@@ -193,7 +193,7 @@ describe('StaffService Integration Tests', () => {
     describe('Staff Firing Integration', () => {
         beforeEach(async () => {
             // Create staff member for firing tests
-            await staffService.hireStaff({
+            await this.staffService.hireStaff({
                 guildId: 'test-guild-123',
                 userId: 'user-123',
                 hiredBy: 'admin-123',
@@ -206,7 +206,7 @@ describe('StaffService Integration Tests', () => {
             const userId = 'user-123';
             const terminatedBy = 'admin-123';
             const reason = 'Policy violation';
-            const result = await staffService.fireStaff({
+            const result = await this.staffService.fireStaff({
                 guildId,
                 userId,
                 terminatedBy,
@@ -227,7 +227,7 @@ describe('StaffService Integration Tests', () => {
             const guildId = 'test-guild-123';
             const userId = 'non-existent-user';
             const terminatedBy = 'admin-123';
-            const result = await staffService.fireStaff({
+            const result = await this.staffService.fireStaff({
                 guildId,
                 userId,
                 terminatedBy,
@@ -249,7 +249,7 @@ describe('StaffService Integration Tests', () => {
                 { userId: 'user-6', role: staff_role_1.StaffRole.PARALEGAL, robloxUsername: 'Paralegal1' }
             ];
             for (const member of staffMembers) {
-                const result = await staffService.hireStaff({
+                const result = await this.staffService.hireStaff({
                     guildId: 'test-guild-123',
                     userId: member.userId,
                     hiredBy: 'admin-123',
@@ -283,7 +283,7 @@ describe('StaffService Integration Tests', () => {
     describe('Error Handling and Edge Cases', () => {
         it('should handle database connection failures gracefully', async () => {
             // Test with malformed input that should cause internal errors but be handled gracefully
-            const result = await staffService.hireStaff({
+            const result = await this.staffService.hireStaff({
                 guildId: 'test-guild-123',
                 userId: 'user-123',
                 hiredBy: 'admin-123',
@@ -296,7 +296,7 @@ describe('StaffService Integration Tests', () => {
         });
         it('should handle malformed staff data', async () => {
             // Test invalid Roblox username (too short - this actually fails validation)
-            const result1 = await staffService.hireStaff({
+            const result1 = await this.staffService.hireStaff({
                 guildId: 'test-guild-123',
                 userId: 'user-invalid-1',
                 hiredBy: 'admin-123',
@@ -305,7 +305,7 @@ describe('StaffService Integration Tests', () => {
             });
             expect(result1.success).toBe(false);
             // Test invalid Roblox username (contains invalid characters)
-            const result2 = await staffService.hireStaff({
+            const result2 = await this.staffService.hireStaff({
                 guildId: 'test-guild-123',
                 userId: 'user-invalid-2',
                 hiredBy: 'admin-123',
@@ -321,14 +321,14 @@ describe('StaffService Integration Tests', () => {
             const guild2 = 'guild-2';
             const userId = 'user-123';
             // Hire same user in different guilds
-            await staffService.hireStaff({
+            await this.staffService.hireStaff({
                 guildId: guild1,
                 userId,
                 hiredBy: 'admin-1',
                 robloxUsername: 'User1',
                 role: staff_role_1.StaffRole.MANAGING_PARTNER
             });
-            await staffService.hireStaff({
+            await this.staffService.hireStaff({
                 guildId: guild2,
                 userId,
                 hiredBy: 'admin-2',

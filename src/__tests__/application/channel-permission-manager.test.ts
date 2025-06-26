@@ -1,5 +1,4 @@
-import { ChannelPermissionManager, ChannelPermissionUpdate } from '../../application/services/channel-permission-manager';
-import { RoleTrackingService } from '../../application/services/role-tracking-service';
+import { ChannelPermissionManager } from '../../application/services/channel-permission-manager';
 import { CaseRepository } from '../../infrastructure/repositories/case-repository';
 import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
 import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-repository';
@@ -8,7 +7,9 @@ import { PermissionService, PermissionContext } from '../../application/services
 import { BusinessRuleValidationService } from '../../application/services/business-rule-validation-service';
 import { StaffRole } from '../../domain/entities/staff-role';
 import { CaseStatus } from '../../domain/entities/case';
+import { RetainerStatus } from '../../domain/entities/retainer';
 import { ChannelType, PermissionFlagsBits } from 'discord.js';
+import { ObjectId } from 'mongodb';
 
 // Mock all dependencies
 jest.mock('../../infrastructure/repositories/case-repository');
@@ -188,12 +189,14 @@ describe('ChannelPermissionManager', () => {
       // Mock user cases
       mockCaseRepo.findCasesByUserId.mockResolvedValue([
         {
-          _id: 'case_1',
+          _id: new ObjectId(),
           channelId: testChannelId,
           status: CaseStatus.IN_PROGRESS,
           guildId: testGuildId,
           clientId: 'client_123',
-          assignedLawyerIds: [testUserId]
+          assignedLawyerIds: [testUserId],
+        createdAt: new Date(),
+        updatedAt: new Date()
         } as any
       ]);
 
@@ -468,12 +471,12 @@ describe('ChannelPermissionManager', () => {
         {
           userId: 'user_1',
           role: StaffRole.MANAGING_PARTNER,
-          status: 'active'
+          status: RetainerStatus.SIGNED
         },
         {
           userId: 'user_2',
           role: StaffRole.JUNIOR_ASSOCIATE,
-          status: 'active'
+          status: RetainerStatus.SIGNED
         },
         {
           userId: 'user_3',
@@ -497,7 +500,7 @@ describe('ChannelPermissionManager', () => {
 
     it('should handle member fetch errors gracefully', async () => {
       mockStaffRepo.findByGuildId.mockResolvedValue([
-        { userId: 'missing_user', role: StaffRole.PARALEGAL, status: 'active' }
+        { userId: 'missing_user', role: StaffRole.PARALEGAL, status: RetainerStatus.SIGNED }
       ] as any[]);
 
       mockGuild.members.fetch.mockRejectedValue(new Error('Member not found'));

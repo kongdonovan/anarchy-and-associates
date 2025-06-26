@@ -22,7 +22,7 @@ export declare class AdminCommands {
     grantRole(role: Role, interaction: CommandInteraction): Promise<void>;
     revokeRole(role: Role, interaction: CommandInteraction): Promise<void>;
     listAdmins(interaction: CommandInteraction): Promise<void>;
-    setPermissionRole(action: 'admin' | 'hr' | 'case' | 'config' | 'retainer' | 'repair', role: Role, interaction: CommandInteraction): Promise<void>;
+    setPermissionRole(action: 'admin' | 'senior-staff' | 'case' | 'config' | 'retainer' | 'repair', role: Role, interaction: CommandInteraction): Promise<void>;
     debugCollection(collection: 'staff' | 'jobs' | 'applications' | 'cases' | 'feedback' | 'retainers' | 'reminders' | 'auditLogs' | 'caseCounters' | 'guildConfig', interaction: CommandInteraction): Promise<void>;
     debugWipeCollections(interaction: CommandInteraction): Promise<void>;
     handleWipeConfirmation(interaction: ModalSubmitInteraction): Promise<void>;

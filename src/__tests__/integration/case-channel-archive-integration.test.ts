@@ -10,6 +10,7 @@ import { BusinessRuleValidationService } from '../../application/services/busine
 import { Case, CaseStatus, CaseResult } from '../../domain/entities/case';
 import { ChannelType } from 'discord.js';
 import { ObjectId } from 'mongodb';
+import { CaseStatus, CasePriority } from '../../domain/entities/case';
 
 // Mock all repositories and external services
 jest.mock('../../infrastructure/repositories/case-repository');
@@ -142,7 +143,9 @@ describe('Case Channel Archive Integration', () => {
         config: [],
         lawyer: [],
         'lead-attorney': [],
-        repair: []
+        repair: [],
+        createdAt: new Date(),
+        updatedAt: new Date()
       },
       adminRoles: [],
       adminUsers: []
@@ -171,12 +174,14 @@ describe('Case Channel Archive Integration', () => {
         title: 'Test Case',
         description: 'Test case description',
         status: CaseStatus.IN_PROGRESS,
-        priority: 'medium' as any,
+        priority: CasePriority.MEDIUM as any,
         assignedLawyerIds: [testUserId],
         leadAttorneyId: testUserId,
         documents: [],
         notes: [],
-        channelId: testChannelId
+        channelId: testChannelId,
+        createdAt: new Date(),
+        updatedAt: new Date()
       };
 
       const closedCase: Case = {
@@ -189,7 +194,7 @@ describe('Case Channel Archive Integration', () => {
 
       mockCaseRepo.conditionalUpdate.mockResolvedValue(closedCase);
 
-      const result = await caseService.closeCase(mockContext, {
+      const result = await this.caseService.closeCase(context, mockContext, {
         caseId: testCaseId,
         result: CaseResult.WIN,
         resultNotes: 'Case won successfully',
@@ -216,12 +221,14 @@ describe('Case Channel Archive Integration', () => {
         title: 'Test Case',
         description: 'Test case description',
         status: CaseStatus.IN_PROGRESS,
-        priority: 'medium' as any,
+        priority: CasePriority.MEDIUM as any,
         assignedLawyerIds: [testUserId],
         leadAttorneyId: testUserId,
         documents: [],
-        notes: []
+        notes: [],
         // No channelId
+        createdAt: new Date(),
+        updatedAt: new Date()
       };
 
       const closedCase: Case = {
@@ -234,7 +241,7 @@ describe('Case Channel Archive Integration', () => {
 
       mockCaseRepo.conditionalUpdate.mockResolvedValue(closedCase);
 
-      const result = await caseService.closeCase(mockContext, {
+      const result = await this.caseService.closeCase(context, mockContext, {
         caseId: testCaseId,
         result: CaseResult.WIN,
         resultNotes: 'Case won successfully',
@@ -257,12 +264,14 @@ describe('Case Channel Archive Integration', () => {
         title: 'Test Case',
         description: 'Test case description',
         status: CaseStatus.CLOSED,
-        priority: 'medium' as any,
+        priority: CasePriority.MEDIUM as any,
         assignedLawyerIds: [],
         documents: [],
         notes: [],
         channelId: testChannelId,
-        closedAt: new Date()
+        closedAt: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date()
       };
 
       mockCaseRepo.findById.mockResolvedValue(caseData);
@@ -291,12 +300,14 @@ describe('Case Channel Archive Integration', () => {
           title: 'Case 1',
           description: 'Description 1',
           status: CaseStatus.CLOSED,
-          priority: 'medium' as any,
+          priority: CasePriority.MEDIUM as any,
           assignedLawyerIds: [],
           documents: [],
           notes: [],
           channelId: 'channel_1',
-          closedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000) // 8 days ago
+          closedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000), // 8 days ago,
+        createdAt: new Date(),
+        updatedAt: new Date()
         },
         {
           _id: new ObjectId('507f1f77bcf86cd799439016'),
@@ -307,12 +318,14 @@ describe('Case Channel Archive Integration', () => {
           title: 'Case 2',
           description: 'Description 2',
           status: CaseStatus.CLOSED,
-          priority: 'medium' as any,
+          priority: CasePriority.MEDIUM as any,
           assignedLawyerIds: [],
           documents: [],
           notes: [],
           channelId: 'channel_2',
-          closedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000) // 8 days ago
+          closedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000), // 8 days ago,
+        createdAt: new Date(),
+        updatedAt: new Date()
         }
       ];
 
@@ -412,11 +425,13 @@ describe('Case Channel Archive Integration', () => {
         title: 'Test Case',
         description: 'Test case description',
         status: CaseStatus.CLOSED,
-        priority: 'medium' as any,
+        priority: CasePriority.MEDIUM as any,
         assignedLawyerIds: [],
         documents: [],
         notes: [],
-        channelId: testChannelId
+        channelId: testChannelId,
+        createdAt: new Date(),
+        updatedAt: new Date()
       };
 
       mockCaseRepo.findById.mockResolvedValue(caseData);
@@ -443,7 +458,9 @@ describe('Case Channel Archive Integration', () => {
           config: [],
           lawyer: [],
           'lead-attorney': [],
-          repair: []
+          repair: [],
+        createdAt: new Date(),
+        updatedAt: new Date()
         },
         adminRoles: [],
         adminUsers: []
@@ -466,11 +483,13 @@ describe('Case Channel Archive Integration', () => {
         title: 'Test Case',
         description: 'Test case description',
         status: CaseStatus.CLOSED,
-        priority: 'medium' as any,
+        priority: CasePriority.MEDIUM as any,
         assignedLawyerIds: [],
         documents: [],
         notes: [],
-        channelId: testChannelId
+        channelId: testChannelId,
+        createdAt: new Date(),
+        updatedAt: new Date()
       };
 
       mockCaseRepo.findById.mockResolvedValue(caseData);
@@ -499,7 +518,9 @@ describe('Case Channel Archive Integration', () => {
           config: [],
           lawyer: [],
           'lead-attorney': [],
-          repair: []
+          repair: [],
+        createdAt: new Date(),
+        updatedAt: new Date()
         },
         adminRoles: [],
         adminUsers: []
@@ -517,11 +538,13 @@ describe('Case Channel Archive Integration', () => {
         title: 'Test Case',
         description: 'Test case description',
         status: CaseStatus.CLOSED,
-        priority: 'medium' as any,
+        priority: CasePriority.MEDIUM as any,
         assignedLawyerIds: [],
         documents: [],
         notes: [],
-        channelId: testChannelId
+        channelId: testChannelId,
+        createdAt: new Date(),
+        updatedAt: new Date()
       };
 
       mockCaseRepo.findById.mockResolvedValue(caseData);

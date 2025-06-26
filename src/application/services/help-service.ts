@@ -42,8 +42,8 @@ export class HelpService {
   private static readonly COMMAND_PERMISSIONS: Record<string, string[]> = {
     'admin': ['admin'],
     'config': ['config'],
-    'staff': ['hr'],
-    'job': ['hr'],
+    'staff': ['senior-staff'],
+    'job': ['senior-staff'],
     'case': ['case'],
     'retainer': ['retainer'],
     'repair': ['admin'],
@@ -69,16 +69,16 @@ export class HelpService {
     },
     'staff': {
       'list': [], // Public
-      'hire': ['hr'],
-      'fire': ['hr'],
-      'promote': ['hr'],
-      'demote': ['hr'],
+      'hire': ['senior-staff'],
+      'fire': ['senior-staff'],
+      'promote': ['senior-staff'],
+      'demote': ['senior-staff'],
       'info': [] // Public
     },
     'job': {
       'list': [], // Public
-      'add': ['hr'],
-      'edit': ['hr']
+      'add': ['senior-staff'],
+      'edit': ['senior-staff']
     },
     'case': {
       'review': [], // Public (clients can request)

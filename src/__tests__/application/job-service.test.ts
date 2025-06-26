@@ -1,7 +1,8 @@
-import { JobService } from '../../application/services/job-service';
+import { JobService, JobCreateRequest, JobUpdateRequest } from '../../application/services/job-service';
 import { JobRepository, JobSearchFilters, JobListResult } from '../../infrastructure/repositories/job-repository';
 import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-repository';
 import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
+import { PermissionService, PermissionContext } from '../../application/services/permission-service';
 import { 
   Job, 
   JobQuestion, 
@@ -10,6 +11,7 @@ import {
 import { StaffRole } from '../../domain/entities/staff-role';
 import { AuditAction } from '../../domain/entities/audit-log';
 import { TestUtils } from '../helpers/test-utils';
+import { CaseStatus, CasePriority } from '../../domain/entities/case';
 
 /**
  * Unit tests for JobService
@@ -20,6 +22,8 @@ describe('JobService Unit Tests', () => {
   let mockJobRepository: jest.Mocked<JobRepository>;
   let mockAuditLogRepository: jest.Mocked<AuditLogRepository>;
   let mockStaffRepository: jest.Mocked<StaffRepository>;
+  let mockPermissionService: jest.Mocked<PermissionService>;
+  let mockPermissionContext: PermissionContext;
 
   // Test data constants
   const testGuildId = '123456789012345678';
@@ -28,6 +32,14 @@ describe('JobService Unit Tests', () => {
   const testJobId = TestUtils.generateObjectId().toString();
 
   beforeEach(() => {
+    // Create mock permission context
+    mockPermissionContext = {
+      guildId: testGuildId,
+      userId: testUserId,
+      userRoles: [],
+      isGuildOwner: false
+    };
+
     // Create partial mock repositories with only the methods we need
     mockJobRepository = {
       createJob: jest.fn(),
@@ -50,17 +62,23 @@ describe('JobService Unit Tests', () => {
 
     mockStaffRepository = {} as jest.Mocked<StaffRepository>;
 
+    mockPermissionService = {
+      hasHRPermissionWithContext: jest.fn(),
+      hasActionPermission: jest.fn()
+    } as jest.Mocked<Partial<PermissionService>> as jest.Mocked<PermissionService>;
+
     jobService = new JobService(
       mockJobRepository,
       mockAuditLogRepository,
-      mockStaffRepository
+      mockStaffRepository,
+      mockPermissionService
     );
 
     jest.clearAllMocks();
   });
 
   describe('createJob', () => {
-    const mockJobRequest = {
+    const mockJobRequest: JobCreateRequest = {
       guildId: testGuildId,
       title: 'Senior Associate Position',
       description: 'Join our legal team as a Senior Associate',
@@ -90,7 +108,8 @@ describe('JobService Unit Tests', () => {
       mockJobRepository.getOpenJobsForRole.mockResolvedValue([]);
       mockJobRepository.createJob.mockResolvedValue(mockCreatedJob);
 
-      const result = await jobService.createJob(mockJobRequest);
+      mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
+      const result = await jobService.createJob(mockPermissionContext, mockJobRequest);
 
       expect(mockJobRepository.getOpenJobsForRole).toHaveBeenCalledWith(testGuildId, StaffRole.SENIOR_ASSOCIATE);
       expect(mockJobRepository.createJob).toHaveBeenCalledWith({
@@ -143,7 +162,8 @@ describe('JobService Unit Tests', () => {
       mockJobRepository.getOpenJobsForRole.mockResolvedValue([]);
       mockJobRepository.createJob.mockResolvedValue(mockCreatedJob);
 
-      const result = await jobService.createJob(requestWithCustomQuestions);
+      mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
+      const result = await jobService.createJob(mockPermissionContext, requestWithCustomQuestions);
 
       expect(mockJobRepository.createJob).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -159,7 +179,8 @@ describe('JobService Unit Tests', () => {
         staffRole: 'invalid_role' as StaffRole
       };
 
-      const result = await jobService.createJob(invalidRequest);
+      mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
+      const result = await jobService.createJob(mockPermissionContext, invalidRequest);
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('Invalid staff role');
@@ -173,7 +194,8 @@ describe('JobService Unit Tests', () => {
       };
       mockJobRepository.getOpenJobsForRole.mockResolvedValue([existingJob]);
 
-      const result = await jobService.createJob(mockJobRequest);
+      mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
+      const result = await jobService.createJob(mockPermissionContext, mockJobRequest);
 
       expect(result.success).toBe(false);
       expect(result.error).toBe(`There is already an open job posting for ${StaffRole.SENIOR_ASSOCIATE}. Close the existing job before creating a new one.`);
@@ -197,7 +219,8 @@ describe('JobService Unit Tests', () => {
 
       mockJobRepository.getOpenJobsForRole.mockResolvedValue([]);
 
-      const result = await jobService.createJob(requestWithInvalidQuestions);
+      mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
+      const result = await jobService.createJob(mockPermissionContext, requestWithInvalidQuestions);
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('Questions must have id, question, and type fields');
@@ -207,7 +230,8 @@ describe('JobService Unit Tests', () => {
     it('should handle repository errors gracefully', async () => {
       mockJobRepository.getOpenJobsForRole.mockRejectedValue(new Error('Database error'));
 
-      const result = await jobService.createJob(mockJobRequest);
+      mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
+      const result = await jobService.createJob(mockPermissionContext, mockJobRequest);
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('Failed to create job');
@@ -245,7 +269,8 @@ describe('JobService Unit Tests', () => {
       mockJobRepository.getOpenJobsForRole.mockResolvedValue([]);
       mockJobRepository.updateJob.mockResolvedValue(updatedJob);
 
-      const result = await jobService.updateJob(testGuildId, testJobId, updateRequest, testUserId);
+      mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
+      const result = await jobService.updateJob(mockPermissionContext, testJobId, updateRequest);
 
       expect(mockJobRepository.findById).toHaveBeenCalledWith(testJobId);
       expect(mockJobRepository.getOpenJobsForRole).toHaveBeenCalledWith(testGuildId, StaffRole.SENIOR_ASSOCIATE);
@@ -275,7 +300,8 @@ describe('JobService Unit Tests', () => {
     it('should reject update for non-existent job', async () => {
       mockJobRepository.findById.mockResolvedValue(null);
 
-      const result = await jobService.updateJob(testGuildId, testJobId, updateRequest, testUserId);
+      mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
+      const result = await jobService.updateJob(mockPermissionContext, testJobId, updateRequest);
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('Job not found');
@@ -286,7 +312,8 @@ describe('JobService Unit Tests', () => {
       const jobFromDifferentGuild = { ...existingJob, guildId: 'different_guild' };
       mockJobRepository.findById.mockResolvedValue(jobFromDifferentGuild);
 
-      const result = await jobService.updateJob(testGuildId, testJobId, updateRequest, testUserId);
+      mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
+      const result = await jobService.updateJob(mockPermissionContext, testJobId, updateRequest);
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('Job not found');
@@ -298,7 +325,8 @@ describe('JobService Unit Tests', () => {
 
       const invalidUpdate = { staffRole: 'invalid_role' as StaffRole };
 
-      const result = await jobService.updateJob(testGuildId, testJobId, invalidUpdate, testUserId);
+      mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
+      const result = await jobService.updateJob(mockPermissionContext, testJobId, invalidUpdate);
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('Invalid staff role');
@@ -315,7 +343,8 @@ describe('JobService Unit Tests', () => {
       mockJobRepository.findById.mockResolvedValue(existingJob);
       mockJobRepository.getOpenJobsForRole.mockResolvedValue([conflictingJob]);
 
-      const result = await jobService.updateJob(testGuildId, testJobId, { staffRole: StaffRole.SENIOR_ASSOCIATE }, testUserId);
+      mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
+      const result = await jobService.updateJob(mockPermissionContext, testJobId, { staffRole: StaffRole.SENIOR_ASSOCIATE });
 
       expect(result.success).toBe(false);
       expect(result.error).toBe(`There is already an open job posting for ${StaffRole.SENIOR_ASSOCIATE}`);
@@ -338,7 +367,8 @@ describe('JobService Unit Tests', () => {
       mockJobRepository.findById.mockResolvedValue(existingJob);
       mockJobRepository.updateJob.mockResolvedValue(updatedJob);
 
-      const result = await jobService.updateJob(testGuildId, testJobId, updateWithQuestions, testUserId);
+      mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
+      const result = await jobService.updateJob(mockPermissionContext, testJobId, updateWithQuestions);
 
       expect(mockJobRepository.updateJob).toHaveBeenCalledWith(testJobId, {
         questions: [...DEFAULT_JOB_QUESTIONS, ...customQuestions]
@@ -359,7 +389,8 @@ describe('JobService Unit Tests', () => {
 
       mockJobRepository.findById.mockResolvedValue(existingJob);
 
-      const result = await jobService.updateJob(testGuildId, testJobId, { customQuestions: invalidQuestions }, testUserId);
+      mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
+      const result = await jobService.updateJob(mockPermissionContext, testJobId, { customQuestions: invalidQuestions });
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('Questions must have id, question, and type fields');
@@ -370,7 +401,8 @@ describe('JobService Unit Tests', () => {
       mockJobRepository.findById.mockResolvedValue(existingJob);
       mockJobRepository.updateJob.mockResolvedValue(null);
 
-      const result = await jobService.updateJob(testGuildId, testJobId, updateRequest, testUserId);
+      mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
+      const result = await jobService.updateJob(mockPermissionContext, testJobId, updateRequest);
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('Failed to update job');
@@ -399,7 +431,8 @@ describe('JobService Unit Tests', () => {
       const closedJob = { ...existingJob, isOpen: false, closedAt: new Date(), closedBy: testUserId };
       mockJobRepository.closeJob.mockResolvedValue(closedJob);
 
-      const result = await jobService.closeJob(testGuildId, testJobId, testUserId);
+      mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
+      const result = await jobService.closeJob(mockPermissionContext, testJobId);
 
       expect(mockJobRepository.closeJob).toHaveBeenCalledWith(testGuildId, testJobId, testUserId);
       expect(mockAuditLogRepository.logAction).toHaveBeenCalledWith({
@@ -408,7 +441,7 @@ describe('JobService Unit Tests', () => {
         actorId: testUserId,
         details: {
           before: { status: 'open' },
-          after: { status: 'closed' },
+          after: { status: CaseStatus.CLOSED },
           metadata: {
             jobId: testJobId,
             title: closedJob.title,
@@ -424,7 +457,8 @@ describe('JobService Unit Tests', () => {
     it('should reject closing non-existent job', async () => {
       mockJobRepository.closeJob.mockResolvedValue(null);
 
-      const result = await jobService.closeJob(testGuildId, testJobId, testUserId);
+      mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
+      const result = await jobService.closeJob(mockPermissionContext, testJobId);
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('Job not found or already closed');
@@ -433,7 +467,8 @@ describe('JobService Unit Tests', () => {
     it('should handle repository errors gracefully', async () => {
       mockJobRepository.closeJob.mockRejectedValue(new Error('Database error'));
 
-      const result = await jobService.closeJob(testGuildId, testJobId, testUserId);
+      mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
+      const result = await jobService.closeJob(mockPermissionContext, testJobId);
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('Failed to close job');
@@ -462,7 +497,8 @@ describe('JobService Unit Tests', () => {
       mockJobRepository.findById.mockResolvedValue(existingJob);
       mockJobRepository.removeJob.mockResolvedValue(true);
 
-      const result = await jobService.removeJob(testGuildId, testJobId, testUserId);
+      mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
+      const result = await jobService.removeJob(mockPermissionContext, testJobId);
 
       expect(mockJobRepository.findById).toHaveBeenCalledWith(testJobId);
       expect(mockJobRepository.removeJob).toHaveBeenCalledWith(testGuildId, testJobId, testUserId);
@@ -487,7 +523,8 @@ describe('JobService Unit Tests', () => {
     it('should reject removing non-existent job', async () => {
       mockJobRepository.findById.mockResolvedValue(null);
 
-      const result = await jobService.removeJob(testGuildId, testJobId, testUserId);
+      mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
+      const result = await jobService.removeJob(mockPermissionContext, testJobId);
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('Job not found');
@@ -498,7 +535,8 @@ describe('JobService Unit Tests', () => {
       const jobFromDifferentGuild = { ...existingJob, guildId: 'different_guild' };
       mockJobRepository.findById.mockResolvedValue(jobFromDifferentGuild);
 
-      const result = await jobService.removeJob(testGuildId, testJobId, testUserId);
+      mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
+      const result = await jobService.removeJob(mockPermissionContext, testJobId);
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('Job not found');
@@ -509,7 +547,8 @@ describe('JobService Unit Tests', () => {
       mockJobRepository.findById.mockResolvedValue(existingJob);
       mockJobRepository.removeJob.mockResolvedValue(false);
 
-      const result = await jobService.removeJob(testGuildId, testJobId, testUserId);
+      mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
+      const result = await jobService.removeJob(mockPermissionContext, testJobId);
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('Failed to remove job');
@@ -545,7 +584,7 @@ describe('JobService Unit Tests', () => {
       const filters: JobSearchFilters = {};
       mockJobRepository.searchJobs.mockResolvedValue(mockJobListResult);
 
-      const result = await jobService.listJobs(testGuildId, filters, 1, testUserId);
+      const result = await jobService.listJobs(mockPermissionContext, filters, 1);
 
       expect(mockJobRepository.searchJobs).toHaveBeenCalledWith(testGuildId, filters, 1, 5);
       expect(mockAuditLogRepository.logAction).toHaveBeenCalledWith({
@@ -572,7 +611,7 @@ describe('JobService Unit Tests', () => {
       };
       mockJobRepository.searchJobs.mockResolvedValue(mockJobListResult);
 
-      const result = await jobService.listJobs(testGuildId, filters, 2, testUserId);
+      const result = await jobService.listJobs(mockPermissionContext, filters, 2);
 
       expect(mockJobRepository.searchJobs).toHaveBeenCalledWith(testGuildId, filters, 2, 5);
       expect(result).toEqual(mockJobListResult);
@@ -581,7 +620,7 @@ describe('JobService Unit Tests', () => {
     it('should handle repository errors', async () => {
       mockJobRepository.searchJobs.mockRejectedValue(new Error('Database error'));
 
-      await expect(jobService.listJobs(testGuildId, {}, 1, testUserId)).rejects.toThrow('Database error');
+      await expect(jobService.listJobs(mockPermissionContext, {}, 1)).rejects.toThrow('Database error');
     });
   });
 
@@ -606,7 +645,7 @@ describe('JobService Unit Tests', () => {
     it('should get job details successfully', async () => {
       mockJobRepository.findById.mockResolvedValue(mockJob);
 
-      const result = await jobService.getJobDetails(testGuildId, testJobId, testUserId);
+      const result = await jobService.getJobDetails(mockPermissionContext, testJobId);
 
       expect(mockJobRepository.findById).toHaveBeenCalledWith(testJobId);
       expect(mockAuditLogRepository.logAction).toHaveBeenCalledWith({
@@ -627,7 +666,7 @@ describe('JobService Unit Tests', () => {
     it('should return null for non-existent job', async () => {
       mockJobRepository.findById.mockResolvedValue(null);
 
-      const result = await jobService.getJobDetails(testGuildId, testJobId, testUserId);
+      const result = await jobService.getJobDetails(mockPermissionContext, testJobId);
 
       expect(result).toBeNull();
       expect(mockAuditLogRepository.logAction).not.toHaveBeenCalled();
@@ -637,7 +676,7 @@ describe('JobService Unit Tests', () => {
       const jobFromDifferentGuild = { ...mockJob, guildId: 'different_guild' };
       mockJobRepository.findById.mockResolvedValue(jobFromDifferentGuild);
 
-      const result = await jobService.getJobDetails(testGuildId, testJobId, testUserId);
+      const result = await jobService.getJobDetails(mockPermissionContext, testJobId);
 
       expect(result).toBeNull();
       expect(mockAuditLogRepository.logAction).not.toHaveBeenCalled();
@@ -664,7 +703,7 @@ describe('JobService Unit Tests', () => {
     it('should get job statistics successfully', async () => {
       mockJobRepository.getJobStatistics.mockResolvedValue(mockStats);
 
-      const result = await jobService.getJobStatistics(testGuildId);
+      const result = await jobService.getJobStatistics(mockPermissionContext);
 
       expect(mockJobRepository.getJobStatistics).toHaveBeenCalledWith(testGuildId);
       expect(result).toEqual(mockStats);
@@ -673,7 +712,7 @@ describe('JobService Unit Tests', () => {
     it('should handle repository errors', async () => {
       mockJobRepository.getJobStatistics.mockRejectedValue(new Error('Database error'));
 
-      await expect(jobService.getJobStatistics(testGuildId)).rejects.toThrow('Database error');
+      await expect(jobService.getJobStatistics(mockPermissionContext)).rejects.toThrow('Database error');
     });
   });
 
@@ -717,7 +756,8 @@ describe('JobService Unit Tests', () => {
       mockJobRepository.getOpenJobsForRole.mockResolvedValue([]);
       mockJobRepository.createJob.mockResolvedValue({} as Job);
 
-      const result = await jobService.createJob(request);
+      mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
+      const result = await jobService.createJob(mockPermissionContext, request);
 
       expect(result.success).toBe(true);
     });
@@ -744,7 +784,8 @@ describe('JobService Unit Tests', () => {
 
       mockJobRepository.getOpenJobsForRole.mockResolvedValue([]);
 
-      const result = await jobService.createJob(request);
+      mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
+      const result = await jobService.createJob(mockPermissionContext, request);
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('Invalid question type: invalid_type');
@@ -773,7 +814,8 @@ describe('JobService Unit Tests', () => {
 
       mockJobRepository.getOpenJobsForRole.mockResolvedValue([]);
 
-      const result = await jobService.createJob(request);
+      mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
+      const result = await jobService.createJob(mockPermissionContext, request);
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('Choice questions must have at least one choice option');
@@ -803,7 +845,8 @@ describe('JobService Unit Tests', () => {
 
       mockJobRepository.getOpenJobsForRole.mockResolvedValue([]);
 
-      const result = await jobService.createJob(request);
+      mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
+      const result = await jobService.createJob(mockPermissionContext, request);
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('minValue must be less than maxValue for number questions');
@@ -832,7 +875,8 @@ describe('JobService Unit Tests', () => {
 
       mockJobRepository.getOpenJobsForRole.mockResolvedValue([]);
 
-      const result = await jobService.createJob(request);
+      mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
+      const result = await jobService.createJob(mockPermissionContext, request);
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('maxLength must be greater than 0 for text questions');
@@ -866,7 +910,8 @@ describe('JobService Unit Tests', () => {
 
       mockJobRepository.getOpenJobsForRole.mockResolvedValue([]);
 
-      const result = await jobService.createJob(request);
+      mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
+      const result = await jobService.createJob(mockPermissionContext, request);
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('Question IDs must be unique');
@@ -895,25 +940,29 @@ describe('JobService Unit Tests', () => {
       };
 
       // Test all methods handle errors gracefully
-      const createResult = await jobService.createJob(basicRequest);
+      mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
+      const createResult = await jobService.createJob(mockPermissionContext, basicRequest);
       expect(createResult.success).toBe(false);
       expect(createResult.error).toBe('Failed to create job');
 
-      const updateResult = await jobService.updateJob(testGuildId, testJobId, {}, testUserId);
+      mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
+      const updateResult = await jobService.updateJob(mockPermissionContext, testJobId, {});
       expect(updateResult.success).toBe(false);
       expect(updateResult.error).toBe('Failed to update job');
 
-      const closeResult = await jobService.closeJob(testGuildId, testJobId, testUserId);
+      mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
+      const closeResult = await jobService.closeJob(mockPermissionContext, testJobId);
       expect(closeResult.success).toBe(false);
       expect(closeResult.error).toBe('Failed to close job');
 
-      const removeResult = await jobService.removeJob(testGuildId, testJobId, testUserId);
+      mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
+      const removeResult = await jobService.removeJob(mockPermissionContext, testJobId);
       expect(removeResult.success).toBe(false);
       expect(removeResult.error).toBe('Failed to remove job');
 
-      await expect(jobService.listJobs(testGuildId, {}, 1, testUserId)).rejects.toThrow();
-      await expect(jobService.getJobDetails(testGuildId, testJobId, testUserId)).rejects.toThrow();
-      await expect(jobService.getJobStatistics(testGuildId)).rejects.toThrow();
+      await expect(jobService.listJobs(mockPermissionContext, {}, 1)).rejects.toThrow();
+      await expect(jobService.getJobDetails(mockPermissionContext, testJobId)).rejects.toThrow();
+      await expect(jobService.getJobStatistics(mockPermissionContext)).rejects.toThrow();
     });
 
     it('should handle audit log failures gracefully during successful operations', async () => {
@@ -948,7 +997,8 @@ describe('JobService Unit Tests', () => {
       };
 
       // Should fail because audit log failure causes the whole operation to fail
-      const result = await jobService.createJob(request);
+      mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
+      const result = await jobService.createJob(mockPermissionContext, request);
       expect(result.success).toBe(false);
       expect(result.error).toBe('Failed to create job');
     });

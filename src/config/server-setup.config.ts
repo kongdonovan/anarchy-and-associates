@@ -9,264 +9,290 @@ import { JobQuestion } from '../domain/entities/job';
 
 // Category and channel definitions
 const INFORMATION_CATEGORY = {
-  name: "Information",
+  name: 'Information',
   channels: [
-    { name: "welcome", type: ChannelType.GuildText },
-    { name: "rules", type: ChannelType.GuildText },
-    { name: "faq", type: ChannelType.GuildText },
-    { name: "announcements", type: ChannelType.GuildText }
-  ]
+    { name: 'welcome', type: ChannelType.GuildText },
+    { name: 'rules', type: ChannelType.GuildText },
+    { name: 'faq', type: ChannelType.GuildText },
+    { name: 'announcements', type: ChannelType.GuildText },
+  ],
 };
 
 const CLIENT_SERVICES_CATEGORY = {
-  name: "Client Services",
+  name: 'Client Services',
   channels: [
-    { name: "client-lobby", type: ChannelType.GuildText },
-    { name: "bot-commands", type: ChannelType.GuildText },
-    { name: "feedback", type: ChannelType.GuildText },
-    { name: "client-voice", type: ChannelType.GuildVoice }
-  ]
+    { name: 'client-lobby', type: ChannelType.GuildText },
+    { name: 'bot-commands', type: ChannelType.GuildText },
+    { name: 'feedback', type: ChannelType.GuildText },
+    { name: 'client-voice', type: ChannelType.GuildVoice },
+  ],
 };
 
-const CASE_REVIEWS_CATEGORY = { 
-  name: "Case Reviews", 
-  channels: [] as Array<{ name: string; type: ChannelType }> 
+const CASE_REVIEWS_CATEGORY = {
+  name: 'Case Reviews',
+  channels: [] as Array<{ name: string; type: ChannelType }>,
 };
 
-const CASE_ARCHIVES_CATEGORY = { 
-  name: "Case Archives", 
-  channels: [] as Array<{ name: string; type: ChannelType }> 
+const CASE_ARCHIVES_CATEGORY = {
+  name: 'Case Archives',
+  channels: [] as Array<{ name: string; type: ChannelType }>,
 };
 
 const LEGAL_TEAM_CATEGORY = {
-  name: "Legal Team",
+  name: 'Legal Team',
   channels: [
-    { name: "lawyer-lounge", type: ChannelType.GuildText },
-    { name: "paralegal-hub", type: ChannelType.GuildText },
-    { name: "team-voice", type: ChannelType.GuildVoice }
-  ]
+    { name: 'lawyer-lounge', type: ChannelType.GuildText },
+    { name: 'paralegal-hub', type: ChannelType.GuildText },
+    { name: 'team-voice', type: ChannelType.GuildVoice },
+  ],
 };
 
 const STAFF_CATEGORY = {
-  name: "Staff",
+  name: 'Staff',
   channels: [
-    { name: "staff-announcements", type: ChannelType.GuildText },
-    { name: "staff-chat", type: ChannelType.GuildText },
-    { name: "applications", type: ChannelType.GuildText },
-    { name: "signed-retainers", type: ChannelType.GuildText },
-    { name: "staff-voice", type: ChannelType.GuildVoice }
-  ]
+    { name: 'staff-announcements', type: ChannelType.GuildText },
+    { name: 'staff-chat', type: ChannelType.GuildText },
+    { name: 'applications', type: ChannelType.GuildText },
+    { name: 'signed-retainers', type: ChannelType.GuildText },
+    { name: 'staff-voice', type: ChannelType.GuildVoice },
+  ],
 };
 
 const ADMINISTRATION_CATEGORY = {
-  name: "Administration",
+  name: 'Administration',
   channels: [
-    { name: "modlog", type: ChannelType.GuildText },
-    { name: "admin-chat", type: ChannelType.GuildText },
-    { name: "admin-voice", type: ChannelType.GuildVoice }
-  ]
+    { name: 'modlog', type: ChannelType.GuildText },
+    { name: 'admin-chat', type: ChannelType.GuildText },
+    { name: 'admin-voice', type: ChannelType.GuildVoice },
+  ],
 };
 
 // Role definitions
 const ROLES = [
-  { 
-    name: "Managing Partner", 
-    color: "DarkRed", 
-    permissions: [PermissionFlagsBits.Administrator], 
+  {
+    name: 'Managing Partner',
+    color: 'DarkRed',
+    permissions: [PermissionFlagsBits.Administrator],
     hoist: true,
     mentionable: true,
-    maxCount: 1
+    maxCount: 1,
   },
-  { 
-    name: "Senior Partner", 
-    color: "Red", 
-    permissions: [PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages], 
+  {
+    name: 'Senior Partner',
+    color: 'Red',
+    permissions: [
+      PermissionFlagsBits.ManageChannels,
+      PermissionFlagsBits.ManageMessages,
+      PermissionFlagsBits.ViewChannel,
+      PermissionFlagsBits.SendMessages,
+    ],
     hoist: true,
     mentionable: true,
-    maxCount: 3
+    maxCount: 3,
   },
-  { 
-    name: "Partner", 
-    color: "Red", 
-    permissions: [PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages], 
+  {
+    name: 'Partner',
+    color: 'Red',
+    permissions: [
+      PermissionFlagsBits.ManageChannels,
+      PermissionFlagsBits.ManageMessages,
+      PermissionFlagsBits.ViewChannel,
+      PermissionFlagsBits.SendMessages,
+    ],
     hoist: true,
     mentionable: true,
-    maxCount: 5
+    maxCount: 5,
   },
-  { 
-    name: "Senior Associate", 
-    color: "Blue", 
-    permissions: [PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages], 
+  {
+    name: 'Senior Associate',
+    color: 'Blue',
+    permissions: [
+      PermissionFlagsBits.ManageMessages,
+      PermissionFlagsBits.ViewChannel,
+      PermissionFlagsBits.SendMessages,
+    ],
     hoist: true,
     mentionable: true,
-    maxCount: 10
+    maxCount: 10,
   },
-  { 
-    name: "Associate", 
-    color: "Aqua", 
-    permissions: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages], 
+  {
+    name: 'Associate',
+    color: 'Aqua',
+    permissions: [
+      PermissionFlagsBits.ViewChannel,
+      PermissionFlagsBits.SendMessages,
+    ],
     hoist: true,
     mentionable: true,
-    maxCount: 10
+    maxCount: 10,
   },
-  { 
-    name: "Paralegal", 
-    color: "Purple", 
-    permissions: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages], 
+  {
+    name: 'Paralegal',
+    color: 'Purple',
+    permissions: [
+      PermissionFlagsBits.ViewChannel,
+      PermissionFlagsBits.SendMessages,
+    ],
     hoist: true,
     mentionable: true,
-    maxCount: 10
+    maxCount: 10,
   },
-  { 
-    name: "Client", 
-    color: "Green", 
-    permissions: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages], 
-    hoist: true,
-    mentionable: true
-  },
-  { 
-    name: "Hiring Staff", 
-    color: "Orange", 
-    permissions: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages], 
+  {
+    name: 'Client',
+    color: 'Green',
+    permissions: [
+      PermissionFlagsBits.ViewChannel,
+      PermissionFlagsBits.SendMessages,
+    ],
     hoist: true,
     mentionable: true,
-    maxCount: 5
-  }
+  },
+  {
+    name: 'Hiring Staff',
+    color: 'Orange',
+    permissions: [
+      PermissionFlagsBits.ViewChannel,
+      PermissionFlagsBits.SendMessages,
+    ],
+    hoist: true,
+    mentionable: true,
+    maxCount: 5,
+  },
 ];
 
 // Job definitions
 const DEFAULT_JOBS = [
   {
-    title: "Managing Partner",
-    description: "Firm leader setting strategy & culture.",
-    roleName: "Managing Partner",
+    title: 'Managing Partner',
+    description: 'Firm leader setting strategy & culture.',
+    roleName: 'Managing Partner',
     isOpenByDefault: false,
     autoCreateOnSetup: true,
     customQuestions: [
-      { 
-        id: "leadership", 
-        question: "Outline your leadership vision.", 
-        type: "paragraph" as const, 
+      {
+        id: 'leadership',
+        question: 'Outline your leadership vision.',
+        type: 'paragraph' as const,
         required: true,
-        maxLength: 1000
+        maxLength: 1000,
       },
-      { 
-        id: "growth", 
-        question: "How will you grow the firm?", 
-        type: "paragraph" as const, 
+      {
+        id: 'growth',
+        question: 'How will you grow the firm?',
+        type: 'paragraph' as const,
         required: true,
-        maxLength: 1000
-      }
-    ] as JobQuestion[]
+        maxLength: 1000,
+      },
+    ] as JobQuestion[],
   },
   {
-    title: "Senior Partner",
-    description: "Heads practice groups and mentors partners.",
-    roleName: "Senior Partner",
+    title: 'Senior Partner',
+    description: 'Heads practice groups and mentors partners.',
+    roleName: 'Senior Partner',
     isOpenByDefault: true,
     autoCreateOnSetup: true,
     customQuestions: [
-      { 
-        id: "wins", 
-        question: "Share a major litigation win.", 
-        type: "paragraph" as const, 
+      {
+        id: 'wins',
+        question: 'Share a major litigation win.',
+        type: 'paragraph' as const,
         required: true,
-        maxLength: 1000
+        maxLength: 1000,
       },
-      { 
-        id: "mentorship", 
-        question: "How do you mentor partners?", 
-        type: "paragraph" as const, 
+      {
+        id: 'mentorship',
+        question: 'How do you mentor partners?',
+        type: 'paragraph' as const,
         required: true,
-        maxLength: 1000
-      }
-    ] as JobQuestion[]
+        maxLength: 1000,
+      },
+    ] as JobQuestion[],
   },
   {
-    title: "Partner",
-    description: "Leads cases, manages clients and teams.",
-    roleName: "Partner",
+    title: 'Partner',
+    description: 'Leads cases, manages clients and teams.',
+    roleName: 'Partner',
     isOpenByDefault: true,
     autoCreateOnSetup: true,
     customQuestions: [
-      { 
-        id: "exp", 
-        question: "Describe your leadership experience.", 
-        type: "paragraph" as const, 
+      {
+        id: 'exp',
+        question: 'Describe your leadership experience.',
+        type: 'paragraph' as const,
         required: true,
-        maxLength: 1000
+        maxLength: 1000,
       },
-      { 
-        id: "vision", 
-        question: "What is your vision for the firm?", 
-        type: "paragraph" as const, 
+      {
+        id: 'vision',
+        question: 'What is your vision for the firm?',
+        type: 'paragraph' as const,
         required: true,
-        maxLength: 1000
-      }
-    ] as JobQuestion[]
+        maxLength: 1000,
+      },
+    ] as JobQuestion[],
   },
   {
-    title: "Senior Associate",
-    description: "Handles complex research and key briefs.",
-    roleName: "Senior Associate",
+    title: 'Senior Associate',
+    description: 'Handles complex research and key briefs.',
+    roleName: 'Senior Associate',
     isOpenByDefault: true,
     autoCreateOnSetup: true,
     customQuestions: [
-      { 
-        id: "research", 
-        question: "How good are you at legal research?", 
-        type: "paragraph" as const, 
+      {
+        id: 'research',
+        question: 'How good are you at legal research?',
+        type: 'paragraph' as const,
         required: true,
-        maxLength: 1000
+        maxLength: 1000,
       },
-      { 
-        id: "coach", 
-        question: "How do you coach associates?", 
-        type: "paragraph" as const, 
+      {
+        id: 'coach',
+        question: 'How do you coach associates?',
+        type: 'paragraph' as const,
         required: true,
-        maxLength: 1000
-      }
-    ] as JobQuestion[]
+        maxLength: 1000,
+      },
+    ] as JobQuestion[],
   },
   {
-    title: "Associate",
-    description: "Entry‑level lawyer assisting on matters.",
-    roleName: "Associate",
+    title: 'Associate',
+    description: 'Entry‑level lawyer assisting on matters.',
+    roleName: 'Associate',
     isOpenByDefault: true,
     autoCreateOnSetup: true,
     customQuestions: [
-      { 
-        id: "exp", 
-        question: "How well do you work in a team?", 
-        type: "paragraph" as const, 
+      {
+        id: 'exp',
+        question: 'How well do you work in a team?',
+        type: 'paragraph' as const,
         required: true,
-        maxLength: 1000
-      }
-    ] as JobQuestion[]
+        maxLength: 1000,
+      },
+    ] as JobQuestion[],
   },
   {
-    title: "Paralegal",
-    description: "Supports attorneys with documents & filings.",
-    roleName: "Paralegal",
+    title: 'Paralegal',
+    description: 'Supports attorneys with documents & filings.',
+    roleName: 'Paralegal',
     isOpenByDefault: true,
     autoCreateOnSetup: true,
     customQuestions: [
-      { 
-        id: "skills", 
-        question: "How much attention to detail do you have?", 
-        type: "paragraph" as const, 
+      {
+        id: 'skills',
+        question: 'How much attention to detail do you have?',
+        type: 'paragraph' as const,
         required: true,
-        maxLength: 1000
+        maxLength: 1000,
       },
-      { 
-        id: "tools", 
-        question: "How well do you work in a team?", 
-        type: "paragraph" as const, 
+      {
+        id: 'tools',
+        question: 'How well do you work in a team?',
+        type: 'paragraph' as const,
         required: true,
-        maxLength: 1000
-      }
-    ] as JobQuestion[]
-  }
+        maxLength: 1000,
+      },
+    ] as JobQuestion[],
+  },
 ];
 
 export interface AnarchyServerConfig {
@@ -301,10 +327,10 @@ export const ANARCHY_SERVER_CONFIG: AnarchyServerConfig = {
     CASE_ARCHIVES_CATEGORY,
     LEGAL_TEAM_CATEGORY,
     STAFF_CATEGORY,
-    ADMINISTRATION_CATEGORY
+    ADMINISTRATION_CATEGORY,
   ],
   roles: ROLES,
-  defaultJobs: DEFAULT_JOBS
+  defaultJobs: DEFAULT_JOBS,
 };
 
 /**
@@ -312,13 +338,13 @@ export const ANARCHY_SERVER_CONFIG: AnarchyServerConfig = {
  * Key: role name, Value: array of permission actions
  */
 export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
-  "Managing Partner": ["admin", "config", "case", "hr", "retainer", "repair"],
-  "Senior Partner": ["case", "hr", "retainer"],
-  "Partner": ["case", "hr", "retainer"],
-  "Senior Associate": ["case", "retainer"],
-  "Associate": ["case", "retainer"],
-  "Paralegal": ["case", "retainer"],
-  "Hiring Staff": ["hr"],
+  'Managing Partner': ['admin', 'config', 'case', 'senior-staff', 'retainer', 'repair'],
+  'Senior Partner': ['case', 'senior-staff', 'retainer'],
+  Partner: ['case', 'senior-staff', 'retainer'],
+  'Senior Associate': ['case', 'retainer'],
+  Associate: ['case', 'retainer'],
+  Paralegal: ['case', 'retainer'],
+  'Hiring Staff': ['senior-staff'],
   // "Client": [] // Clients get no elevated permissions
 };
 
@@ -326,11 +352,14 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
  * Maps GuildConfig keys to logical channel/category names for auto-setup.
  * Change this mapping to update which channels/categories are used for each config key.
  */
-export const DEFAULT_CHANNEL_MAPPINGS: Record<string, { name: string; type: "GUILD_TEXT" | "GUILD_CATEGORY" }> = {
-  feedbackChannelId: { name: "feedback", type: "GUILD_TEXT" },
-  caseReviewCategoryId: { name: "Case Reviews", type: "GUILD_CATEGORY" },
-  modlogChannelId: { name: "modlog", type: "GUILD_TEXT" },
-  applicationChannelId: { name: "applications", type: "GUILD_TEXT" },
-  retainerChannelId: { name: "signed-retainers", type: "GUILD_TEXT" },
-  caseArchiveCategoryId: { name: "Case Archives", type: "GUILD_CATEGORY" },
+export const DEFAULT_CHANNEL_MAPPINGS: Record<
+  string,
+  { name: string; type: 'GUILD_TEXT' | 'GUILD_CATEGORY' }
+> = {
+  feedbackChannelId: { name: 'feedback', type: 'GUILD_TEXT' },
+  caseReviewCategoryId: { name: 'Case Reviews', type: 'GUILD_CATEGORY' },
+  modlogChannelId: { name: 'modlog', type: 'GUILD_TEXT' },
+  applicationChannelId: { name: 'applications', type: 'GUILD_TEXT' },
+  retainerChannelId: { name: 'signed-retainers', type: 'GUILD_TEXT' },
+  caseArchiveCategoryId: { name: 'Case Archives', type: 'GUILD_CATEGORY' },
 };

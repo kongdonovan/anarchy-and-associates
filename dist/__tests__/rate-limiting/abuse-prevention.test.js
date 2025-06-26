@@ -70,7 +70,7 @@ describe('Rate Limiting and Abuse Prevention Tests', () => {
             clientRoleId: undefined,
             permissions: {
                 admin: [],
-                hr: [],
+                'senior-staff': [],
                 case: [],
                 config: [],
                 retainer: [],
@@ -337,7 +337,7 @@ describe('Rate Limiting and Abuse Prevention Tests', () => {
         it('should prevent abuse of staff hiring operations', async () => {
             const abusiveUser = 'abusive-hirer';
             // First hire should succeed
-            const firstHire = await staffService.hireStaff({
+            const firstHire = await this.staffService.hireStaff(context, {
                 guildId: testGuildId,
                 userId: 'hire-victim-1',
                 hiredBy: abusiveUser,

@@ -9,3 +9,4 @@ export * from './services/case-service';
 export * from './services/discord-role-sync-service';
 export * from './services/feedback-service';
 export * from './services/reminder-service';
+export * from './services/cross-entity-validation-service';

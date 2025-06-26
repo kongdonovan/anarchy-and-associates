@@ -12,6 +12,18 @@ import {
 import { RepairService, RepairResult, HealthCheckResult } from '../../application/services/repair-service';
 import { PermissionService, PermissionContext } from '../../application/services/permission-service';
 import { GuildConfigRepository } from '../../infrastructure/repositories/guild-config-repository';
+import { OrphanedChannelCleanupService, OrphanedChannelDetails, CleanupReport } from '../../application/services/orphaned-channel-cleanup-service';
+import { CaseChannelArchiveService } from '../../application/services/case-channel-archive-service';
+import { CaseRepository } from '../../infrastructure/repositories/case-repository';
+import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-repository';
+import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
+import { BusinessRuleValidationService } from '../../application/services/business-rule-validation-service';
+import { CrossEntityValidationService, IntegrityReport, RepairResult as ValidationRepairResult } from '../../application/services/cross-entity-validation-service';
+import { JobRepository } from '../../infrastructure/repositories/job-repository';
+import { ApplicationRepository } from '../../infrastructure/repositories/application-repository';
+import { RetainerRepository } from '../../infrastructure/repositories/retainer-repository';
+import { FeedbackRepository } from '../../infrastructure/repositories/feedback-repository';
+import { ReminderRepository } from '../../infrastructure/repositories/reminder-repository';
 import { EmbedUtils } from '../../infrastructure/utils/embed-utils';
 import { logger } from '../../infrastructure/logger';
 
@@ -22,11 +34,60 @@ export class RepairCommands {
   private repairService: RepairService;
   private permissionService: PermissionService;
   private guildConfigRepository: GuildConfigRepository;
+  private orphanedChannelCleanupService: OrphanedChannelCleanupService;
+  private crossEntityValidationService: CrossEntityValidationService;
 
   constructor() {
     this.repairService = new RepairService();
     this.guildConfigRepository = new GuildConfigRepository();
     this.permissionService = new PermissionService(this.guildConfigRepository);
+    
+    // Initialize services for orphaned channel cleanup
+    const caseRepository = new CaseRepository();
+    const auditLogRepository = new AuditLogRepository();
+    const staffRepository = new StaffRepository();
+    const businessRuleValidationService = new BusinessRuleValidationService(
+      this.guildConfigRepository,
+      staffRepository,
+      caseRepository,
+      this.permissionService
+    );
+    const caseChannelArchiveService = new CaseChannelArchiveService(
+      caseRepository,
+      this.guildConfigRepository,
+      auditLogRepository,
+      this.permissionService,
+      businessRuleValidationService
+    );
+    
+    this.orphanedChannelCleanupService = new OrphanedChannelCleanupService(
+      caseRepository,
+      this.guildConfigRepository,
+      auditLogRepository,
+      staffRepository,
+      this.permissionService,
+      businessRuleValidationService,
+      caseChannelArchiveService
+    );
+
+    // Initialize repositories for cross-entity validation
+    const jobRepository = new JobRepository();
+    const applicationRepository = new ApplicationRepository();
+    const retainerRepository = new RetainerRepository();
+    const feedbackRepository = new FeedbackRepository();
+    const reminderRepository = new ReminderRepository();
+
+    this.crossEntityValidationService = new CrossEntityValidationService(
+      staffRepository,
+      caseRepository,
+      applicationRepository,
+      jobRepository,
+      retainerRepository,
+      feedbackRepository,
+      reminderRepository,
+      auditLogRepository,
+      businessRuleValidationService
+    );
   }
 
   private async getPermissionContext(interaction: CommandInteraction): Promise<PermissionContext> {
@@ -513,5 +574,502 @@ export class RepairCommands {
         ephemeral: true,
       });
     }
+  }
+
+  @Slash({ name: 'orphaned-channels', description: 'Scan for orphaned channels that need cleanup' })
+  async scanOrphanedChannels(
+    interaction: CommandInteraction
+  ): Promise<void> {
+    try {
+      if (!interaction.guild) {
+        await interaction.reply({
+          embeds: [EmbedUtils.createErrorEmbed('Error', 'This command can only be used in a server.')],
+          ephemeral: true,
+        });
+        return;
+      }
+
+      const hasPermission = await this.checkAdminPermission(interaction);
+      if (!hasPermission) {
+        await interaction.reply({
+          embeds: [EmbedUtils.createErrorEmbed('Permission Denied', 'You need admin permissions to use repair commands.')],
+          ephemeral: true,
+        });
+        return;
+      }
+
+      await interaction.reply({
+        embeds: [EmbedUtils.createInfoEmbed('Scanning Channels', 'Scanning for orphaned channels...')],
+        ephemeral: true,
+      });
+
+      const context = await this.getPermissionContext(interaction);
+      const orphanedChannels = await this.orphanedChannelCleanupService.scanForOrphanedChannels(
+        interaction.guild,
+        context
+      );
+
+      const embed = EmbedUtils.createAALegalEmbed({
+        title: '🔍 Orphaned Channel Scan Results',
+        description: `Found ${orphanedChannels.length} potentially orphaned channels.`,
+      });
+
+      // Group channels by recommended action
+      const toArchive = orphanedChannels.filter(c => c.recommendedAction === 'archive');
+      const toDelete = orphanedChannels.filter(c => c.recommendedAction === 'delete');
+      const toReview = orphanedChannels.filter(c => c.recommendedAction === 'review');
+
+      if (toArchive.length > 0) {
+        const archiveList = toArchive.slice(0, 5).map(c => 
+          `• **${c.channelName}** - Inactive ${c.inactiveDays} days`
+        ).join('\n');
+        const more = toArchive.length > 5 ? `\n...and ${toArchive.length - 5} more` : '';
+        
+        embed.addFields({
+          name: `📁 To Archive (${toArchive.length})`,
+          value: archiveList + more,
+          inline: false
+        });
+      }
+
+      if (toDelete.length > 0) {
+        const deleteList = toDelete.slice(0, 5).map(c => 
+          `• **${c.channelName}** - Inactive ${c.inactiveDays} days`
+        ).join('\n');
+        const more = toDelete.length > 5 ? `\n...and ${toDelete.length - 5} more` : '';
+        
+        embed.addFields({
+          name: `🗑️ To Delete (${toDelete.length})`,
+          value: deleteList + more,
+          inline: false
+        });
+      }
+
+      if (toReview.length > 0) {
+        const reviewList = toReview.slice(0, 5).map(c => 
+          `• **${c.channelName}** - ${c.reasons[0] || 'Needs review'}`
+        ).join('\n');
+        const more = toReview.length > 5 ? `\n...and ${toReview.length - 5} more` : '';
+        
+        embed.addFields({
+          name: `👀 Needs Review (${toReview.length})`,
+          value: reviewList + more,
+          inline: false
+        });
+      }
+
+      if (orphanedChannels.length > 0) {
+        embed.addFields({
+          name: 'Next Steps',
+          value: 'Use `/repair cleanup-channels` to perform cleanup with optional dry-run mode.',
+          inline: false
+        });
+      }
+
+      await interaction.followUp({
+        embeds: [embed],
+        ephemeral: true,
+      });
+
+    } catch (error) {
+      logger.error('Error in orphaned channels scan command:', error);
+      await interaction.followUp({
+        embeds: [EmbedUtils.createErrorEmbed('Scan Failed', 'An unexpected error occurred during orphaned channel scan.')],
+        ephemeral: true,
+      });
+    }
+  }
+
+  @Slash({ name: 'cleanup-channels', description: 'Clean up orphaned channels (archive or delete)' })
+  async cleanupOrphanedChannels(
+    @SlashOption({
+      name: 'dry-run',
+      description: 'Preview changes without applying them',
+      type: ApplicationCommandOptionType.Boolean,
+      required: false,
+    })
+    dryRun: boolean = false,
+    @SlashOption({
+      name: 'archive-only',
+      description: 'Only archive channels, do not delete',
+      type: ApplicationCommandOptionType.Boolean,
+      required: false,
+    })
+    archiveOnly: boolean = false,
+    interaction: CommandInteraction
+  ): Promise<void> {
+    try {
+      if (!interaction.guild) {
+        await interaction.reply({
+          embeds: [EmbedUtils.createErrorEmbed('Error', 'This command can only be used in a server.')],
+          ephemeral: true,
+        });
+        return;
+      }
+
+      const hasPermission = await this.checkAdminPermission(interaction);
+      if (!hasPermission) {
+        await interaction.reply({
+          embeds: [EmbedUtils.createErrorEmbed('Permission Denied', 'You need admin permissions to use repair commands.')],
+          ephemeral: true,
+        });
+        return;
+      }
+
+      await interaction.reply({
+        embeds: [EmbedUtils.createInfoEmbed(
+          'Starting Cleanup', 
+          `Channel cleanup ${dryRun ? '(dry-run mode)' : ''} in progress...`
+        )],
+        ephemeral: true,
+      });
+
+      const context = await this.getPermissionContext(interaction);
+      
+      // First scan for orphaned channels
+      const orphanedChannels = await this.orphanedChannelCleanupService.scanForOrphanedChannels(
+        interaction.guild,
+        context
+      );
+
+      if (orphanedChannels.length === 0) {
+        await interaction.followUp({
+          embeds: [EmbedUtils.createSuccessEmbed(
+            'No Orphaned Channels',
+            'No orphaned channels found that need cleanup.'
+          )],
+          ephemeral: true,
+        });
+        return;
+      }
+
+      // Perform cleanup
+      const actionsToPerform = archiveOnly ? ['archive'] : ['archive', 'delete'];
+      const report = await this.orphanedChannelCleanupService.performCleanup(
+        interaction.guild,
+        orphanedChannels,
+        context,
+        {
+          dryRun,
+          actionsToPerform: actionsToPerform as any
+        }
+      );
+
+      // Create result embed
+      const embed = EmbedUtils.createAALegalEmbed({
+        title: dryRun ? '🧹 Cleanup Preview (Dry Run)' : '✅ Cleanup Complete',
+        description: `Processed ${report.totalChannelsScanned} orphaned channels.`,
+      });
+
+      embed.addFields(
+        {
+          name: 'Summary',
+          value: [
+            `📁 Archived: ${report.channelsArchived}`,
+            `🗑️ Deleted: ${report.channelsDeleted}`,
+            `⏭️ Skipped: ${report.channelsSkipped}`,
+            `❌ Errors: ${report.errors}`
+          ].join('\n'),
+          inline: false
+        }
+      );
+
+      // Show some results
+      if (report.results.length > 0) {
+        const resultsSummary = report.results
+          .slice(0, 10)
+          .map(r => {
+            const icon = r.action === 'archived' ? '📁' : 
+                        r.action === 'deleted' ? '🗑️' : 
+                        r.action === 'skipped' ? '⏭️' : '❌';
+            return `${icon} **${r.channelName}** - ${r.reason}`;
+          })
+          .join('\n');
+        
+        const more = report.results.length > 10 ? 
+          `\n...and ${report.results.length - 10} more` : '';
+
+        embed.addFields({
+          name: 'Actions Taken',
+          value: resultsSummary + more,
+          inline: false
+        });
+      }
+
+      await interaction.followUp({
+        embeds: [embed],
+        ephemeral: true,
+      });
+
+    } catch (error) {
+      logger.error('Error in cleanup channels command:', error);
+      await interaction.followUp({
+        embeds: [EmbedUtils.createErrorEmbed('Cleanup Failed', 'An unexpected error occurred during channel cleanup.')],
+        ephemeral: true,
+      });
+    }
+  }
+
+  @Slash({ name: 'auto-cleanup', description: 'Configure automatic orphaned channel cleanup' })
+  async configureAutoCleanup(
+    @SlashOption({
+      name: 'enabled',
+      description: 'Enable or disable automatic cleanup',
+      type: ApplicationCommandOptionType.Boolean,
+      required: true,
+    })
+    enabled: boolean,
+    interaction: CommandInteraction
+  ): Promise<void> {
+    try {
+      if (!interaction.guild) {
+        await interaction.reply({
+          embeds: [EmbedUtils.createErrorEmbed('Error', 'This command can only be used in a server.')],
+          ephemeral: true,
+        });
+        return;
+      }
+
+      const hasPermission = await this.checkAdminPermission(interaction);
+      if (!hasPermission) {
+        await interaction.reply({
+          embeds: [EmbedUtils.createErrorEmbed('Permission Denied', 'You need admin permissions to use repair commands.')],
+          ephemeral: true,
+        });
+        return;
+      }
+
+      const context = await this.getPermissionContext(interaction);
+      await this.orphanedChannelCleanupService.setAutoCleanup(
+        interaction.guild.id,
+        enabled,
+        context
+      );
+
+      const embed = EmbedUtils.createSuccessEmbed(
+        'Auto Cleanup Configuration',
+        `Automatic orphaned channel cleanup has been ${enabled ? 'enabled' : 'disabled'}.`
+      );
+
+      if (enabled) {
+        embed.addFields({
+          name: 'ℹ️ Information',
+          value: 'The bot will automatically scan and clean up orphaned channels based on the configured schedule.',
+          inline: false
+        });
+      }
+
+      await interaction.reply({
+        embeds: [embed],
+        ephemeral: true,
+      });
+
+    } catch (error) {
+      logger.error('Error in auto cleanup configuration command:', error);
+      await interaction.reply({
+        embeds: [EmbedUtils.createErrorEmbed('Configuration Failed', 'An unexpected error occurred while configuring auto cleanup.')],
+        ephemeral: true,
+      });
+    }
+  }
+
+  @Slash({
+    name: 'integrity-check',
+    description: 'Scan for data integrity issues across all entities'
+  })
+  @SlashOption({
+    name: 'auto-repair',
+    description: 'Automatically repair issues that can be fixed',
+    type: ApplicationCommandOptionType.Boolean,
+    required: false
+  })
+  async integrityCheck(
+    interaction: CommandInteraction,
+    @SlashOption({ name: 'auto-repair' }) autoRepair: boolean = false
+  ): Promise<void> {
+    try {
+      // Check admin permission
+      if (!await this.checkAdminPermission(interaction)) {
+        return;
+      }
+
+      const guildId = interaction.guildId!;
+
+      // Defer reply as this might take a while
+      await interaction.deferReply({ ephemeral: true });
+
+      // Run integrity scan
+      const report = await this.crossEntityValidationService.scanForIntegrityIssues(
+        guildId,
+        { client: interaction.client }
+      );
+
+      // Create initial report embed
+      const reportEmbed = this.createIntegrityReportEmbed(report);
+
+      // If no issues found
+      if (report.issues.length === 0) {
+        await interaction.editReply({
+          embeds: [
+            EmbedUtils.createSuccessEmbed(
+              'Integrity Check Complete',
+              'No integrity issues found! Your data is in good shape.'
+            )
+          ]
+        });
+        return;
+      }
+
+      // If auto-repair is requested and there are repairable issues
+      if (autoRepair && report.repairableIssues > 0) {
+        const repairEmbed = new EmbedBuilder()
+          .setTitle('Auto-Repair Confirmation')
+          .setDescription(`Found **${report.repairableIssues}** issues that can be automatically repaired.\n\nDo you want to proceed with auto-repair?`)
+          .setColor(0xFFA500)
+          .addFields(
+            { name: 'Critical Issues', value: `${report.issuesBySeverity.critical} (${report.issues.filter(i => i.severity === 'critical' && i.canAutoRepair).length} repairable)`, inline: true },
+            { name: 'Warnings', value: `${report.issuesBySeverity.warning} (${report.issues.filter(i => i.severity === 'warning' && i.canAutoRepair).length} repairable)`, inline: true },
+            { name: 'Info', value: `${report.issuesBySeverity.info} (${report.issues.filter(i => i.severity === 'info' && i.canAutoRepair).length} repairable)`, inline: true }
+          );
+
+        await interaction.editReply({
+          embeds: [reportEmbed, repairEmbed],
+          content: 'Reply with **REPAIR** within 30 seconds to confirm auto-repair.'
+        });
+
+        // Wait for confirmation
+        const filter = (m: any) => m.author.id === interaction.user.id && m.content === 'REPAIR';
+        const collector = interaction.channel?.createMessageCollector({ filter, time: 30000, max: 1 });
+
+        collector?.on('collect', async (message) => {
+          try {
+            await message.delete();
+
+            // Run repairs
+            const repairResult = await this.crossEntityValidationService.repairIntegrityIssues(report.issues);
+            
+            // Create repair result embed
+            const repairResultEmbed = this.createRepairResultEmbed(repairResult);
+
+            await interaction.editReply({
+              embeds: [reportEmbed, repairResultEmbed],
+              content: null
+            });
+          } catch (error) {
+            logger.error('Error during auto-repair:', error);
+            await interaction.editReply({
+              embeds: [EmbedUtils.createErrorEmbed('Repair Failed', 'An error occurred during auto-repair.')],
+              content: null
+            });
+          }
+        });
+
+        collector?.on('end', (collected) => {
+          if (collected.size === 0) {
+            interaction.editReply({
+              embeds: [reportEmbed],
+              content: 'Auto-repair cancelled (timed out).'
+            });
+          }
+        });
+      } else {
+        // Just show the report
+        await interaction.editReply({
+          embeds: [reportEmbed]
+        });
+      }
+
+    } catch (error) {
+      logger.error('Error in integrity check command:', error);
+      await interaction.editReply({
+        embeds: [EmbedUtils.createErrorEmbed('Check Failed', 'An unexpected error occurred during the integrity check.')]
+      });
+    }
+  }
+
+  private createIntegrityReportEmbed(report: IntegrityReport): EmbedBuilder {
+    const scanDuration = (report.scanCompletedAt.getTime() - report.scanStartedAt.getTime()) / 1000;
+    
+    const embed = new EmbedBuilder()
+      .setTitle('Data Integrity Report')
+      .setColor(report.issues.length === 0 ? 0x00FF00 : report.issuesBySeverity.critical > 0 ? 0xFF0000 : 0xFFA500)
+      .setDescription(`Scanned **${report.totalEntitiesScanned}** entities in ${scanDuration.toFixed(2)}s`)
+      .setTimestamp();
+
+    if (report.issues.length > 0) {
+      embed.addFields(
+        { name: 'Total Issues', value: report.issues.length.toString(), inline: true },
+        { name: 'Repairable', value: report.repairableIssues.toString(), inline: true },
+        { name: 'Manual Fix Required', value: (report.issues.length - report.repairableIssues).toString(), inline: true }
+      );
+
+      // Add severity breakdown
+      embed.addFields(
+        { name: 'Critical Issues', value: report.issuesBySeverity.critical.toString(), inline: true },
+        { name: 'Warnings', value: report.issuesBySeverity.warning.toString(), inline: true },
+        { name: 'Info', value: report.issuesBySeverity.info.toString(), inline: true }
+      );
+
+      // Add entity type breakdown
+      if (report.issuesByEntityType.size > 0) {
+        const entityBreakdown = Array.from(report.issuesByEntityType.entries())
+          .map(([type, count]) => `**${type}**: ${count}`)
+          .join('\n');
+        embed.addFields({ name: 'Issues by Entity Type', value: entityBreakdown });
+      }
+
+      // Add sample issues (up to 5)
+      const sampleIssues = report.issues.slice(0, 5);
+      const issueDescriptions = sampleIssues.map(issue => 
+        `**[${issue.severity.toUpperCase()}]** ${issue.entityType} - ${issue.message} ${issue.canAutoRepair ? '(auto-repairable)' : '(manual fix required)'}`
+      ).join('\n');
+      
+      embed.addFields({ 
+        name: `Sample Issues ${report.issues.length > 5 ? `(showing 5 of ${report.issues.length})` : ''}`, 
+        value: issueDescriptions 
+      });
+    } else {
+      embed.addFields({ name: 'Result', value: 'No integrity issues found!' });
+    }
+
+    return embed;
+  }
+
+  private createRepairResultEmbed(result: ValidationRepairResult): EmbedBuilder {
+    const embed = new EmbedBuilder()
+      .setTitle('Auto-Repair Results')
+      .setColor(result.issuesFailed === 0 ? 0x00FF00 : 0xFFA500)
+      .addFields(
+        { name: 'Issues Found', value: result.totalIssuesFound.toString(), inline: true },
+        { name: 'Successfully Repaired', value: result.issuesRepaired.toString(), inline: true },
+        { name: 'Failed Repairs', value: result.issuesFailed.toString(), inline: true }
+      )
+      .setTimestamp();
+
+    if (result.issuesRepaired > 0) {
+      const repairedSample = result.repairedIssues.slice(0, 5);
+      const repairedDescriptions = repairedSample.map(issue => 
+        `✅ ${issue.entityType} - ${issue.message}`
+      ).join('\n');
+      
+      embed.addFields({ 
+        name: `Repaired Issues ${result.repairedIssues.length > 5 ? `(showing 5 of ${result.repairedIssues.length})` : ''}`, 
+        value: repairedDescriptions 
+      });
+    }
+
+    if (result.failedRepairs.length > 0) {
+      const failedSample = result.failedRepairs.slice(0, 3);
+      const failedDescriptions = failedSample.map(({ issue, error }) => 
+        `❌ ${issue.entityType} - ${issue.message}\n   Error: ${error}`
+      ).join('\n');
+      
+      embed.addFields({ 
+        name: `Failed Repairs ${result.failedRepairs.length > 3 ? `(showing 3 of ${result.failedRepairs.length})` : ''}`, 
+        value: failedDescriptions 
+      });
+    }
+
+    return embed;
   }
 }

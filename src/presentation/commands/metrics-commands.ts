@@ -192,6 +192,7 @@ export class MetricsCommands {
 
   @Slash({ name: 'overview', description: 'Display bot and server statistics' })
   async metrics(interaction: CommandInteraction): Promise<void> {
+      const context = await this.getPermissionContext(interaction);
     try {
       if (!interaction.guild) {
         await interaction.reply({
