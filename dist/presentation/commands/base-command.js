@@ -151,7 +151,7 @@ class BaseCommand {
             userId: interaction.user.id,
             userName: interaction.user.tag,
             commandName: interaction.commandName,
-            subcommand: interaction.options.getSubcommand(false) || undefined,
+            subcommand: interaction.isChatInputCommand() ? interaction.options.getSubcommand(false) || undefined : undefined,
             channelId: interaction.channelId,
             ...details
         });
@@ -165,7 +165,7 @@ class BaseCommand {
             userId: interaction.user.id,
             userName: interaction.user.tag,
             commandName: interaction.commandName,
-            subcommand: interaction.options.getSubcommand(false) || undefined,
+            subcommand: interaction.isChatInputCommand() ? interaction.options.getSubcommand(false) || undefined : undefined,
             channelId: interaction.channelId,
             error: error instanceof Error ? error.message : String(error),
             stack: error instanceof Error ? error.stack : undefined,
@@ -176,6 +176,8 @@ class BaseCommand {
      * Extract member from user option
      */
     async getMemberFromOption(interaction, optionName) {
+        if (!interaction.isChatInputCommand())
+            return null;
         const user = interaction.options.getUser(optionName);
         if (!user || !interaction.guild)
             return null;
@@ -191,7 +193,6 @@ class BaseCommand {
      * Defer reply with thinking state
      */
     async deferReply(interaction, ephemeral = false) {
-        const context = await this.getPermissionContext(interaction);
         if (!interaction.deferred && !interaction.replied) {
             await interaction.deferReply({ ephemeral });
         }

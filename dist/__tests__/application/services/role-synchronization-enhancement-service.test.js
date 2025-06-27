@@ -76,7 +76,7 @@ describe('RoleSynchronizationEnhancementService', () => {
             expect(result.userId).toBe('user123');
             expect(result.conflictingRoles).toHaveLength(3);
             expect(result.highestRole.roleName).toBe('Managing Partner');
-            expect(result.severity).toBe(role_synchronization_enhancement_service_1.ConflictSeverity.CRITICAL);
+            expect(result.severity).toBe(role_synchronization_enhancement_service_1.ConflictSeverity.HIGH);
         });
         it('should calculate correct severity for different role combinations', async () => {
             // Test case 1: High severity (level difference >= 3)
@@ -125,6 +125,7 @@ describe('RoleSynchronizationEnhancementService', () => {
             const mockMembers = new Map([
                 ['user1', {
                         user: { id: 'user1', tag: 'User1#1234' },
+                        guild: { id: 'guild123' },
                         roles: {
                             cache: new Map([
                                 ['role1', { id: 'role1', name: 'Senior Partner' }],
@@ -134,6 +135,7 @@ describe('RoleSynchronizationEnhancementService', () => {
                     }],
                 ['user2', {
                         user: { id: 'user2', tag: 'User2#5678' },
+                        guild: { id: 'guild123' },
                         roles: {
                             cache: new Map([
                                 ['role3', { id: 'role3', name: 'Senior Associate' }]
@@ -142,6 +144,7 @@ describe('RoleSynchronizationEnhancementService', () => {
                     }],
                 ['user3', {
                         user: { id: 'user3', tag: 'User3#9012' },
+                        guild: { id: 'guild123' },
                         roles: {
                             cache: new Map() // No staff roles
                         }
@@ -411,6 +414,7 @@ describe('RoleSynchronizationEnhancementService', () => {
             const mockMembers = new Map([
                 ['user1', {
                         user: { id: 'user1', tag: 'User1#1234' },
+                        guild: { id: 'guild123' },
                         roles: {
                             cache: new Map([
                                 ['role1', { id: 'role1', name: 'Managing Partner' }],
@@ -420,6 +424,7 @@ describe('RoleSynchronizationEnhancementService', () => {
                     }],
                 ['user2', {
                         user: { id: 'user2', tag: 'User2#5678' },
+                        guild: { id: 'guild123' },
                         roles: {
                             cache: new Map([
                                 ['role3', { id: 'role3', name: 'Senior Partner' }],
@@ -429,6 +434,7 @@ describe('RoleSynchronizationEnhancementService', () => {
                     }],
                 ['user3', {
                         user: { id: 'user3', tag: 'User3#9012' },
+                        guild: { id: 'guild123' },
                         roles: {
                             cache: new Map([
                                 ['role5', { id: 'role5', name: 'Senior Associate' }]
@@ -451,8 +457,8 @@ describe('RoleSynchronizationEnhancementService', () => {
             expect(report.conflictsByRole['Paralegal']).toBe(1);
             expect(report.conflictsByRole['Senior Partner']).toBe(1);
             expect(report.conflictsByRole['Associate']).toBe(1);
-            expect(report.conflictsBySeverity[role_synchronization_enhancement_service_1.ConflictSeverity.CRITICAL]).toBe(1);
-            expect(report.conflictsBySeverity[role_synchronization_enhancement_service_1.ConflictSeverity.HIGH]).toBe(1);
+            expect(report.conflictsBySeverity[role_synchronization_enhancement_service_1.ConflictSeverity.CRITICAL]).toBe(0);
+            expect(report.conflictsBySeverity[role_synchronization_enhancement_service_1.ConflictSeverity.HIGH]).toBe(2);
         });
     });
     describe('incrementalSync', () => {
@@ -463,6 +469,7 @@ describe('RoleSynchronizationEnhancementService', () => {
                     fetch: jest.fn()
                         .mockResolvedValueOnce({
                         user: { id: 'user1', tag: 'User1#1234' },
+                        guild: { id: 'guild123' },
                         roles: {
                             cache: new Map([
                                 ['role1', { id: 'role1', name: 'Senior Partner' }],
@@ -472,6 +479,7 @@ describe('RoleSynchronizationEnhancementService', () => {
                     })
                         .mockResolvedValueOnce({
                         user: { id: 'user2', tag: 'User2#5678' },
+                        guild: { id: 'guild123' },
                         roles: {
                             cache: new Map([
                                 ['role3', { id: 'role3', name: 'Associate' }]

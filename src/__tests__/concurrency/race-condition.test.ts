@@ -11,6 +11,8 @@ import { CaseStatus, CasePriority, CaseResult } from '../../domain/entities/case
 import { AuditAction } from '../../domain/entities/audit-log';
 import { TestUtils } from '../helpers/test-utils';
 import { DatabaseTestHelpers } from '../helpers/database-helpers';
+import { PermissionService, PermissionContext } from '../../application/services/permission-service';
+import { BusinessRuleValidationService } from '../../application/services/business-rule-validation-service';
 
 /**
  * Concurrency and Race Condition Tests
@@ -34,6 +36,8 @@ describe('Concurrency and Race Condition Tests', () => {
   let guildConfigRepository: GuildConfigRepository;
   let caseCounterRepository: CaseCounterRepository;
   let operationQueue: OperationQueue;
+  let permissionService: PermissionService;
+  let businessRuleValidationService: BusinessRuleValidationService;
 
   const testGuildId = 'concurrency-test-guild';
   const adminUserId = 'admin-123';
@@ -51,8 +55,15 @@ describe('Concurrency and Race Condition Tests', () => {
     caseCounterRepository = new CaseCounterRepository();
 
     // Initialize services
-    staffService = new StaffService(staffRepository, auditLogRepository);
-    caseService = new CaseService(caseRepository, caseCounterRepository, guildConfigRepository);
+    permissionService = new PermissionService(guildConfigRepository);
+    businessRuleValidationService = new BusinessRuleValidationService(
+      guildConfigRepository,
+      staffRepository,
+      caseRepository,
+      permissionService
+    );
+    staffService = new StaffService(staffRepository, auditLogRepository, permissionService, businessRuleValidationService);
+    caseService = new CaseService(caseRepository, caseCounterRepository, guildConfigRepository, permissionService, businessRuleValidationService);
 
     // Initialize queue
     operationQueue = OperationQueue.getInstance();
@@ -61,7 +72,7 @@ describe('Concurrency and Race Condition Tests', () => {
     await TestUtils.clearTestDatabase();
     operationQueue.clearQueue();
 
-    // Setup test guild
+    // Setup test guild with admin permissions
     await guildConfigRepository.add({
       guildId: testGuildId,
       feedbackChannelId: undefined,
@@ -72,15 +83,16 @@ describe('Concurrency and Race Condition Tests', () => {
       applicationChannelId: undefined,
       clientRoleId: undefined,
       permissions: {
-        admin: [],
-        'senior-staff': [],
-        case: [],
-        config: [],
-        lawyer: [],
-        repair: []
+        admin: ['admin-role'],
+        'senior-staff': ['admin-role'],
+        case: ['admin-role', 'case-role'],
+        config: ['admin-role'],
+        lawyer: ['admin-role'],
+        'lead-attorney': ['admin-role'],
+        repair: ['admin-role']
       },
-      adminRoles: [],
-      adminUsers: []
+      adminRoles: ['admin-role'],
+      adminUsers: [adminUserId]
     });
   });
 
@@ -96,18 +108,21 @@ describe('Concurrency and Race Condition Tests', () => {
       // Create concurrent hire operations
       for (let i = 0; i < concurrentHires; i++) {
         const operation = operationQueue.enqueue(
-          () => staffService.hireStaff({
+          () => {
+            const context: PermissionContext = {
               guildId: testGuildId,
               userId: adminUserId,
-              userRoles: [],
+              userRoles: ['admin-role'],
               isGuildOwner: false
-            }, {
-            guildId: testGuildId,
-            userId: `concurrent-user-${i}`,
-            hiredBy: adminUserId,
-            robloxUsername: `ConcurrentUser${i}`,
-            role: StaffRole.PARALEGAL
-          }),
+            };
+            return staffService.hireStaff(context, {
+              guildId: testGuildId,
+              userId: `concurrent-user-${i}`,
+              hiredBy: adminUserId,
+              robloxUsername: `ConcurrentUser${i}`,
+              role: StaffRole.PARALEGAL
+            });
+          },
           `user-${i}`,
           testGuildId,
           false
@@ -126,7 +141,7 @@ describe('Concurrency and Race Condition Tests', () => {
       expect(successfulHires).toBeLessThanOrEqual(10);
 
       // Verify database consistency
-      const paralegals = await staffRepository.findByRole(testGuildId, StaffRole.PARALEGAL);
+      const paralegals = await staffRepository.findByFilters({ guildId: testGuildId, role: StaffRole.PARALEGAL });
       expect(paralegals.length).toBe(successfulHires);
       expect(paralegals.length).toBeLessThanOrEqual(10);
 
@@ -140,12 +155,13 @@ describe('Concurrency and Race Condition Tests', () => {
       // First hire some staff
       const staffMembers = [];
       for (let i = 0; i < 5; i++) {
-        const hire = await staffService.hireStaff({
-              guildId: testGuildId,
-              userId: adminUserId,
-              userRoles: [],
-              isGuildOwner: false
-            }, {
+        const context: PermissionContext = {
+          guildId: testGuildId,
+          userId: adminUserId,
+          userRoles: ['admin-role'],
+          isGuildOwner: false
+        };
+        const hire = await staffService.hireStaff(context, {
           guildId: testGuildId,
           userId: `promotion-test-${i}`,
           hiredBy: adminUserId,
@@ -158,18 +174,21 @@ describe('Concurrency and Race Condition Tests', () => {
       // Try to promote multiple paralegals to Junior Associate simultaneously
       const promotionOperations = staffMembers.map((staff, index) =>
         operationQueue.enqueue(
-          () => staffService.promoteStaff({
+          () => {
+            const context: PermissionContext = {
               guildId: testGuildId,
               userId: adminUserId,
-              userRoles: [],
+              userRoles: ['admin-role'],
               isGuildOwner: false
-            }, {
-            guildId: testGuildId,
-            userId: staff.userId,
-            promotedBy: adminUserId,
-            newRole: StaffRole.JUNIOR_ASSOCIATE,
-            reason: `Concurrent promotion ${index}`
-          }),
+            };
+            return staffService.promoteStaff(context, {
+              guildId: testGuildId,
+              userId: staff.userId,
+              promotedBy: adminUserId,
+              newRole: StaffRole.JUNIOR_ASSOCIATE,
+              reason: `Concurrent promotion ${index}`
+            });
+          },
           `promoter-${index}`,
           testGuildId,
           false
@@ -186,7 +205,7 @@ describe('Concurrency and Race Condition Tests', () => {
       expect(successfulPromotions).toBe(5);
 
       // Verify database consistency
-      const juniorAssociates = await staffRepository.findByRole(testGuildId, StaffRole.JUNIOR_ASSOCIATE);
+      const juniorAssociates = await staffRepository.findByFilters({ guildId: testGuildId, role: StaffRole.JUNIOR_ASSOCIATE });
       expect(juniorAssociates.length).toBe(5);
 
       const remainingParalegals = await staffRepository.findByRole(testGuildId, StaffRole.PARALEGAL);
@@ -199,18 +218,21 @@ describe('Concurrency and Race Condition Tests', () => {
       // Try to hire the same user multiple times concurrently
       const duplicateHires = Array.from({ length: 5 }, (_, i) =>
         operationQueue.enqueue(
-          () => staffService.hireStaff({
+          () => {
+            const context: PermissionContext = {
               guildId: testGuildId,
               userId: adminUserId,
-              userRoles: [],
+              userRoles: ['admin-role'],
               isGuildOwner: false
-            }, {
-            guildId: testGuildId,
-            userId,
-            hiredBy: adminUserId,
-            robloxUsername: `DuplicateUser${i}`,
-            role: StaffRole.PARALEGAL
-          }),
+            };
+            return staffService.hireStaff(context, {
+              guildId: testGuildId,
+              userId,
+              hiredBy: adminUserId,
+              robloxUsername: `DuplicateUser${i}`,
+              role: StaffRole.PARALEGAL
+            });
+          },
           `hirer-${i}`,
           testGuildId,
           false
@@ -243,19 +265,22 @@ describe('Concurrency and Race Condition Tests', () => {
       // Create concurrent case creation operations
       for (let i = 0; i < concurrentCases; i++) {
         const operation = operationQueue.enqueue(
-          () => caseService.createCase({
+          () => {
+            const context: PermissionContext = {
               guildId: testGuildId,
-              userId: 'system',
-              userRoles: [],
+              userId: adminUserId,
+              userRoles: ['admin-role', 'case-role'],
               isGuildOwner: false
-            }, {
-            guildId: testGuildId,
-            clientId: `client-${i}`,
-            clientUsername: `client${i}`,
-            title: `Concurrent Case ${i}`,
-            description: `Test case created concurrently ${i}`,
-            priority: CasePriority.MEDIUM
-          }),
+            };
+            return caseService.createCase(context, {
+              guildId: testGuildId,
+              clientId: `client-${i}`,
+              clientUsername: `client${i}`,
+              title: `Concurrent Case ${i}`,
+              description: `Test case created concurrently ${i}`,
+              priority: CasePriority.MEDIUM
+            });
+          },
           `creator-${i}`,
           testGuildId,
           false
@@ -285,12 +310,13 @@ describe('Concurrency and Race Condition Tests', () => {
 
     it('should handle concurrent case acceptance properly', async () => {
       // Create a case first
-      const testCase = await caseService.createCase({
-              guildId: testGuildId,
-              userId: 'system',
-              userRoles: [],
-              isGuildOwner: false
-            }, {
+      const context: PermissionContext = {
+        guildId: testGuildId,
+        userId: adminUserId,
+        userRoles: ['admin-role', 'case-role'],
+        isGuildOwner: false
+      };
+      const testCase = await caseService.createCase(context, {
         guildId: testGuildId,
         clientId: 'concurrent-client',
         clientUsername: 'concurrentclient',
@@ -304,12 +330,15 @@ describe('Concurrency and Race Condition Tests', () => {
       const lawyerIds = ['lawyer-1', 'lawyer-2', 'lawyer-3', 'lawyer-4', 'lawyer-5'];
       const acceptanceOperations = lawyerIds.map(lawyerId =>
         operationQueue.enqueue(
-          () => caseService.acceptCase({
-            guildId: testGuildId,
-            userId: lawyerId,
-            userRoles: [],
-            isGuildOwner: false
-          }, caseId),
+          () => {
+            const context: PermissionContext = {
+              guildId: testGuildId,
+              userId: lawyerId,
+              userRoles: ['admin-role', 'case-role'],
+              isGuildOwner: false
+            };
+            return caseService.acceptCase(context, caseId);
+          },
           lawyerId,
           testGuildId,
           false
@@ -323,12 +352,13 @@ describe('Concurrency and Race Condition Tests', () => {
       expect(successfulAcceptances).toBe(1);
 
       // Verify final case state
-      const finalCase = await caseService.getCaseById({
+      const verifyContext: PermissionContext = {
         guildId: testGuildId,
-        userId: 'system',
-        userRoles: [],
+        userId: adminUserId,
+        userRoles: ['admin-role', 'case-role'],
         isGuildOwner: false
-      }, caseId);
+      };
+      const finalCase = await caseService.getCaseById(verifyContext, caseId);
       expect(finalCase?.status).toBe(CaseStatus.IN_PROGRESS);
       expect(finalCase?.leadAttorneyId).toBeTruthy();
       expect(lawyerIds.includes(finalCase!.leadAttorneyId!)).toBe(true);
@@ -336,12 +366,13 @@ describe('Concurrency and Race Condition Tests', () => {
 
     it('should handle concurrent case closures', async () => {
       // Create and accept a case
-      const testCase = await caseService.createCase({
-              guildId: testGuildId,
-              userId: 'system',
-              userRoles: [],
-              isGuildOwner: false
-            }, {
+      const createContext: PermissionContext = {
+        guildId: testGuildId,
+        userId: adminUserId,
+        userRoles: ['admin-role', 'case-role'],
+        isGuildOwner: false
+      };
+      const testCase = await caseService.createCase(createContext, {
         guildId: testGuildId,
         clientId: 'closure-client',
         clientUsername: 'closureclient',
@@ -349,28 +380,32 @@ describe('Concurrency and Race Condition Tests', () => {
         description: 'Testing concurrent case closure'
       });
 
-      const openCase = await caseService.acceptCase({
+      const acceptContext: PermissionContext = {
         guildId: testGuildId,
         userId: 'lead-lawyer',
-        userRoles: [],
+        userRoles: ['admin-role', 'case-role'],
         isGuildOwner: false
-      }, testCase._id!.toString());
+      };
+      const openCase = await caseService.acceptCase(acceptContext, testCase._id!.toString());
       const caseId = openCase._id!.toString();
 
       // Multiple users try to close the same case
       const closureOperations = Array.from({ length: 3 }, (_, i) =>
         operationQueue.enqueue(
-          () => caseService.closeCase({
+          () => {
+            const context: PermissionContext = {
               guildId: testGuildId,
               userId: `closer-${i}`,
-              userRoles: [],
+              userRoles: ['admin-role', 'case-role'],
               isGuildOwner: false
-            }, {
-            caseId,
-            result: i === 0 ? CaseResult.WIN : i === 1 ? CaseResult.LOSS : CaseResult.SETTLEMENT,
-            resultNotes: `Closed by concurrent operation ${i}`,
-            closedBy: `closer-${i}`
-          }),
+            };
+            return caseService.closeCase(context, {
+              caseId,
+              result: i === 0 ? CaseResult.WIN : i === 1 ? CaseResult.LOSS : CaseResult.SETTLEMENT,
+              resultNotes: `Closed by concurrent operation ${i}`,
+              closedBy: `closer-${i}`
+            });
+          },
           `closer-${i}`,
           testGuildId,
           false
@@ -384,12 +419,13 @@ describe('Concurrency and Race Condition Tests', () => {
       expect(successfulClosures).toBe(1);
 
       // Verify case is closed
-      const finalCase = await caseService.getCaseById({
+      const finalContext: PermissionContext = {
         guildId: testGuildId,
-        userId: 'system',
-        userRoles: [],
+        userId: adminUserId,
+        userRoles: ['admin-role', 'case-role'],
         isGuildOwner: false
-      }, caseId);
+      };
+      const finalCase = await caseService.getCaseById(finalContext, caseId);
       expect(finalCase?.status).toBe('closed');
       expect(finalCase?.closedBy).toBeTruthy();
     });
@@ -406,18 +442,21 @@ describe('Concurrency and Race Condition Tests', () => {
           // Staff hire
           operations.push(
             operationQueue.enqueue(
-              () => staffService.hireStaff({
-              guildId: testGuildId,
-              userId: adminUserId,
-              userRoles: [],
-              isGuildOwner: false
-            }, {
-                guildId: testGuildId,
-                userId: `audit-test-${i}`,
-                hiredBy: adminUserId,
-                robloxUsername: `AuditTest${i}`,
-                role: StaffRole.PARALEGAL
-              }),
+              () => {
+                const context: PermissionContext = {
+                  guildId: testGuildId,
+                  userId: adminUserId,
+                  userRoles: ['admin-role'],
+                  isGuildOwner: false
+                };
+                return staffService.hireStaff(context, {
+                  guildId: testGuildId,
+                  userId: `audit-test-${i}`,
+                  hiredBy: adminUserId,
+                  robloxUsername: `AuditTest${i}`,
+                  role: StaffRole.PARALEGAL
+                });
+              },
               `user-${i}`,
               testGuildId,
               false
@@ -427,18 +466,21 @@ describe('Concurrency and Race Condition Tests', () => {
           // Case creation
           operations.push(
             operationQueue.enqueue(
-              () => caseService.createCase({
-              guildId: testGuildId,
-              userId: 'system',
-              userRoles: [],
-              isGuildOwner: false
-            }, {
-                guildId: testGuildId,
-                clientId: `audit-client-${i}`,
-                clientUsername: `auditclient${i}`,
-                title: `Audit Test Case ${i}`,
-                description: `Case for audit testing ${i}`
-              }),
+              () => {
+                const context: PermissionContext = {
+                  guildId: testGuildId,
+                  userId: adminUserId,
+                  userRoles: ['admin-role', 'case-role'],
+                  isGuildOwner: false
+                };
+                return caseService.createCase(context, {
+                  guildId: testGuildId,
+                  clientId: `audit-client-${i}`,
+                  clientUsername: `auditclient${i}`,
+                  title: `Audit Test Case ${i}`,
+                  description: `Case for audit testing ${i}`
+                });
+              },
               `user-${i}`,
               testGuildId,
               false
@@ -479,18 +521,21 @@ describe('Concurrency and Race Condition Tests', () => {
           case 0: // Staff hire
             operations.push(
               operationQueue.enqueue(
-                () => staffService.hireStaff({
-              guildId: testGuildId,
-              userId: adminUserId,
-              userRoles: [],
-              isGuildOwner: false
-            }, {
-                  guildId: testGuildId,
-                  userId: `volume-staff-${i}`,
-                  hiredBy: adminUserId,
-                  robloxUsername: `VolumeStaff${i}`,
-                  role: StaffRole.PARALEGAL
-                }),
+                () => {
+                  const context: PermissionContext = {
+                    guildId: testGuildId,
+                    userId: adminUserId,
+                    userRoles: ['admin-role'],
+                    isGuildOwner: false
+                  };
+                  return staffService.hireStaff(context, {
+                    guildId: testGuildId,
+                    userId: `volume-staff-${i}`,
+                    hiredBy: adminUserId,
+                    robloxUsername: `VolumeStaff${i}`,
+                    role: StaffRole.PARALEGAL
+                  });
+                },
                 `volume-user-${i}`,
                 testGuildId,
                 false
@@ -501,18 +546,21 @@ describe('Concurrency and Race Condition Tests', () => {
           case 1: // Case creation
             operations.push(
               operationQueue.enqueue(
-                () => caseService.createCase({
-              guildId: testGuildId,
-              userId: 'system',
-              userRoles: [],
-              isGuildOwner: false
-            }, {
-                  guildId: testGuildId,
-                  clientId: `volume-client-${i}`,
-                  clientUsername: `volumeclient${i}`,
-                  title: `Volume Case ${i}`,
-                  description: `High volume test case ${i}`
-                }),
+                () => {
+                  const context: PermissionContext = {
+                    guildId: testGuildId,
+                    userId: 'system',
+                    userRoles: ['admin-role'],
+                    isGuildOwner: false
+                  };
+                  return caseService.createCase(context, {
+                    guildId: testGuildId,
+                    clientId: `volume-client-${i}`,
+                    clientUsername: `volumeclient${i}`,
+                    title: `Volume Case ${i}`,
+                    description: `High volume test case ${i}`
+                  });
+                },
                 `volume-user-${i}`,
                 testGuildId,
                 false
@@ -523,12 +571,15 @@ describe('Concurrency and Race Condition Tests', () => {
           case 2: // Staff info retrieval
             operations.push(
               operationQueue.enqueue(
-                () => staffService.getStaffList({
-                  guildId: testGuildId,
-                  userId: `requester-${i}`,
-                  userRoles: [],
-                  isGuildOwner: false
-                }),
+                () => {
+                  const context: PermissionContext = {
+                    guildId: testGuildId,
+                    userId: `requester-${i}`,
+                    userRoles: ['admin-role'],
+                    isGuildOwner: false
+                  };
+                  return staffService.getStaffList(context, undefined);
+                },
                 `volume-user-${i}`,
                 testGuildId,
                 false
@@ -539,12 +590,15 @@ describe('Concurrency and Race Condition Tests', () => {
           case 3: // Case search
             operations.push(
               operationQueue.enqueue(
-                () => caseService.searchCases({
-                  guildId: testGuildId,
-                  userId: `volume-user-${i}`,
-                  userRoles: [],
-                  isGuildOwner: false
-                }, { guildId: testGuildId }),
+                () => {
+                  const context: PermissionContext = {
+                    guildId: testGuildId,
+                    userId: `volume-user-${i}`,
+                    userRoles: ['admin-role'],
+                    isGuildOwner: false
+                  };
+                  return caseService.searchCases(context, { guildId: testGuildId });
+                },
                 `volume-user-${i}`,
                 testGuildId,
                 false
@@ -674,14 +728,15 @@ describe('Concurrency and Race Condition Tests', () => {
   describe('Resource Contention Scenarios', () => {
     it('should handle database connection limits', async () => {
       // Simulate many concurrent database operations
-      const dbOperations = Array.from({ length: 200 }, (_, i) =>
-        staffService.getStaffList({
-                  guildId: testGuildId,
-                  userId: `requester-${i}`,
-                  userRoles: [],
-                  isGuildOwner: false
-                })
-      );
+      const dbOperations = Array.from({ length: 200 }, (_, i) => {
+        const context: PermissionContext = {
+          guildId: testGuildId,
+          userId: `requester-${i}`,
+          userRoles: ['admin-role'],
+          isGuildOwner: false
+        };
+        return staffService.getStaffList(context, undefined);
+      });
 
       const results = await Promise.allSettled(dbOperations);
       
@@ -692,12 +747,13 @@ describe('Concurrency and Race Condition Tests', () => {
 
     it('should handle rapid sequential operations on same entity', async () => {
       // Create a staff member
-      const initialHire = await staffService.hireStaff({
-              guildId: testGuildId,
-              userId: adminUserId,
-              userRoles: [],
-              isGuildOwner: false
-            }, {
+      const hireContext: PermissionContext = {
+        guildId: testGuildId,
+        userId: adminUserId,
+        userRoles: ['admin-role'],
+        isGuildOwner: false
+      };
+      const initialHire = await staffService.hireStaff(hireContext, {
         guildId: testGuildId,
         userId: 'rapid-test-user',
         hiredBy: adminUserId,
@@ -709,41 +765,61 @@ describe('Concurrency and Race Condition Tests', () => {
 
       // Perform rapid operations on the same staff member
       const rapidOperations = [
-        () => staffService.getStaffInfo({
-              guildId: testGuildId,
-              userId: adminUserId,
-              userRoles: [],
-              isGuildOwner: false
-            }, 'rapid-test-user'),
-        () => staffService.promoteStaff({
-              guildId: testGuildId,
-              userId: adminUserId,
-              userRoles: [],
-              isGuildOwner: false
-            }, {
-          guildId: testGuildId,
-          userId: 'rapid-test-user',
-          promotedBy: adminUserId,
-          newRole: StaffRole.JUNIOR_ASSOCIATE
-        }),
-        () => staffService.getStaffInfo({
-              guildId: testGuildId,
-              userId: adminUserId,
-              userRoles: [],
-              isGuildOwner: false
-            }, 'rapid-test-user'),
-        () => staffService.demoteStaff({
-              guildId: testGuildId,
-              userId: adminUserId,
-              userRoles: [],
-              isGuildOwner: false
-            }, {$1guildId: testGuildId,$2userId: 'rapid-test-user',$3promotedBy: adminUserId,$4newRole: StaffRole.PARALEGAL$5}),
-        () => staffService.getStaffInfo({
-              guildId: testGuildId,
-              userId: adminUserId,
-              userRoles: [],
-              isGuildOwner: false
-            }, 'rapid-test-user')
+        () => {
+          const context: PermissionContext = {
+            guildId: testGuildId,
+            userId: adminUserId,
+            userRoles: ['admin-role'],
+            isGuildOwner: false
+          };
+          return staffService.getStaffInfo(context, 'rapid-test-user');
+        },
+        () => {
+          const context: PermissionContext = {
+            guildId: testGuildId,
+            userId: adminUserId,
+            userRoles: ['admin-role'],
+            isGuildOwner: false
+          };
+          return staffService.promoteStaff(context, {
+            guildId: testGuildId,
+            userId: 'rapid-test-user',
+            promotedBy: adminUserId,
+            newRole: StaffRole.JUNIOR_ASSOCIATE
+          });
+        },
+        () => {
+          const context: PermissionContext = {
+            guildId: testGuildId,
+            userId: adminUserId,
+            userRoles: ['admin-role'],
+            isGuildOwner: false
+          };
+          return staffService.getStaffInfo(context, 'rapid-test-user');
+        },
+        () => {
+          const context: PermissionContext = {
+            guildId: testGuildId,
+            userId: adminUserId,
+            userRoles: ['admin-role'],
+            isGuildOwner: false
+          };
+          return staffService.demoteStaff(context, {
+            guildId: testGuildId,
+            userId: 'rapid-test-user',
+            promotedBy: adminUserId,
+            newRole: StaffRole.PARALEGAL
+          });
+        },
+        () => {
+          const context: PermissionContext = {
+            guildId: testGuildId,
+            userId: adminUserId,
+            userRoles: ['admin-role'],
+            isGuildOwner: false
+          };
+          return staffService.getStaffInfo(context, 'rapid-test-user');
+        }
       ] as (() => Promise<any>)[];
 
       const queuedOperations = rapidOperations.map((op, i) =>
@@ -757,12 +833,13 @@ describe('Concurrency and Race Condition Tests', () => {
       expect(successCount).toBeGreaterThan(2); // At least reads should work
 
       // Final state should be consistent
-      const finalState = await staffService.getStaffInfo({
-              guildId: testGuildId,
-              userId: adminUserId,
-              userRoles: [],
-              isGuildOwner: false
-            }, 'rapid-test-user');
+      const finalContext: PermissionContext = {
+        guildId: testGuildId,
+        userId: adminUserId,
+        userRoles: ['admin-role'],
+        isGuildOwner: false
+      };
+      const finalState = await staffService.getStaffInfo(finalContext, 'rapid-test-user');
       expect(finalState).toBeDefined();
       expect(finalState?.status).toBe('active');
     });

@@ -352,10 +352,11 @@ describe('PermissionService', () => {
       const summary = await permissionService.getPermissionSummary(adminContext);
       
       expect(summary.isAdmin).toBe(true);
-      // Admin should have all permissions
-      Object.values(summary.permissions).forEach(permission => {
-        expect(permission).toBe(true);
-      });
+      // Admin users only get the 'admin' permission, not all permissions automatically
+      expect(summary.permissions.admin).toBe(true);
+      // Other permissions should be false unless the admin has specific roles
+      expect(summary.permissions.case).toBe(false);
+      expect(summary.permissions['senior-staff']).toBe(false);
     });
   });
 });

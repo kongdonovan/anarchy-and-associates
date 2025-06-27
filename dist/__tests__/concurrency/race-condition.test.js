@@ -13,6 +13,8 @@ const case_1 = require("../../domain/entities/case");
 const audit_log_1 = require("../../domain/entities/audit-log");
 const test_utils_1 = require("../helpers/test-utils");
 const database_helpers_1 = require("../helpers/database-helpers");
+const permission_service_1 = require("../../application/services/permission-service");
+const business_rule_validation_service_1 = require("../../application/services/business-rule-validation-service");
 /**
  * Concurrency and Race Condition Tests
  *
@@ -35,6 +37,8 @@ describe('Concurrency and Race Condition Tests', () => {
     let guildConfigRepository;
     let caseCounterRepository;
     let operationQueue;
+    let permissionService;
+    let businessRuleValidationService;
     const testGuildId = 'concurrency-test-guild';
     const adminUserId = 'admin-123';
     beforeAll(async () => {
@@ -48,14 +52,16 @@ describe('Concurrency and Race Condition Tests', () => {
         guildConfigRepository = new guild_config_repository_1.GuildConfigRepository();
         caseCounterRepository = new case_counter_repository_1.CaseCounterRepository();
         // Initialize services
-        staffService = new staff_service_1.StaffService(staffRepository, auditLogRepository);
-        caseService = new case_service_1.CaseService(caseRepository, caseCounterRepository, guildConfigRepository);
+        permissionService = new permission_service_1.PermissionService(guildConfigRepository);
+        businessRuleValidationService = new business_rule_validation_service_1.BusinessRuleValidationService(guildConfigRepository, staffRepository, caseRepository, permissionService);
+        staffService = new staff_service_1.StaffService(staffRepository, auditLogRepository, permissionService, businessRuleValidationService);
+        caseService = new case_service_1.CaseService(caseRepository, caseCounterRepository, guildConfigRepository, permissionService, businessRuleValidationService);
         // Initialize queue
         operationQueue = operation_queue_1.OperationQueue.getInstance();
         // Clear state
         await test_utils_1.TestUtils.clearTestDatabase();
         operationQueue.clearQueue();
-        // Setup test guild
+        // Setup test guild with admin permissions
         await guildConfigRepository.add({
             guildId: testGuildId,
             feedbackChannelId: undefined,
@@ -66,15 +72,16 @@ describe('Concurrency and Race Condition Tests', () => {
             applicationChannelId: undefined,
             clientRoleId: undefined,
             permissions: {
-                admin: [],
-                'senior-staff': [],
-                case: [],
-                config: [],
-                lawyer: [],
-                repair: []
+                admin: ['admin-role'],
+                'senior-staff': ['admin-role'],
+                case: ['admin-role', 'case-role'],
+                config: ['admin-role'],
+                lawyer: ['admin-role'],
+                'lead-attorney': ['admin-role'],
+                repair: ['admin-role']
             },
-            adminRoles: [],
-            adminUsers: []
+            adminRoles: ['admin-role'],
+            adminUsers: [adminUserId]
         });
     });
     afterAll(async () => {
@@ -86,18 +93,21 @@ describe('Concurrency and Race Condition Tests', () => {
             const operations = [];
             // Create concurrent hire operations
             for (let i = 0; i < concurrentHires; i++) {
-                const operation = operationQueue.enqueue(() => staffService.hireStaff({
-                    guildId: testGuildId,
-                    userId: adminUserId,
-                    userRoles: [],
-                    isGuildOwner: false
-                }, {
-                    guildId: testGuildId,
-                    userId: `concurrent-user-${i}`,
-                    hiredBy: adminUserId,
-                    robloxUsername: `ConcurrentUser${i}`,
-                    role: staff_role_1.StaffRole.PARALEGAL
-                }), `user-${i}`, testGuildId, false);
+                const operation = operationQueue.enqueue(() => {
+                    const context = {
+                        guildId: testGuildId,
+                        userId: adminUserId,
+                        userRoles: ['admin-role'],
+                        isGuildOwner: false
+                    };
+                    return staffService.hireStaff(context, {
+                        guildId: testGuildId,
+                        userId: `concurrent-user-${i}`,
+                        hiredBy: adminUserId,
+                        robloxUsername: `ConcurrentUser${i}`,
+                        role: staff_role_1.StaffRole.PARALEGAL
+                    });
+                }, `user-${i}`, testGuildId, false);
                 operations.push(operation);
             }
             const results = await Promise.allSettled(operations);
@@ -106,7 +116,7 @@ describe('Concurrency and Race Condition Tests', () => {
             // Should not exceed role limit (10 paralegals max)
             expect(successfulHires).toBeLessThanOrEqual(10);
             // Verify database consistency
-            const paralegals = await staffRepository.findByRole(testGuildId, staff_role_1.StaffRole.PARALEGAL);
+            const paralegals = await staffRepository.findByFilters({ guildId: testGuildId, role: staff_role_1.StaffRole.PARALEGAL });
             expect(paralegals.length).toBe(successfulHires);
             expect(paralegals.length).toBeLessThanOrEqual(10);
             // Verify no duplicate userIds
@@ -118,12 +128,13 @@ describe('Concurrency and Race Condition Tests', () => {
             // First hire some staff
             const staffMembers = [];
             for (let i = 0; i < 5; i++) {
-                const hire = await staffService.hireStaff({
+                const context = {
                     guildId: testGuildId,
                     userId: adminUserId,
-                    userRoles: [],
+                    userRoles: ['admin-role'],
                     isGuildOwner: false
-                }, {
+                };
+                const hire = await staffService.hireStaff(context, {
                     guildId: testGuildId,
                     userId: `promotion-test-${i}`,
                     hiredBy: adminUserId,
@@ -133,24 +144,27 @@ describe('Concurrency and Race Condition Tests', () => {
                 staffMembers.push(hire.staff);
             }
             // Try to promote multiple paralegals to Junior Associate simultaneously
-            const promotionOperations = staffMembers.map((staff, index) => operationQueue.enqueue(() => staffService.promoteStaff({
-                guildId: testGuildId,
-                userId: adminUserId,
-                userRoles: [],
-                isGuildOwner: false
-            }, {
-                guildId: testGuildId,
-                userId: staff.userId,
-                promotedBy: adminUserId,
-                newRole: staff_role_1.StaffRole.JUNIOR_ASSOCIATE,
-                reason: `Concurrent promotion ${index}`
-            }), `promoter-${index}`, testGuildId, false));
+            const promotionOperations = staffMembers.map((staff, index) => operationQueue.enqueue(() => {
+                const context = {
+                    guildId: testGuildId,
+                    userId: adminUserId,
+                    userRoles: ['admin-role'],
+                    isGuildOwner: false
+                };
+                return staffService.promoteStaff(context, {
+                    guildId: testGuildId,
+                    userId: staff.userId,
+                    promotedBy: adminUserId,
+                    newRole: staff_role_1.StaffRole.JUNIOR_ASSOCIATE,
+                    reason: `Concurrent promotion ${index}`
+                });
+            }, `promoter-${index}`, testGuildId, false));
             const results = await Promise.allSettled(promotionOperations);
             // All should succeed since there's no limit conflict
             const successfulPromotions = results.filter(r => r.status === 'fulfilled' && r.value.success === true).length;
             expect(successfulPromotions).toBe(5);
             // Verify database consistency
-            const juniorAssociates = await staffRepository.findByRole(testGuildId, staff_role_1.StaffRole.JUNIOR_ASSOCIATE);
+            const juniorAssociates = await staffRepository.findByFilters({ guildId: testGuildId, role: staff_role_1.StaffRole.JUNIOR_ASSOCIATE });
             expect(juniorAssociates.length).toBe(5);
             const remainingParalegals = await staffRepository.findByRole(testGuildId, staff_role_1.StaffRole.PARALEGAL);
             expect(remainingParalegals.length).toBe(0);
@@ -158,18 +172,21 @@ describe('Concurrency and Race Condition Tests', () => {
         it('should prevent double hiring of same user', async () => {
             const userId = 'double-hire-test';
             // Try to hire the same user multiple times concurrently
-            const duplicateHires = Array.from({ length: 5 }, (_, i) => operationQueue.enqueue(() => staffService.hireStaff({
-                guildId: testGuildId,
-                userId: adminUserId,
-                userRoles: [],
-                isGuildOwner: false
-            }, {
-                guildId: testGuildId,
-                userId,
-                hiredBy: adminUserId,
-                robloxUsername: `DuplicateUser${i}`,
-                role: staff_role_1.StaffRole.PARALEGAL
-            }), `hirer-${i}`, testGuildId, false));
+            const duplicateHires = Array.from({ length: 5 }, (_, i) => operationQueue.enqueue(() => {
+                const context = {
+                    guildId: testGuildId,
+                    userId: adminUserId,
+                    userRoles: ['admin-role'],
+                    isGuildOwner: false
+                };
+                return staffService.hireStaff(context, {
+                    guildId: testGuildId,
+                    userId,
+                    hiredBy: adminUserId,
+                    robloxUsername: `DuplicateUser${i}`,
+                    role: staff_role_1.StaffRole.PARALEGAL
+                });
+            }, `hirer-${i}`, testGuildId, false));
             const results = await Promise.allSettled(duplicateHires);
             // Only one should succeed
             const successfulHires = results.filter(r => r.status === 'fulfilled' && r.value.success === true).length;
@@ -187,19 +204,22 @@ describe('Concurrency and Race Condition Tests', () => {
             const operations = [];
             // Create concurrent case creation operations
             for (let i = 0; i < concurrentCases; i++) {
-                const operation = operationQueue.enqueue(() => caseService.createCase({
-                    guildId: testGuildId,
-                    userId: 'system',
-                    userRoles: [],
-                    isGuildOwner: false
-                }, {
-                    guildId: testGuildId,
-                    clientId: `client-${i}`,
-                    clientUsername: `client${i}`,
-                    title: `Concurrent Case ${i}`,
-                    description: `Test case created concurrently ${i}`,
-                    priority: case_1.CasePriority.MEDIUM
-                }), `creator-${i}`, testGuildId, false);
+                const operation = operationQueue.enqueue(() => {
+                    const context = {
+                        guildId: testGuildId,
+                        userId: adminUserId,
+                        userRoles: ['admin-role', 'case-role'],
+                        isGuildOwner: false
+                    };
+                    return caseService.createCase(context, {
+                        guildId: testGuildId,
+                        clientId: `client-${i}`,
+                        clientUsername: `client${i}`,
+                        title: `Concurrent Case ${i}`,
+                        description: `Test case created concurrently ${i}`,
+                        priority: case_1.CasePriority.MEDIUM
+                    });
+                }, `creator-${i}`, testGuildId, false);
                 operations.push(operation);
             }
             const results = await Promise.all(operations);
@@ -219,12 +239,13 @@ describe('Concurrency and Race Condition Tests', () => {
         });
         it('should handle concurrent case acceptance properly', async () => {
             // Create a case first
-            const testCase = await caseService.createCase({
+            const context = {
                 guildId: testGuildId,
-                userId: 'system',
-                userRoles: [],
+                userId: adminUserId,
+                userRoles: ['admin-role', 'case-role'],
                 isGuildOwner: false
-            }, {
+            };
+            const testCase = await caseService.createCase(context, {
                 guildId: testGuildId,
                 clientId: 'concurrent-client',
                 clientUsername: 'concurrentclient',
@@ -234,71 +255,81 @@ describe('Concurrency and Race Condition Tests', () => {
             const caseId = testCase._id.toString();
             // Multiple lawyers try to accept the same case
             const lawyerIds = ['lawyer-1', 'lawyer-2', 'lawyer-3', 'lawyer-4', 'lawyer-5'];
-            const acceptanceOperations = lawyerIds.map(lawyerId => operationQueue.enqueue(() => caseService.acceptCase({
-                guildId: testGuildId,
-                userId: lawyerId,
-                userRoles: [],
-                isGuildOwner: false
-            }, caseId), lawyerId, testGuildId, false));
+            const acceptanceOperations = lawyerIds.map(lawyerId => operationQueue.enqueue(() => {
+                const context = {
+                    guildId: testGuildId,
+                    userId: lawyerId,
+                    userRoles: ['admin-role', 'case-role'],
+                    isGuildOwner: false
+                };
+                return caseService.acceptCase(context, caseId);
+            }, lawyerId, testGuildId, false));
             const results = await Promise.allSettled(acceptanceOperations);
             // Only one should succeed
             const successfulAcceptances = results.filter(r => r.status === 'fulfilled').length;
             expect(successfulAcceptances).toBe(1);
             // Verify final case state
-            const finalCase = await caseService.getCaseById({
+            const verifyContext = {
                 guildId: testGuildId,
-                userId: 'system',
-                userRoles: [],
+                userId: adminUserId,
+                userRoles: ['admin-role', 'case-role'],
                 isGuildOwner: false
-            }, caseId);
+            };
+            const finalCase = await caseService.getCaseById(verifyContext, caseId);
             expect(finalCase?.status).toBe(case_1.CaseStatus.IN_PROGRESS);
             expect(finalCase?.leadAttorneyId).toBeTruthy();
             expect(lawyerIds.includes(finalCase.leadAttorneyId)).toBe(true);
         });
         it('should handle concurrent case closures', async () => {
             // Create and accept a case
-            const testCase = await caseService.createCase({
+            const createContext = {
                 guildId: testGuildId,
-                userId: 'system',
-                userRoles: [],
+                userId: adminUserId,
+                userRoles: ['admin-role', 'case-role'],
                 isGuildOwner: false
-            }, {
+            };
+            const testCase = await caseService.createCase(createContext, {
                 guildId: testGuildId,
                 clientId: 'closure-client',
                 clientUsername: 'closureclient',
                 title: 'Concurrent Closure Test',
                 description: 'Testing concurrent case closure'
             });
-            const openCase = await caseService.acceptCase({
+            const acceptContext = {
                 guildId: testGuildId,
                 userId: 'lead-lawyer',
-                userRoles: [],
+                userRoles: ['admin-role', 'case-role'],
                 isGuildOwner: false
-            }, testCase._id.toString());
+            };
+            const openCase = await caseService.acceptCase(acceptContext, testCase._id.toString());
             const caseId = openCase._id.toString();
             // Multiple users try to close the same case
-            const closureOperations = Array.from({ length: 3 }, (_, i) => operationQueue.enqueue(() => caseService.closeCase({
-                guildId: testGuildId,
-                userId: `closer-${i}`,
-                userRoles: [],
-                isGuildOwner: false
-            }, {
-                caseId,
-                result: i === 0 ? case_1.CaseResult.WIN : i === 1 ? case_1.CaseResult.LOSS : case_1.CaseResult.SETTLEMENT,
-                resultNotes: `Closed by concurrent operation ${i}`,
-                closedBy: `closer-${i}`
-            }), `closer-${i}`, testGuildId, false));
+            const closureOperations = Array.from({ length: 3 }, (_, i) => operationQueue.enqueue(() => {
+                const context = {
+                    guildId: testGuildId,
+                    userId: `closer-${i}`,
+                    userRoles: ['admin-role', 'case-role'],
+                    isGuildOwner: false
+                };
+                return caseService.closeCase(context, {
+                    caseId,
+                    result: i === 0 ? case_1.CaseResult.WIN : i === 1 ? case_1.CaseResult.LOSS : case_1.CaseResult.SETTLEMENT,
+                    resultNotes: `Closed by concurrent operation ${i}`,
+                    closedBy: `closer-${i}`
+                });
+            }, `closer-${i}`, testGuildId, false));
             const results = await Promise.allSettled(closureOperations);
             // Only one should succeed
             const successfulClosures = results.filter(r => r.status === 'fulfilled').length;
             expect(successfulClosures).toBe(1);
             // Verify case is closed
-            const finalCase = await caseService.getCaseById({
+            const finalContext = {
                 guildId: testGuildId,
-                userId: 'system',
-                userRoles: [],
+                userId: adminUserId,
+                userRoles: ['admin-role', 'case-role'],
                 isGuildOwner: false
-            }, caseId);
+            };
+            const finalCase = await caseService.getCaseById(finalContext, caseId);
             expect(finalCase?.status).toBe('closed');
             expect(finalCase?.closedBy).toBeTruthy();
         });
@@ -311,33 +342,39 @@ describe('Concurrency and Race Condition Tests', () => {
             for (let i = 0; i < operationCount; i++) {
                 if (i % 2 === 0) {
                     // Staff hire
-                    operations.push(operationQueue.enqueue(() => staffService.hireStaff({
-                        guildId: testGuildId,
-                        userId: adminUserId,
-                        userRoles: [],
-                        isGuildOwner: false
-                    }, {
-                        guildId: testGuildId,
-                        userId: `audit-test-${i}`,
-                        hiredBy: adminUserId,
-                        robloxUsername: `AuditTest${i}`,
-                        role: staff_role_1.StaffRole.PARALEGAL
-                    }), `user-${i}`, testGuildId, false));
+                    operations.push(operationQueue.enqueue(() => {
+                        const context = {
+                            guildId: testGuildId,
+                            userId: adminUserId,
+                            userRoles: ['admin-role'],
+                            isGuildOwner: false
+                        };
+                        return staffService.hireStaff(context, {
+                            guildId: testGuildId,
+                            userId: `audit-test-${i}`,
+                            hiredBy: adminUserId,
+                            robloxUsername: `AuditTest${i}`,
+                            role: staff_role_1.StaffRole.PARALEGAL
+                        });
+                    }, `user-${i}`, testGuildId, false));
                 }
                 else {
                     // Case creation
-                    operations.push(operationQueue.enqueue(() => caseService.createCase({
-                        guildId: testGuildId,
-                        userId: 'system',
-                        userRoles: [],
-                        isGuildOwner: false
-                    }, {
-                        guildId: testGuildId,
-                        clientId: `audit-client-${i}`,
-                        clientUsername: `auditclient${i}`,
-                        title: `Audit Test Case ${i}`,
-                        description: `Case for audit testing ${i}`
-                    }), `user-${i}`, testGuildId, false));
+                    operations.push(operationQueue.enqueue(() => {
+                        const context = {
+                            guildId: testGuildId,
+                            userId: adminUserId,
+                            userRoles: ['admin-role', 'case-role'],
+                            isGuildOwner: false
+                        };
+                        return caseService.createCase(context, {
+                            guildId: testGuildId,
+                            clientId: `audit-client-${i}`,
+                            clientUsername: `auditclient${i}`,
+                            title: `Audit Test Case ${i}`,
+                            description: `Case for audit testing ${i}`
+                        });
+                    }, `user-${i}`, testGuildId, false));
                 }
             }
             await Promise.allSettled(operations);
@@ -362,48 +399,60 @@ describe('Concurrency and Race Condition Tests', () => {
                 const operationType = i % 4;
                 switch (operationType) {
                     case 0: // Staff hire
-                        operations.push(operationQueue.enqueue(() => staffService.hireStaff({
-                            guildId: testGuildId,
-                            userId: adminUserId,
-                            userRoles: [],
-                            isGuildOwner: false
-                        }, {
-                            guildId: testGuildId,
-                            userId: `volume-staff-${i}`,
-                            hiredBy: adminUserId,
-                            robloxUsername: `VolumeStaff${i}`,
-                            role: staff_role_1.StaffRole.PARALEGAL
-                        }), `volume-user-${i}`, testGuildId, false));
+                        operations.push(operationQueue.enqueue(() => {
+                            const context = {
+                                guildId: testGuildId,
+                                userId: adminUserId,
+                                userRoles: ['admin-role'],
+                                isGuildOwner: false
+                            };
+                            return staffService.hireStaff(context, {
+                                guildId: testGuildId,
+                                userId: `volume-staff-${i}`,
+                                hiredBy: adminUserId,
+                                robloxUsername: `VolumeStaff${i}`,
+                                role: staff_role_1.StaffRole.PARALEGAL
+                            });
+                        }, `volume-user-${i}`, testGuildId, false));
                         break;
                     case 1: // Case creation
-                        operations.push(operationQueue.enqueue(() => caseService.createCase({
-                            guildId: testGuildId,
-                            userId: 'system',
-                            userRoles: [],
-                            isGuildOwner: false
-                        }, {
-                            guildId: testGuildId,
-                            clientId: `volume-client-${i}`,
-                            clientUsername: `volumeclient${i}`,
-                            title: `Volume Case ${i}`,
-                            description: `High volume test case ${i}`
-                        }), `volume-user-${i}`, testGuildId, false));
+                        operations.push(operationQueue.enqueue(() => {
+                            const context = {
+                                guildId: testGuildId,
+                                userId: 'system',
+                                userRoles: ['admin-role'],
+                                isGuildOwner: false
+                            };
+                            return caseService.createCase(context, {
+                                guildId: testGuildId,
+                                clientId: `volume-client-${i}`,
+                                clientUsername: `volumeclient${i}`,
+                                title: `Volume Case ${i}`,
+                                description: `High volume test case ${i}`
+                            });
+                        }, `volume-user-${i}`, testGuildId, false));
                         break;
                     case 2: // Staff info retrieval
-                        operations.push(operationQueue.enqueue(() => staffService.getStaffList({
-                            guildId: testGuildId,
-                            userId: `requester-${i}`,
-                            userRoles: [],
-                            isGuildOwner: false
-                        }), `volume-user-${i}`, testGuildId, false));
+                        operations.push(operationQueue.enqueue(() => {
+                            const context = {
+                                guildId: testGuildId,
+                                userId: `requester-${i}`,
+                                userRoles: ['admin-role'],
+                                isGuildOwner: false
+                            };
+                            return staffService.getStaffList(context, undefined);
+                        }, `volume-user-${i}`, testGuildId, false));
                         break;
                     case 3: // Case search
-                        operations.push(operationQueue.enqueue(() => caseService.searchCases({
-                            guildId: testGuildId,
-                            userId: `volume-user-${i}`,
-                            userRoles: [],
-                            isGuildOwner: false
-                        }, { guildId: testGuildId }), `volume-user-${i}`, testGuildId, false));
+                        operations.push(operationQueue.enqueue(() => {
+                            const context = {
+                                guildId: testGuildId,
+                                userId: `volume-user-${i}`,
+                                userRoles: ['admin-role'],
+                                isGuildOwner: false
+                            };
+                            return caseService.searchCases(context, { guildId: testGuildId });
+                        }, `volume-user-${i}`, testGuildId, false));
                         break;
                 }
             }
@@ -483,12 +532,15 @@ describe('Concurrency and Race Condition Tests', () => {
     describe('Resource Contention Scenarios', () => {
         it('should handle database connection limits', async () => {
             // Simulate many concurrent database operations
-            const dbOperations = Array.from({ length: 200 }, (_, i) => staffService.getStaffList({
-                guildId: testGuildId,
-                userId: `requester-${i}`,
-                userRoles: [],
-                isGuildOwner: false
-            }));
+            const dbOperations = Array.from({ length: 200 }, (_, i) => {
+                const context = {
+                    guildId: testGuildId,
+                    userId: `requester-${i}`,
+                    userRoles: ['admin-role'],
+                    isGuildOwner: false
+                };
+                return staffService.getStaffList(context, undefined);
+            });
             const results = await Promise.allSettled(dbOperations);
             // Most operations should succeed despite connection limits
             const successCount = results.filter(r => r.status === 'fulfilled').length;
@@ -496,12 +548,13 @@ describe('Concurrency and Race Condition Tests', () => {
         });
         it('should handle rapid sequential operations on same entity', async () => {
             // Create a staff member
-            const initialHire = await staffService.hireStaff({
+            const hireContext = {
                 guildId: testGuildId,
                 userId: adminUserId,
-                userRoles: [],
+                userRoles: ['admin-role'],
                 isGuildOwner: false
-            }, {
+            };
+            const initialHire = await staffService.hireStaff(hireContext, {
                 guildId: testGuildId,
                 userId: 'rapid-test-user',
                 hiredBy: adminUserId,
@@ -511,41 +564,61 @@ describe('Concurrency and Race Condition Tests', () => {
             expect(initialHire.success).toBe(true);
             // Perform rapid operations on the same staff member
             const rapidOperations = [
-                () => staffService.getStaffInfo({
-                    guildId: testGuildId,
-                    userId: adminUserId,
-                    userRoles: [],
-                    isGuildOwner: false
-                }, 'rapid-test-user'),
-                () => staffService.promoteStaff({
-                    guildId: testGuildId,
-                    userId: adminUserId,
-                    userRoles: [],
-                    isGuildOwner: false
-                }, {
-                    guildId: testGuildId,
-                    userId: 'rapid-test-user',
-                    promotedBy: adminUserId,
-                    newRole: staff_role_1.StaffRole.JUNIOR_ASSOCIATE
-                }),
-                () => staffService.getStaffInfo({
-                    guildId: testGuildId,
-                    userId: adminUserId,
-                    userRoles: [],
-                    isGuildOwner: false
-                }, 'rapid-test-user'),
-                () => staffService.demoteStaff({
-                    guildId: testGuildId,
-                    userId: adminUserId,
-                    userRoles: [],
-                    isGuildOwner: false
-                }, { $1guildId: testGuildId, $2userId: 'rapid-test-user', $3promotedBy: adminUserId, $4newRole: staff_role_1.StaffRole.PARALEGAL$5 }),
-                () => staffService.getStaffInfo({
-                    guildId: testGuildId,
-                    userId: adminUserId,
-                    userRoles: [],
-                    isGuildOwner: false
-                }, 'rapid-test-user')
+                () => {
+                    const context = {
+                        guildId: testGuildId,
+                        userId: adminUserId,
+                        userRoles: ['admin-role'],
+                        isGuildOwner: false
+                    };
+                    return staffService.getStaffInfo(context, 'rapid-test-user');
+                },
+                () => {
+                    const context = {
+                        guildId: testGuildId,
+                        userId: adminUserId,
+                        userRoles: ['admin-role'],
+                        isGuildOwner: false
+                    };
+                    return staffService.promoteStaff(context, {
+                        guildId: testGuildId,
+                        userId: 'rapid-test-user',
+                        promotedBy: adminUserId,
+                        newRole: staff_role_1.StaffRole.JUNIOR_ASSOCIATE
+                    });
+                },
+                () => {
+                    const context = {
+                        guildId: testGuildId,
+                        userId: adminUserId,
+                        userRoles: ['admin-role'],
+                        isGuildOwner: false
+                    };
+                    return staffService.getStaffInfo(context, 'rapid-test-user');
+                },
+                () => {
+                    const context = {
+                        guildId: testGuildId,
+                        userId: adminUserId,
+                        userRoles: ['admin-role'],
+                        isGuildOwner: false
+                    };
+                    return staffService.demoteStaff(context, {
+                        guildId: testGuildId,
+                        userId: 'rapid-test-user',
+                        promotedBy: adminUserId,
+                        newRole: staff_role_1.StaffRole.PARALEGAL
+                    });
+                },
+                () => {
+                    const context = {
+                        guildId: testGuildId,
+                        userId: adminUserId,
+                        userRoles: ['admin-role'],
+                        isGuildOwner: false
+                    };
+                    return staffService.getStaffInfo(context, 'rapid-test-user');
+                }
             ];
             const queuedOperations = rapidOperations.map((op, i) => operationQueue.enqueue(op, `rapid-requester-${i}`, testGuildId, false));
             const results = await Promise.allSettled(queuedOperations);
@@ -553,12 +626,13 @@ describe('Concurrency and Race Condition Tests', () => {
             const successCount = results.filter(r => r.status === 'fulfilled').length;
             expect(successCount).toBeGreaterThan(2); // At least reads should work
             // Final state should be consistent
-            const finalState = await staffService.getStaffInfo({
+            const finalContext = {
                 guildId: testGuildId,
                 userId: adminUserId,
-                userRoles: [],
+                userRoles: ['admin-role'],
                 isGuildOwner: false
-            }, 'rapid-test-user');
+            };
+            const finalState = await staffService.getStaffInfo(finalContext, 'rapid-test-user');
             expect(finalState).toBeDefined();
             expect(finalState?.status).toBe('active');
         });

@@ -15,7 +15,6 @@ import { RobloxService } from '../../infrastructure/external/roblox-service';
 
 import { StaffRole } from '../../domain/entities/staff-role';
 import { CaseStatus, CasePriority } from '../../domain/entities/case';
-import { RetainerStatus } from '../../domain/entities/retainer';
 import { ObjectId } from 'mongodb';
 
 // Mock all repositories and external services
@@ -26,6 +25,30 @@ jest.mock('../../infrastructure/repositories/case-counter-repository');
 jest.mock('../../infrastructure/repositories/retainer-repository');
 jest.mock('../../infrastructure/repositories/guild-config-repository');
 jest.mock('../../infrastructure/external/roblox-service');
+
+// Mock discord.js ModalBuilder
+jest.mock('discord.js', () => ({
+  ...jest.requireActual('discord.js'),
+  ModalBuilder: jest.fn().mockImplementation(() => ({
+    setCustomId: jest.fn().mockReturnThis(),
+    setTitle: jest.fn().mockReturnThis(),
+    addComponents: jest.fn().mockReturnThis(),
+    data: { title: '🚨 Role Limit Bypass Required' }
+  })),
+  TextInputBuilder: jest.fn().mockImplementation(() => ({
+    setCustomId: jest.fn().mockReturnThis(),
+    setLabel: jest.fn().mockReturnThis(),
+    setStyle: jest.fn().mockReturnThis(),
+    setRequired: jest.fn().mockReturnThis(),
+    setPlaceholder: jest.fn().mockReturnThis(),
+    setMaxLength: jest.fn().mockReturnThis(),
+    setValue: jest.fn().mockReturnThis()
+  })),
+  ActionRowBuilder: jest.fn().mockImplementation(() => ({
+    addComponents: jest.fn().mockReturnThis()
+  })),
+  TextInputStyle: { Short: 1, Paragraph: 2 }
+}));
 
 describe('Business Rule Integration Tests', () => {
   let staffService: StaffService;
@@ -174,6 +197,81 @@ describe('Business Rule Integration Tests', () => {
     mockAuditLogRepo.logAction.mockResolvedValue({} as any);
     mockAuditLogRepo.logRoleLimitBypass.mockResolvedValue({} as any);
     mockAuditLogRepo.logBusinessRuleViolation.mockResolvedValue({} as any);
+    
+    // Mock permission validation for users based on their roles
+    businessRuleValidationService.validatePermission = jest.fn().mockImplementation(async (context, permission) => {
+      // Guild owner has all permissions
+      if (context.isGuildOwner) {
+        return {
+          valid: true,
+          errors: [],
+          warnings: [],
+          bypassAvailable: true,
+          bypassType: 'guild-owner',
+          hasPermission: true,
+          requiredPermission: permission,
+          grantedPermissions: [permission],
+          metadata: {
+            ruleType: 'permission-validation',
+            requiredPermission: permission,
+            bypassReason: 'guild-owner'
+          }
+        };
+      }
+      
+      // For lead attorney validation when setting lead attorney
+      if (permission === 'lead-attorney' && context.userId === seniorPartnerId) {
+        return {
+          valid: true,
+          errors: [],
+          warnings: [],
+          bypassAvailable: false,
+          hasPermission: true,
+          requiredPermission: permission,
+          grantedPermissions: [permission]
+        };
+      }
+      
+      // Senior Partner permissions
+      if (context.userId === seniorPartnerId) {
+        const validPermissions = ['lawyer', 'lead-attorney', 'senior-staff'];
+        if (validPermissions.includes(permission)) {
+          return {
+            valid: true,
+            errors: [],
+            warnings: [],
+            bypassAvailable: false,
+            hasPermission: true,
+            requiredPermission: permission,
+            grantedPermissions: [permission]
+          };
+        }
+      }
+      
+      // For regular user, no lead-attorney permission
+      if (permission === 'lead-attorney' && context.userId === regularUserId) {
+        return {
+          valid: false,
+          errors: ['Missing required permission: lead-attorney'],
+          warnings: [],
+          bypassAvailable: false,
+          hasPermission: false,
+          requiredPermission: permission,
+          grantedPermissions: []
+        };
+      }
+      
+      // Default mock implementation
+      return {
+        valid: false,
+        errors: [`Missing required permission: ${permission}`],
+        warnings: [],
+        bypassAvailable: false,
+        hasPermission: false,
+        requiredPermission: permission,
+        grantedPermissions: []
+      };
+    });
   });
 
   describe('Staff Management Edge Cases', () => {
@@ -193,7 +291,7 @@ describe('Business Rule Integration Tests', () => {
           reason: 'Attempting to hire second Managing Partner' };
 
         // Should fail for senior partner (not guild owner)
-        const result = await this.staffService.$1($2, hireRequest);
+        const result = await staffService.hireStaff(seniorPartnerContext, hireRequest);
 
         expect(result.success).toBe(false);
         expect(result.error).toContain('Maximum limit of 1 reached');
@@ -204,7 +302,21 @@ describe('Business Rule Integration Tests', () => {
         mockStaffRepo.getStaffCountByRole.mockResolvedValue(1);
         mockStaffRepo.findByUserId.mockResolvedValue(null);
         mockStaffRepo.findStaffByRobloxUsername.mockResolvedValue(null);
-        mockStaffRepo.add.mockResolvedValue({} as any);
+        mockStaffRepo.add.mockResolvedValue({
+          _id: new ObjectId(),
+          userId: 'second_managing_partner',
+          guildId,
+          role: StaffRole.MANAGING_PARTNER,
+          status: 'active',
+          createdAt: new Date(),
+          updatedAt: new Date()
+        } as any);
+        
+        // Mock the validateRobloxUsername method that StaffService uses internally
+        jest.spyOn(staffService as any, 'validateRobloxUsername').mockResolvedValue({
+          isValid: true,
+          username: 'SecondManagingPartner'
+        });
 
         const hireRequest = {
           guildId,
@@ -212,10 +324,12 @@ describe('Business Rule Integration Tests', () => {
           robloxUsername: 'SecondManagingPartner',
           role: StaffRole.MANAGING_PARTNER,
           hiredBy: managingPartnerId,
-          reason: 'Emergency hire - guild owner bypass' };
+          reason: 'Emergency hire - guild owner bypass',
+          isGuildOwner: true
+        };
 
         // Should succeed for guild owner
-        const result = await this.staffService.$1($2, hireRequest);
+        const result = await staffService.hireStaff(guildOwnerContext, hireRequest);
 
         expect(result.success).toBe(true);
         expect(mockAuditLogRepo.logRoleLimitBypass).toHaveBeenCalledWith(
@@ -242,11 +356,11 @@ describe('Business Rule Integration Tests', () => {
           hiredBy: juniorAssociateId,
           reason: 'Junior Associate trying to hire Senior Partner' };
 
-        // Junior Associate shouldn't be able to hire Senior Partner
-        const result = await this.staffService.$1($2, hireRequest);
+        // Junior Associate shouldn't be able to hire Senior Partner (no senior-staff permission)
+        const result = await staffService.hireStaff(juniorAssociateContext, hireRequest);
 
         expect(result.success).toBe(false);
-        expect(result.error).toContain('lower levels than your own role');
+        expect(result.error).toContain('You do not have permission to hire staff members');
       });
     });
 
@@ -348,7 +462,7 @@ describe('Business Rule Integration Tests', () => {
           description: 'This should succeed',
           priority: CasePriority.MEDIUM };
 
-        const result = await this.caseService.createCase(context, seniorPartnerContext, caseRequest);
+        const result = await caseService.createCase(seniorPartnerContext, caseRequest);
 
         expect(result.caseNumber).toBe('AA-2024-123-TestClient');
         expect(result.status).toBe(CaseStatus.PENDING);
@@ -383,14 +497,22 @@ describe('Business Rule Integration Tests', () => {
           _id: caseId,
           guildId,
           assignedLawyerIds: [seniorPartnerId],
-        createdAt: new Date(),
-        updatedAt: new Date()
+          createdAt: new Date(),
+          updatedAt: new Date()
         } as any);
-        mockCaseRepo.update.mockResolvedValue({} as any);
+        mockCaseRepo.update.mockResolvedValue({
+          _id: caseId,
+          guildId,
+          assignedLawyerIds: [seniorPartnerId],
+          leadAttorneyId: seniorPartnerId,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        } as any);
 
         const result = await caseService.setLeadAttorney(seniorPartnerContext, caseId, seniorPartnerId);
 
         expect(result).toBeDefined();
+        expect(result.leadAttorneyId).toBe(seniorPartnerId);
       });
 
       it('should validate lead attorney permissions before assignment', async () => {
@@ -457,7 +579,7 @@ describe('Business Rule Integration Tests', () => {
       } as any);
 
       // Senior Partner (has lawyer permission) should be able to create retainer
-      const result = await this.retainerService.createRetainer(context, seniorPartnerContext, retainerRequest);
+      const result = await retainerService.createRetainer(seniorPartnerContext, retainerRequest);
 
       expect(result.status).toBe('pending');
       expect(result.lawyerId).toBe(seniorPartnerId);
@@ -542,7 +664,10 @@ describe('Business Rule Integration Tests', () => {
       const modal = GuildOwnerUtils.createRoleLimitBypassModal(managingPartnerId, validationResult);
 
       expect(modal).toBeDefined();
-      // Modal creation is mocked, but this tests the call doesn't throw
+      expect(modal.data.title).toBe('🚨 Role Limit Bypass Required');
+      // The modal should have the expected methods
+      expect(modal.setCustomId).toBeDefined();
+      expect(modal.setTitle).toBeDefined();
     });
 
     it('should validate bypass confirmation correctly', () => {

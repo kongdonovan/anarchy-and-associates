@@ -2,8 +2,7 @@ import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'disc
 import { ValidationResult, RoleLimitValidationResult, CaseLimitValidationResult, StaffValidationResult, PermissionValidationResult } from '../../application/services/business-rule-validation-service';
 import { CommandValidationResult, ValidationBypassRequest } from '../../application/services/command-validation-service';
 import { EmbedUtils } from '../../infrastructure/utils/embed-utils';
-import { StaffRole } from '../../domain/entities/staff-role';
-import { RoleUtils } from '../../infrastructure/utils/role-utils';
+import { RoleUtils, StaffRole } from '../../domain/entities/staff-role';
 
 export class ValidationErrorHandler {
   /**
@@ -141,8 +140,8 @@ export class ValidationErrorHandler {
    */
   public static createBypassSuccessEmbed(
     commandName: string,
-    subcommandName?: string,
-    bypassReason: string
+    bypassReason: string,
+    subcommandName?: string
   ): EmbedBuilder {
     return new EmbedBuilder()
       .setTitle('✅ Validation Override Successful')
@@ -227,10 +226,10 @@ export class ValidationErrorHandler {
     );
 
     // Add role hierarchy info
-    const hierarchy = RoleUtils.getRoleHierarchy();
+    const hierarchy = RoleUtils.getAllRolesSortedByLevel();
     embed.addFields({
       name: '📈 Role Limits',
-      value: hierarchy.map(role => {
+      value: hierarchy.map((role: StaffRole) => {
         const maxCount = RoleUtils.getRoleMaxCount(role);
         return `**${role}**: Max ${maxCount}`;
       }).join('\n'),

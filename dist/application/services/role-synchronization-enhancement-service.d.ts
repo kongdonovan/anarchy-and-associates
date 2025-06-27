@@ -62,7 +62,6 @@ export interface ConflictReport {
     }>;
 }
 export declare class RoleSynchronizationEnhancementService {
-    private staffRepository;
     private auditLogRepository;
     private readonly STAFF_ROLE_MAPPING;
     private readonly STAFF_ROLES_HIERARCHY;

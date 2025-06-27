@@ -12,6 +12,8 @@ const staff_role_1 = require("../../domain/entities/staff-role");
 const case_1 = require("../../domain/entities/case");
 const test_utils_1 = require("../helpers/test-utils");
 const database_helpers_1 = require("../helpers/database-helpers");
+const permission_service_1 = require("../../application/services/permission-service");
+const business_rule_validation_service_1 = require("../../application/services/business-rule-validation-service");
 /**
  * Performance and Load Testing
  *
@@ -34,9 +36,18 @@ describe('Performance and Load Testing', () => {
     let guildConfigRepository;
     let caseCounterRepository;
     let operationQueue;
+    let permissionService;
+    let businessRuleValidationService;
     // let rateLimiter: RateLimiter; // Commented out as not used
     const testGuildId = 'performance-test-guild';
     const adminUserId = 'admin-123';
+    // Create a test context
+    const context = {
+        guildId: testGuildId,
+        userId: adminUserId,
+        userRoles: ['admin_role'],
+        isGuildOwner: false
+    };
     // Performance thresholds
     const PERFORMANCE_THRESHOLDS = {
         SINGLE_OPERATION_MS: 1000,
@@ -56,8 +67,10 @@ describe('Performance and Load Testing', () => {
         guildConfigRepository = new guild_config_repository_1.GuildConfigRepository();
         caseCounterRepository = new case_counter_repository_1.CaseCounterRepository();
         // Initialize services
-        staffService = new staff_service_1.StaffService(staffRepository, auditLogRepository);
-        caseService = new case_service_1.CaseService(caseRepository, caseCounterRepository, guildConfigRepository);
+        permissionService = new permission_service_1.PermissionService(guildConfigRepository);
+        businessRuleValidationService = new business_rule_validation_service_1.BusinessRuleValidationService(guildConfigRepository, staffRepository, caseRepository, permissionService);
+        staffService = new staff_service_1.StaffService(staffRepository, auditLogRepository, permissionService, businessRuleValidationService);
+        caseService = new case_service_1.CaseService(caseRepository, caseCounterRepository, guildConfigRepository, permissionService, businessRuleValidationService);
         // Initialize infrastructure
         operationQueue = operation_queue_1.OperationQueue.getInstance();
         // rateLimiter = RateLimiter.getInstance(); // Not used in these tests
@@ -79,7 +92,8 @@ describe('Performance and Load Testing', () => {
                 'senior-staff': [],
                 case: [],
                 config: [],
-                retainer: [],
+                lawyer: [],
+                'lead-attorney': [],
                 repair: []
             },
             adminRoles: [],
@@ -92,7 +106,7 @@ describe('Performance and Load Testing', () => {
     describe('Single Operation Performance', () => {
         it('should complete staff hiring within performance threshold', async () => {
             const startTime = Date.now();
-            const result = await this.staffService.hireStaff(context, {
+            const result = await staffService.hireStaff(context, {
                 guildId: testGuildId,
                 userId: 'perf-test-user',
                 hiredBy: adminUserId,
@@ -106,7 +120,7 @@ describe('Performance and Load Testing', () => {
         });
         it('should complete case creation within performance threshold', async () => {
             const startTime = Date.now();
-            const testCase = await this.caseService.createCase(context, {
+            const testCase = await caseService.createCase(context, {
                 guildId: testGuildId,
                 clientId: 'perf-test-client',
                 clientUsername: 'perftestclient',
@@ -121,7 +135,7 @@ describe('Performance and Load Testing', () => {
         });
         it('should complete staff promotion within performance threshold', async () => {
             // Setup: hire staff first
-            await this.staffService.hireStaff(context, {
+            await staffService.hireStaff(context, {
                 guildId: testGuildId,
                 userId: 'promotion-perf-test',
                 hiredBy: adminUserId,
@@ -129,7 +143,7 @@ describe('Performance and Load Testing', () => {
                 role: staff_role_1.StaffRole.PARALEGAL
             });
             const startTime = Date.now();
-            const result = await this.staffService.promoteStaff(context, {
+            const result = await staffService.promoteStaff(context, {
                 guildId: testGuildId,
                 userId: 'promotion-perf-test',
                 promotedBy: adminUserId,
@@ -145,7 +159,7 @@ describe('Performance and Load Testing', () => {
         it('should handle bulk staff hiring efficiently', async () => {
             const bulkSize = 50;
             const startTime = Date.now();
-            const hirePromises = Array.from({ length: bulkSize }, (_, i) => staffService.hireStaff({
+            const hirePromises = Array.from({ length: bulkSize }, (_, i) => staffService.hireStaff(context, {
                 guildId: testGuildId,
                 userId: `bulk-staff-${i}`,
                 hiredBy: adminUserId,
@@ -166,7 +180,7 @@ describe('Performance and Load Testing', () => {
         it('should handle bulk case creation efficiently', async () => {
             const bulkSize = 100;
             const startTime = Date.now();
-            const casePromises = Array.from({ length: bulkSize }, (_, i) => caseService.createCase({
+            const casePromises = Array.from({ length: bulkSize }, (_, i) => caseService.createCase(context, {
                 guildId: testGuildId,
                 clientId: `bulk-client-${i}`,
                 clientUsername: `bulkclient${i}`,
@@ -192,7 +206,7 @@ describe('Performance and Load Testing', () => {
             for (let i = 0; i < operationCount; i++) {
                 if (i % 2 === 0) {
                     // Staff operations
-                    mixedOperations.push(staffService.hireStaff({
+                    mixedOperations.push(staffService.hireStaff(context, {
                         guildId: testGuildId,
                         userId: `mixed-staff-${i}`,
                         hiredBy: adminUserId,
@@ -202,7 +216,7 @@ describe('Performance and Load Testing', () => {
                 }
                 else {
                     // Case operations
-                    mixedOperations.push(caseService.createCase({
+                    mixedOperations.push(caseService.createCase(context, {
                         guildId: testGuildId,
                         clientId: `mixed-client-${i}`,
                         clientUsername: `mixedclient${i}`,
@@ -225,7 +239,7 @@ describe('Performance and Load Testing', () => {
             const dataSetupPromises = [];
             // Create staff members
             for (let i = 0; i < 100; i++) {
-                dataSetupPromises.push(staffService.hireStaff({
+                dataSetupPromises.push(staffService.hireStaff(context, {
                     guildId: testGuildId,
                     userId: `search-staff-${i}`,
                     hiredBy: adminUserId,
@@ -235,7 +249,7 @@ describe('Performance and Load Testing', () => {
             }
             // Create cases
             for (let i = 0; i < 200; i++) {
-                dataSetupPromises.push(caseService.createCase({
+                dataSetupPromises.push(caseService.createCase(context, {
                     guildId: testGuildId,
                     clientId: `search-client-${i}`,
                     clientUsername: `searchclient${i}`,
@@ -248,7 +262,7 @@ describe('Performance and Load Testing', () => {
         });
         it('should perform staff search efficiently', async () => {
             const startTime = Date.now();
-            const staffList = await staffService.getStaffList(testGuildId, adminUserId);
+            const staffList = await staffService.getStaffList(context);
             const endTime = Date.now();
             const duration = endTime - startTime;
             expect(staffList.staff.length).toBeGreaterThan(0);
@@ -256,7 +270,7 @@ describe('Performance and Load Testing', () => {
         });
         it('should perform case search efficiently', async () => {
             const startTime = Date.now();
-            const cases = await caseService.searchCases({
+            const cases = await caseService.searchCases(context, {
                 guildId: testGuildId,
                 title: 'Search Test'
             });
@@ -267,10 +281,10 @@ describe('Performance and Load Testing', () => {
         });
         it('should perform filtered searches efficiently', async () => {
             const searchTests = [
-                () => caseService.searchCases({ guildId: testGuildId, priority: case_1.CasePriority.HIGH }),
-                () => caseService.searchCases({ guildId: testGuildId, status: case_1.CaseStatus.PENDING }),
-                () => staffService.getStaffList(testGuildId, adminUserId, staff_role_1.StaffRole.PARALEGAL),
-                () => staffService.getRoleCounts(testGuildId)
+                () => caseService.searchCases(context, { guildId: testGuildId, priority: case_1.CasePriority.HIGH }),
+                () => caseService.searchCases(context, { guildId: testGuildId, status: case_1.CaseStatus.PENDING }),
+                () => staffService.getStaffList(context, staff_role_1.StaffRole.PARALEGAL),
+                () => staffService.getRoleCounts(context)
             ];
             for (const searchTest of searchTests) {
                 const startTime = Date.now();
@@ -283,7 +297,7 @@ describe('Performance and Load Testing', () => {
         });
         it('should handle complex search queries efficiently', async () => {
             const startTime = Date.now();
-            const complexSearch = await caseService.searchCases({
+            const complexSearch = await caseService.searchCases(context, {
                 guildId: testGuildId,
                 title: 'Test',
                 priority: case_1.CasePriority.MEDIUM,
@@ -300,7 +314,7 @@ describe('Performance and Load Testing', () => {
             const concurrentReads = 100;
             const startTime = Date.now();
             // Setup some data first
-            await this.staffService.hireStaff(context, {
+            await staffService.hireStaff(context, {
                 guildId: testGuildId,
                 userId: 'concurrent-read-test',
                 hiredBy: adminUserId,
@@ -312,15 +326,15 @@ describe('Performance and Load Testing', () => {
                 const operation = i % 4;
                 switch (operation) {
                     case 0:
-                        return staffService.getStaffList(testGuildId, `reader-${i}`);
+                        return staffService.getStaffList(context);
                     case 1:
-                        return staffService.getStaffInfo(testGuildId, 'concurrent-read-test', `reader-${i}`);
+                        return staffService.getStaffInfo(context, 'concurrent-read-test');
                     case 2:
-                        return caseService.searchCases({ guildId: testGuildId });
+                        return caseService.searchCases(context, { guildId: testGuildId });
                     case 3:
-                        return staffService.getRoleCounts(testGuildId);
+                        return staffService.getRoleCounts(context);
                     default:
-                        return staffService.getStaffList(testGuildId, `reader-${i}`);
+                        return staffService.getStaffList(context);
                 }
             });
             const results = await Promise.allSettled(readOperations);
@@ -336,7 +350,7 @@ describe('Performance and Load Testing', () => {
             const mixedOperations = Array.from({ length: totalOperations }, (_, i) => {
                 if (i % 3 === 0) {
                     // Write operations (fewer)
-                    return operationQueue.enqueue(() => staffService.hireStaff({
+                    return operationQueue.enqueue(() => staffService.hireStaff(context, {
                         guildId: testGuildId,
                         userId: `concurrent-mixed-${i}`,
                         hiredBy: adminUserId,
@@ -346,7 +360,7 @@ describe('Performance and Load Testing', () => {
                 }
                 else {
                     // Read operations (more frequent)
-                    return staffService.getStaffList(testGuildId, `reader-${i}`);
+                    return staffService.getStaffList(context);
                 }
             });
             const results = await Promise.allSettled(mixedOperations);
@@ -364,7 +378,7 @@ describe('Performance and Load Testing', () => {
             let operationCount = 0;
             const sustainedLoadInterval = setInterval(() => {
                 operationCount++;
-                operations.push(staffService.getStaffList(testGuildId, `sustained-${operationCount}`));
+                operations.push(staffService.getStaffList(context));
             }, operationInterval);
             // Run for sustained duration
             await new Promise(resolve => setTimeout(resolve, sustainedDuration));
@@ -385,7 +399,7 @@ describe('Performance and Load Testing', () => {
                 // Clear previous test data
                 await test_utils_1.TestUtils.clearTestDatabase();
                 // Create test data
-                const setupPromises = Array.from({ length: dataSize }, (_, i) => caseService.createCase({
+                const setupPromises = Array.from({ length: dataSize }, (_, i) => caseService.createCase(context, {
                     guildId: testGuildId,
                     clientId: `scale-client-${i}`,
                     clientUsername: `scaleclient${i}`,
@@ -395,7 +409,7 @@ describe('Performance and Load Testing', () => {
                 await Promise.all(setupPromises);
                 // Test search performance with increasing data
                 const startTime = Date.now();
-                const searchResult = await caseService.searchCases({ guildId: testGuildId });
+                const searchResult = await caseService.searchCases(context, { guildId: testGuildId });
                 const endTime = Date.now();
                 const duration = endTime - startTime;
                 expect(searchResult.length).toBe(dataSize);
@@ -429,7 +443,7 @@ describe('Performance and Load Testing', () => {
             };
             const initialMemory = getMemoryUsage();
             // Perform memory-intensive operations
-            const bulkOperations = Array.from({ length: 1000 }, (_, i) => caseService.createCase({
+            const bulkOperations = Array.from({ length: 1000 }, (_, i) => caseService.createCase(context, {
                 guildId: testGuildId,
                 clientId: `memory-client-${i}`,
                 clientUsername: `memoryclient${i}`,
@@ -450,13 +464,13 @@ describe('Performance and Load Testing', () => {
         it('should handle resource cleanup efficiently', async () => {
             // Create and clean up resources
             for (let cycle = 0; cycle < 5; cycle++) {
-                const cycleOperations = Array.from({ length: 100 }, (_, i) => staffService.getStaffList(testGuildId, `cleanup-test-${cycle}-${i}`));
+                const cycleOperations = Array.from({ length: 100 }, () => staffService.getStaffList(context));
                 await Promise.allSettled(cycleOperations);
                 // Allow time for cleanup
                 await new Promise(resolve => setTimeout(resolve, 100));
             }
             // System should remain stable after multiple cycles
-            const finalTest = await staffService.getStaffList(testGuildId, 'final-cleanup-test');
+            const finalTest = await staffService.getStaffList(context);
             expect(finalTest).toBeDefined();
         });
     });
@@ -467,7 +481,7 @@ describe('Performance and Load Testing', () => {
             const setupPromises = [];
             for (let i = 0; i < setupSize; i++) {
                 if (i % 2 === 0) {
-                    setupPromises.push(staffService.hireStaff({
+                    setupPromises.push(staffService.hireStaff(context, {
                         guildId: testGuildId,
                         userId: `query-staff-${i}`,
                         hiredBy: adminUserId,
@@ -476,7 +490,7 @@ describe('Performance and Load Testing', () => {
                     }));
                 }
                 else {
-                    setupPromises.push(caseService.createCase({
+                    setupPromises.push(caseService.createCase(context, {
                         guildId: testGuildId,
                         clientId: `query-client-${i}`,
                         clientUsername: `queryclient${i}`,

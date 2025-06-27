@@ -1,4 +1,5 @@
 import { User, CommandInteraction, ModalSubmitInteraction } from 'discord.js';
+import { PermissionService } from '../../application/services/permission-service';
 import { BaseCommand } from './base-command';
 export declare class StaffCommands extends BaseCommand {
     private staffRepository;
@@ -7,10 +8,8 @@ export declare class StaffCommands extends BaseCommand {
     private guildConfigRepository;
     private staffService;
     private roleSyncService;
-    private permissionService;
-    private businessRuleValidationService;
+    protected permissionService: PermissionService;
     constructor();
-    private crossEntityValidationService;
     hireStaff(user: User, role: string, robloxUsername: string, reason: string, interaction: CommandInteraction): Promise<void>;
     /**
      * Perform the actual staff hiring (separated for reuse in bypass flow)

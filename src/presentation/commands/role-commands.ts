@@ -57,7 +57,6 @@ export class RoleCommands {
 
   @Slash({ name: 'sync', description: 'Synchronize Discord roles with staff database' })
   async syncRoles(interaction: CommandInteraction): Promise<void> {
-      const context = await this.getPermissionContext(interaction);
     try {
       if (!interaction.guildId || !interaction.guild) {
         await interaction.reply({
@@ -119,7 +118,6 @@ export class RoleCommands {
 
   @Slash({ name: 'status', description: 'View role tracking system status' })
   async roleStatus(interaction: CommandInteraction): Promise<void> {
-      const context = await this.getPermissionContext(interaction);
     try {
       if (!interaction.guildId || !interaction.guild) {
         await interaction.reply({
@@ -484,7 +482,7 @@ export class RoleCommands {
             collector.stop();
           });
 
-          collector.on('end', async (collected, reason) => {
+          collector.on('end', async (_collected, reason) => {
             if (reason === 'time') {
               const timeoutEmbed = EmbedUtils.createErrorEmbed(
                 'Timeout',

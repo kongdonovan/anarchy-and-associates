@@ -36,6 +36,7 @@ const retainer_repository_1 = require("../../infrastructure/repositories/retaine
 const feedback_repository_1 = require("../../infrastructure/repositories/feedback-repository");
 const reminder_repository_1 = require("../../infrastructure/repositories/reminder-repository");
 let StaffCommands = class StaffCommands extends base_command_1.BaseCommand {
+    // businessRuleValidationService is inherited from BaseCommand
     constructor() {
         super();
         this.staffRepository = new staff_repository_1.StaffRepository();
@@ -51,18 +52,19 @@ let StaffCommands = class StaffCommands extends base_command_1.BaseCommand {
         // Initialize services
         this.permissionService = new permission_service_1.PermissionService(this.guildConfigRepository);
         this.businessRuleValidationService = new business_rule_validation_service_1.BusinessRuleValidationService(this.guildConfigRepository, this.staffRepository, this.caseRepository, this.permissionService);
-        this.crossEntityValidationService = new cross_entity_validation_service_1.CrossEntityValidationService(this.staffRepository, this.caseRepository, applicationRepository, jobRepository, retainerRepository, feedbackRepository, reminderRepository, this.auditLogRepository, this.businessRuleValidationService);
+        this.crossEntityValidationService = new cross_entity_validation_service_1.CrossEntityValidationService(this.staffRepository, this.caseRepository, applicationRepository, jobRepository, retainerRepository, feedbackRepository, reminderRepository, this.auditLogRepository);
         this.commandValidationService = new command_validation_service_1.CommandValidationService(this.businessRuleValidationService, this.crossEntityValidationService);
         // Initialize validation services in base class
         this.initializeValidationServices(this.commandValidationService, this.businessRuleValidationService, this.crossEntityValidationService, this.permissionService);
         this.staffService = new staff_service_1.StaffService(this.staffRepository, this.auditLogRepository, this.permissionService, this.businessRuleValidationService);
         this.roleSyncService = new discord_role_sync_service_1.DiscordRoleSyncService(this.staffRepository, this.auditLogRepository);
     }
+    // crossEntityValidationService is inherited from BaseCommand
     async hireStaff(user, role, robloxUsername, reason, interaction) {
         try {
             if (!interaction.guildId || !interaction.guild) {
                 await interaction.reply({
-                    embeds: [this.createErrorEmbed('This command can only be used in a server.')],
+                    embeds: [this.createErrorEmbed('Invalid Server', 'This command can only be used in a server.')],
                     ephemeral: true,
                 });
                 return;
@@ -71,7 +73,7 @@ let StaffCommands = class StaffCommands extends base_command_1.BaseCommand {
             if (!staff_role_1.RoleUtils.isValidRole(role)) {
                 const validRoles = staff_role_1.RoleUtils.getAllRoles().join(', ');
                 await interaction.reply({
-                    embeds: [this.createErrorEmbed(`Invalid role. Valid roles are: ${validRoles}`)],
+                    embeds: [this.createErrorEmbed('Invalid Role', `Invalid role. Valid roles are: ${validRoles}`)],
                     ephemeral: true,
                 });
                 return;
@@ -83,7 +85,7 @@ let StaffCommands = class StaffCommands extends base_command_1.BaseCommand {
                 const canHire = staff_role_1.RoleUtils.canPromote(actorStaff.role, role);
                 if (!canHire) {
                     await interaction.reply({
-                        embeds: [this.createErrorEmbed('You can only hire staff at lower levels than your own role.')],
+                        embeds: [this.createErrorEmbed('Permission Denied', 'You can only hire staff at lower levels than your own role.')],
                         ephemeral: true,
                     });
                     return;
@@ -95,7 +97,7 @@ let StaffCommands = class StaffCommands extends base_command_1.BaseCommand {
         catch (error) {
             logger_1.logger.error('Error in hire staff command:', error);
             await interaction.reply({
-                embeds: [this.createErrorEmbed('An error occurred while processing the command.')],
+                embeds: [this.createErrorEmbed('Error', 'An error occurred while processing the command.')],
                 ephemeral: true,
             });
         }
@@ -117,7 +119,7 @@ let StaffCommands = class StaffCommands extends base_command_1.BaseCommand {
             if (!result.success) {
                 const replyMethod = interaction.replied ? 'editReply' : 'reply';
                 await interaction[replyMethod]({
-                    embeds: [this.createErrorEmbed(result.error || 'Failed to hire staff member.')],
+                    embeds: [this.createErrorEmbed('Hiring Failed', result.error || 'Failed to hire staff member.')],
                 });
                 return;
             }
@@ -134,7 +136,7 @@ let StaffCommands = class StaffCommands extends base_command_1.BaseCommand {
             await interaction[replyMethod]({
                 embeds: [bypassReason ?
                         guild_owner_utils_1.GuildOwnerUtils.createBypassSuccessEmbed(role, result.staff?.role ? staff_role_1.RoleUtils.getRoleLevel(result.staff.role) : 1, bypassReason) :
-                        this.createSuccessEmbed(successMessage)
+                        this.createSuccessEmbed('Success', successMessage)
                 ],
             });
             logger_1.logger.info(`Staff hired: ${user.id} as ${role} by ${interaction.user.id} in guild ${interaction.guildId}`, {
@@ -146,7 +148,7 @@ let StaffCommands = class StaffCommands extends base_command_1.BaseCommand {
             logger_1.logger.error('Error in performStaffHiring:', error);
             const replyMethod = interaction.replied ? 'editReply' : 'reply';
             await interaction[replyMethod]({
-                embeds: [this.createErrorEmbed('An error occurred while processing the hiring.')],
+                embeds: [this.createErrorEmbed('Hiring Error', 'An error occurred while processing the hiring.')],
             });
         }
     }
@@ -213,7 +215,7 @@ let StaffCommands = class StaffCommands extends base_command_1.BaseCommand {
         try {
             if (!interaction.guildId || !interaction.guild) {
                 await interaction.reply({
-                    embeds: [this.createErrorEmbed('This command can only be used in a server.')],
+                    embeds: [this.createErrorEmbed('Invalid Server', 'This command can only be used in a server.')],
                     ephemeral: true,
                 });
                 return;
@@ -223,7 +225,7 @@ let StaffCommands = class StaffCommands extends base_command_1.BaseCommand {
             const targetStaff = await this.staffRepository.findByUserId(interaction.guildId, user.id);
             if (!targetStaff) {
                 await interaction.reply({
-                    embeds: [this.createErrorEmbed('User is not a staff member.')],
+                    embeds: [this.createErrorEmbed('Not Found', 'User is not a staff member.')],
                     ephemeral: true,
                 });
                 return;
@@ -234,7 +236,7 @@ let StaffCommands = class StaffCommands extends base_command_1.BaseCommand {
                 const canFire = staff_role_1.RoleUtils.canDemote(actorStaff.role, targetStaff.role);
                 if (!canFire) {
                     await interaction.reply({
-                        embeds: [this.createErrorEmbed('You can only fire staff members at lower levels than your own role.')],
+                        embeds: [this.createErrorEmbed('Permission Denied', 'You can only fire staff members at lower levels than your own role.')],
                         ephemeral: true,
                     });
                     return;
@@ -243,7 +245,7 @@ let StaffCommands = class StaffCommands extends base_command_1.BaseCommand {
             // Prevent self-firing unless guild owner
             if (user.id === interaction.user.id && !context.isGuildOwner) {
                 await interaction.reply({
-                    embeds: [this.createErrorEmbed('You cannot fire yourself.')],
+                    embeds: [this.createErrorEmbed('Invalid Action', 'You cannot fire yourself.')],
                     ephemeral: true,
                 });
                 return;
@@ -256,7 +258,7 @@ let StaffCommands = class StaffCommands extends base_command_1.BaseCommand {
             });
             if (!result.success) {
                 await interaction.reply({
-                    embeds: [this.createErrorEmbed(result.error || 'Failed to fire staff member.')],
+                    embeds: [this.createErrorEmbed('Termination Failed', result.error || 'Failed to fire staff member.')],
                     ephemeral: true,
                 });
                 return;
@@ -264,14 +266,14 @@ let StaffCommands = class StaffCommands extends base_command_1.BaseCommand {
             // Remove Discord roles
             await this.roleSyncService.removeStaffRoles(interaction.guild, user.id, interaction.user.id);
             await interaction.reply({
-                embeds: [this.createSuccessEmbed(`Successfully fired ${user.displayName} (${targetStaff.role}).`)],
+                embeds: [this.createSuccessEmbed('Staff Terminated', `Successfully fired ${user.displayName} (${targetStaff.role}).`)],
             });
             logger_1.logger.info(`Staff fired: ${user.id} (${targetStaff.role}) by ${interaction.user.id} in guild ${interaction.guildId}`);
         }
         catch (error) {
             logger_1.logger.error('Error in fire staff command:', error);
             await interaction.reply({
-                embeds: [this.createErrorEmbed('An error occurred while processing the command.')],
+                embeds: [this.createErrorEmbed('Error', 'An error occurred while processing the command.')],
                 ephemeral: true,
             });
         }
@@ -280,7 +282,7 @@ let StaffCommands = class StaffCommands extends base_command_1.BaseCommand {
         try {
             if (!interaction.guildId || !interaction.guild) {
                 await interaction.reply({
-                    embeds: [this.createErrorEmbed('This command can only be used in a server.')],
+                    embeds: [this.createErrorEmbed('Invalid Server', 'This command can only be used in a server.')],
                     ephemeral: true,
                 });
                 return;
@@ -290,7 +292,7 @@ let StaffCommands = class StaffCommands extends base_command_1.BaseCommand {
             if (!staff_role_1.RoleUtils.isValidRole(role)) {
                 const validRoles = staff_role_1.RoleUtils.getAllRoles().join(', ');
                 await interaction.reply({
-                    embeds: [this.createErrorEmbed(`Invalid role. Valid roles are: ${validRoles}`)],
+                    embeds: [this.createErrorEmbed('Invalid Role', `Invalid role. Valid roles are: ${validRoles}`)],
                     ephemeral: true,
                 });
                 return;
@@ -299,7 +301,7 @@ let StaffCommands = class StaffCommands extends base_command_1.BaseCommand {
             const targetStaff = await this.staffRepository.findByUserId(interaction.guildId, user.id);
             if (!targetStaff) {
                 await interaction.reply({
-                    embeds: [this.createErrorEmbed('User is not a staff member.')],
+                    embeds: [this.createErrorEmbed('Not Found', 'User is not a staff member.')],
                     ephemeral: true,
                 });
                 return;
@@ -310,7 +312,7 @@ let StaffCommands = class StaffCommands extends base_command_1.BaseCommand {
                 const canPromote = staff_role_1.RoleUtils.canPromote(actorStaff.role, role);
                 if (!canPromote) {
                     await interaction.reply({
-                        embeds: [this.createErrorEmbed('You can only promote staff to roles lower than your own.')],
+                        embeds: [this.createErrorEmbed('Permission Denied', 'You can only promote staff to roles lower than your own.')],
                         ephemeral: true,
                     });
                     return;
@@ -325,7 +327,7 @@ let StaffCommands = class StaffCommands extends base_command_1.BaseCommand {
             });
             if (!result.success) {
                 await interaction.reply({
-                    embeds: [this.createErrorEmbed(result.error || 'Failed to promote staff member.')],
+                    embeds: [this.createErrorEmbed('Promotion Failed', result.error || 'Failed to promote staff member.')],
                     ephemeral: true,
                 });
                 return;
@@ -335,14 +337,14 @@ let StaffCommands = class StaffCommands extends base_command_1.BaseCommand {
                 await this.roleSyncService.syncStaffRole(interaction.guild, result.staff, interaction.user.id);
             }
             await interaction.reply({
-                embeds: [this.createSuccessEmbed(`Successfully promoted ${user.displayName} from ${targetStaff.role} to ${role}.`)],
+                embeds: [this.createSuccessEmbed('Staff Promoted', `Successfully promoted ${user.displayName} from ${targetStaff.role} to ${role}.`)],
             });
             logger_1.logger.info(`Staff promoted: ${user.id} from ${targetStaff.role} to ${role} by ${interaction.user.id} in guild ${interaction.guildId}`);
         }
         catch (error) {
             logger_1.logger.error('Error in promote staff command:', error);
             await interaction.reply({
-                embeds: [this.createErrorEmbed('An error occurred while processing the command.')],
+                embeds: [this.createErrorEmbed('Error', 'An error occurred while processing the command.')],
                 ephemeral: true,
             });
         }
@@ -351,7 +353,7 @@ let StaffCommands = class StaffCommands extends base_command_1.BaseCommand {
         try {
             if (!interaction.guildId || !interaction.guild) {
                 await interaction.reply({
-                    embeds: [this.createErrorEmbed('This command can only be used in a server.')],
+                    embeds: [this.createErrorEmbed('Invalid Server', 'This command can only be used in a server.')],
                     ephemeral: true,
                 });
                 return;
@@ -361,7 +363,7 @@ let StaffCommands = class StaffCommands extends base_command_1.BaseCommand {
             if (!staff_role_1.RoleUtils.isValidRole(role)) {
                 const validRoles = staff_role_1.RoleUtils.getAllRoles().join(', ');
                 await interaction.reply({
-                    embeds: [this.createErrorEmbed(`Invalid role. Valid roles are: ${validRoles}`)],
+                    embeds: [this.createErrorEmbed('Invalid Role', `Invalid role. Valid roles are: ${validRoles}`)],
                     ephemeral: true,
                 });
                 return;
@@ -370,7 +372,7 @@ let StaffCommands = class StaffCommands extends base_command_1.BaseCommand {
             const targetStaff = await this.staffRepository.findByUserId(interaction.guildId, user.id);
             if (!targetStaff) {
                 await interaction.reply({
-                    embeds: [this.createErrorEmbed('User is not a staff member.')],
+                    embeds: [this.createErrorEmbed('Not Found', 'User is not a staff member.')],
                     ephemeral: true,
                 });
                 return;
@@ -381,7 +383,7 @@ let StaffCommands = class StaffCommands extends base_command_1.BaseCommand {
                 const canDemote = staff_role_1.RoleUtils.canDemote(actorStaff.role, targetStaff.role);
                 if (!canDemote) {
                     await interaction.reply({
-                        embeds: [this.createErrorEmbed('You can only demote staff members at lower levels than your own role.')],
+                        embeds: [this.createErrorEmbed('Permission Denied', 'You can only demote staff members at lower levels than your own role.')],
                         ephemeral: true,
                     });
                     return;
@@ -396,7 +398,7 @@ let StaffCommands = class StaffCommands extends base_command_1.BaseCommand {
             });
             if (!result.success) {
                 await interaction.reply({
-                    embeds: [this.createErrorEmbed(result.error || 'Failed to demote staff member.')],
+                    embeds: [this.createErrorEmbed('Demotion Failed', result.error || 'Failed to demote staff member.')],
                     ephemeral: true,
                 });
                 return;
@@ -406,14 +408,14 @@ let StaffCommands = class StaffCommands extends base_command_1.BaseCommand {
                 await this.roleSyncService.syncStaffRole(interaction.guild, result.staff, interaction.user.id);
             }
             await interaction.reply({
-                embeds: [this.createSuccessEmbed(`Successfully demoted ${user.displayName} from ${targetStaff.role} to ${role}.`)],
+                embeds: [this.createSuccessEmbed('Staff Demoted', `Successfully demoted ${user.displayName} from ${targetStaff.role} to ${role}.`)],
             });
             logger_1.logger.info(`Staff demoted: ${user.id} from ${targetStaff.role} to ${role} by ${interaction.user.id} in guild ${interaction.guildId}`);
         }
         catch (error) {
             logger_1.logger.error('Error in demote staff command:', error);
             await interaction.reply({
-                embeds: [this.createErrorEmbed('An error occurred while processing the command.')],
+                embeds: [this.createErrorEmbed('Error', 'An error occurred while processing the command.')],
                 ephemeral: true,
             });
         }
@@ -422,7 +424,7 @@ let StaffCommands = class StaffCommands extends base_command_1.BaseCommand {
         try {
             if (!interaction.guildId) {
                 await interaction.reply({
-                    embeds: [this.createErrorEmbed('This command can only be used in a server.')],
+                    embeds: [this.createErrorEmbed('Invalid Server', 'This command can only be used in a server.')],
                     ephemeral: true,
                 });
                 return;
@@ -431,12 +433,13 @@ let StaffCommands = class StaffCommands extends base_command_1.BaseCommand {
             if (roleFilter && !staff_role_1.RoleUtils.isValidRole(roleFilter)) {
                 const validRoles = staff_role_1.RoleUtils.getAllRoles().join(', ');
                 await interaction.reply({
-                    embeds: [this.createErrorEmbed(`Invalid role filter. Valid roles are: ${validRoles}`)],
+                    embeds: [this.createErrorEmbed('Invalid Filter', `Invalid role filter. Valid roles are: ${validRoles}`)],
                     ephemeral: true,
                 });
                 return;
             }
-            const result = await this.staffService.getStaffList(interaction.guildId, interaction.user.id, roleFilter, 1, 15);
+            const context = await this.getPermissionContext(interaction);
+            const result = await this.staffService.getStaffList(context, roleFilter, 1, 15);
             if (result.staff.length === 0) {
                 const message = roleFilter
                     ? `No staff members found with role: ${roleFilter}`
@@ -446,7 +449,7 @@ let StaffCommands = class StaffCommands extends base_command_1.BaseCommand {
                 });
                 return;
             }
-            const embed = this.createInfoEmbed('👥 Staff List');
+            const embed = this.createInfoEmbed('👥 Staff List', `Showing ${result.staff.length} staff members`);
             // Group staff by role for better organization
             const staffByRole = new Map();
             result.staff.forEach(staff => {
@@ -476,7 +479,7 @@ let StaffCommands = class StaffCommands extends base_command_1.BaseCommand {
         catch (error) {
             logger_1.logger.error('Error in list staff command:', error);
             await interaction.reply({
-                embeds: [this.createErrorEmbed('An error occurred while processing the command.')],
+                embeds: [this.createErrorEmbed('Error', 'An error occurred while processing the command.')],
                 ephemeral: true,
             });
         }
@@ -485,20 +488,21 @@ let StaffCommands = class StaffCommands extends base_command_1.BaseCommand {
         try {
             if (!interaction.guildId) {
                 await interaction.reply({
-                    embeds: [this.createErrorEmbed('This command can only be used in a server.')],
+                    embeds: [this.createErrorEmbed('Invalid Server', 'This command can only be used in a server.')],
                     ephemeral: true,
                 });
                 return;
             }
-            const staff = await this.staffService.getStaffInfo(context, interaction.guildId, user.id, interaction.user.id);
+            const context = await this.getPermissionContext(interaction);
+            const staff = await this.staffService.getStaffInfo(context, user.id);
             if (!staff) {
                 await interaction.reply({
-                    embeds: [this.createErrorEmbed('User is not a staff member.')],
+                    embeds: [this.createErrorEmbed('Not Found', 'User is not a staff member.')],
                     ephemeral: true,
                 });
                 return;
             }
-            const embed = this.createInfoEmbed(`👤 Staff Information: ${user.displayName}`);
+            const embed = this.createInfoEmbed(`👤 Staff Information: ${user.displayName}`, `Detailed information for staff member`);
             embed.addFields({ name: 'Role', value: staff.role, inline: true }, { name: 'Status', value: staff.status, inline: true }, { name: 'Roblox Username', value: staff.robloxUsername, inline: true }, { name: 'Hired Date', value: `<t:${Math.floor(staff.hiredAt.getTime() / 1000)}:F>`, inline: true }, { name: 'Hired By', value: `<@${staff.hiredBy}>`, inline: true }, { name: 'Role Level', value: staff_role_1.RoleUtils.getRoleLevel(staff.role).toString(), inline: true });
             // Add promotion history if available
             if (staff.promotionHistory.length > 0) {
@@ -518,7 +522,7 @@ let StaffCommands = class StaffCommands extends base_command_1.BaseCommand {
         catch (error) {
             logger_1.logger.error('Error in staff info command:', error);
             await interaction.reply({
-                embeds: [this.createErrorEmbed('An error occurred while processing the command.')],
+                embeds: [this.createErrorEmbed('Error', 'An error occurred while processing the command.')],
                 ephemeral: true,
             });
         }
@@ -567,7 +571,7 @@ __decorate([
     (0, discordx_1.Slash)({ name: 'fire', description: 'Fire a staff member' }),
     (0, validation_decorators_1.ValidatePermissions)('senior-staff'),
     (0, validation_decorators_1.ValidateBusinessRules)('staff_member'),
-    ValidateEntity('staff', 'delete'),
+    (0, validation_decorators_1.ValidateEntity)('staff', 'delete'),
     __param(0, (0, discordx_1.SlashOption)({
         name: 'user',
         description: 'User to fire',
@@ -588,7 +592,7 @@ __decorate([
     (0, discordx_1.Slash)({ name: 'promote', description: 'Promote a staff member' }),
     (0, validation_decorators_1.ValidatePermissions)('senior-staff'),
     (0, validation_decorators_1.ValidateBusinessRules)('staff_member', 'role_limit'),
-    ValidateEntity('staff', 'update'),
+    (0, validation_decorators_1.ValidateEntity)('staff', 'update'),
     __param(0, (0, discordx_1.SlashOption)({
         name: 'user',
         description: 'User to promote',
@@ -615,7 +619,7 @@ __decorate([
     (0, discordx_1.Slash)({ name: 'demote', description: 'Demote a staff member' }),
     (0, validation_decorators_1.ValidatePermissions)('senior-staff'),
     (0, validation_decorators_1.ValidateBusinessRules)('staff_member'),
-    ValidateEntity('staff', 'update'),
+    (0, validation_decorators_1.ValidateEntity)('staff', 'update'),
     __param(0, (0, discordx_1.SlashOption)({
         name: 'user',
         description: 'User to demote',

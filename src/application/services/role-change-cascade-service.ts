@@ -67,8 +67,6 @@ export class RoleChangeCascadeService {
       this.caseRepository,
       this.staffRepository,
       this.auditLogRepository,
-      guildConfigRepository,
-      permissionService,
       businessRuleValidationService
     );
 
@@ -279,12 +277,12 @@ export class RoleChangeCascadeService {
     const managingPartners = await this.staffRepository.findByFilters({
       guildId: guild.id,
       role: StaffRole.MANAGING_PARTNER,
-      status: RetainerStatus.ACTIVE
+      status: 'active'
     });
     const seniorPartners = await this.staffRepository.findByFilters({
       guildId: guild.id,
       role: StaffRole.SENIOR_PARTNER,
-      status: RetainerStatus.ACTIVE
+      status: 'active'
     });
     const seniorStaff = [...managingPartners, ...seniorPartners];
 

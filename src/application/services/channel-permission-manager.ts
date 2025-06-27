@@ -5,19 +5,16 @@ import {
   PermissionFlagsBits, 
   TextChannel, 
   CategoryChannel,
-  PermissionOverwrites
 } from 'discord.js';
-import { PermissionService, PermissionContext } from './permission-service';
 import { CaseRepository } from '../../infrastructure/repositories/case-repository';
 import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
 import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-repository';
-import { GuildConfigRepository } from '../../infrastructure/repositories/guild-config-repository';
 import { BusinessRuleValidationService } from './business-rule-validation-service';
-import { Case, CaseStatus } from '../../domain/entities/case';
+import { PermissionContext } from './permission-service';
 import { StaffRole, RoleUtils } from '../../domain/entities/staff-role';
 import { AuditAction } from '../../domain/entities/audit-log';
 import { logger } from '../../infrastructure/logger';
-import { CaseStatus, CasePriority } from '../../domain/entities/case';
+import { CaseStatus } from '../../domain/entities/case';
 
 export interface ChannelPermissionUpdate {
   channelId: string;
@@ -47,8 +44,6 @@ export class ChannelPermissionManager {
   private caseRepository: CaseRepository;
   private staffRepository: StaffRepository;
   private auditLogRepository: AuditLogRepository;
-  private guildConfigRepository: GuildConfigRepository;
-  private permissionService: PermissionService;
   private businessRuleValidationService: BusinessRuleValidationService;
 
   // Channel type patterns for automatic detection
@@ -164,15 +159,11 @@ export class ChannelPermissionManager {
     caseRepository: CaseRepository,
     staffRepository: StaffRepository,
     auditLogRepository: AuditLogRepository,
-    guildConfigRepository: GuildConfigRepository,
-    permissionService: PermissionService,
     businessRuleValidationService: BusinessRuleValidationService
   ) {
     this.caseRepository = caseRepository;
     this.staffRepository = staffRepository;
     this.auditLogRepository = auditLogRepository;
-    this.guildConfigRepository = guildConfigRepository;
-    this.permissionService = permissionService;
     this.businessRuleValidationService = businessRuleValidationService;
   }
 

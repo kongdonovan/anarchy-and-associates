@@ -12,7 +12,7 @@ import {
 import { RepairService, RepairResult, HealthCheckResult } from '../../application/services/repair-service';
 import { PermissionService, PermissionContext } from '../../application/services/permission-service';
 import { GuildConfigRepository } from '../../infrastructure/repositories/guild-config-repository';
-import { OrphanedChannelCleanupService, OrphanedChannelDetails, CleanupReport } from '../../application/services/orphaned-channel-cleanup-service';
+import { OrphanedChannelCleanupService } from '../../application/services/orphaned-channel-cleanup-service';
 import { CaseChannelArchiveService } from '../../application/services/case-channel-archive-service';
 import { CaseRepository } from '../../infrastructure/repositories/case-repository';
 import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-repository';
@@ -85,8 +85,7 @@ export class RepairCommands {
       retainerRepository,
       feedbackRepository,
       reminderRepository,
-      auditLogRepository,
-      businessRuleValidationService
+      auditLogRepository
     );
   }
 
@@ -877,15 +876,14 @@ export class RepairCommands {
     name: 'integrity-check',
     description: 'Scan for data integrity issues across all entities'
   })
-  @SlashOption({
-    name: 'auto-repair',
-    description: 'Automatically repair issues that can be fixed',
-    type: ApplicationCommandOptionType.Boolean,
-    required: false
-  })
   async integrityCheck(
     interaction: CommandInteraction,
-    @SlashOption({ name: 'auto-repair' }) autoRepair: boolean = false
+    @SlashOption({ 
+      name: 'auto-repair',
+      description: 'Automatically repair issues that can be fixed',
+      type: ApplicationCommandOptionType.Boolean,
+      required: false
+    }) autoRepair: boolean = false
   ): Promise<void> {
     try {
       // Check admin permission
@@ -939,9 +937,9 @@ export class RepairCommands {
 
         // Wait for confirmation
         const filter = (m: any) => m.author.id === interaction.user.id && m.content === 'REPAIR';
-        const collector = interaction.channel?.createMessageCollector({ filter, time: 30000, max: 1 });
+        const collector = (interaction.channel as any)?.createMessageCollector({ filter, time: 30000, max: 1 });
 
-        collector?.on('collect', async (message) => {
+        collector?.on('collect', async (message: any) => {
           try {
             await message.delete();
 
@@ -949,7 +947,7 @@ export class RepairCommands {
             const repairResult = await this.crossEntityValidationService.repairIntegrityIssues(report.issues);
             
             // Create repair result embed
-            const repairResultEmbed = this.createRepairResultEmbed(repairResult);
+            const repairResultEmbed = this.createValidationRepairResultEmbed(repairResult);
 
             await interaction.editReply({
               embeds: [reportEmbed, repairResultEmbed],
@@ -964,7 +962,7 @@ export class RepairCommands {
           }
         });
 
-        collector?.on('end', (collected) => {
+        collector?.on('end', (collected: any) => {
           if (collected.size === 0) {
             interaction.editReply({
               embeds: [reportEmbed],
@@ -1035,7 +1033,7 @@ export class RepairCommands {
     return embed;
   }
 
-  private createRepairResultEmbed(result: ValidationRepairResult): EmbedBuilder {
+  private createValidationRepairResultEmbed(result: ValidationRepairResult): EmbedBuilder {
     const embed = new EmbedBuilder()
       .setTitle('Auto-Repair Results')
       .setColor(result.issuesFailed === 0 ? 0x00FF00 : 0xFFA500)

@@ -129,7 +129,7 @@ class CommandValidationService {
     /**
      * Create validation bypass modal
      */
-    createBypassModal(bypassRequests) {
+    createBypassModal(_bypassRequests) {
         const modal = new discord_js_1.ModalBuilder()
             .setCustomId(`validation_bypass_${Date.now()}`)
             .setTitle('⚠️ Validation Override Required');
@@ -170,14 +170,18 @@ class CommandValidationService {
      */
     async extractValidationContext(interaction, permissionContext) {
         const commandName = interaction.commandName;
-        const subcommandName = interaction.options.getSubcommand(false) || undefined;
-        // Extract all options
+        let subcommandName = undefined;
         const options = {};
-        interaction.options.data.forEach(option => {
-            if (option.value !== undefined) {
-                options[option.name] = option.value;
-            }
-        });
+        // Check if interaction has options (ChatInputCommandInteraction)
+        if (interaction.isChatInputCommand()) {
+            subcommandName = interaction.options.getSubcommand(false) || undefined;
+            // Extract all options
+            interaction.options.data.forEach(option => {
+                if (option.value !== undefined) {
+                    options[option.name] = option.value;
+                }
+            });
+        }
         return {
             interaction,
             permissionContext,
@@ -310,11 +314,13 @@ class CommandValidationService {
                 priority: 2,
                 bypassable: false,
                 validate: async (ctx) => {
-                    const validationResult = await this.crossEntityValidationService.validateBeforeOperation(entityValidation.entityType, entityValidation.operation, ctx.permissionContext.guildId, ctx.options);
+                    const entity = ctx.options || {};
+                    entity.guildId = ctx.permissionContext.guildId;
+                    const validationIssues = await this.crossEntityValidationService.validateBeforeOperation(entity, entityValidation.entityType, entityValidation.operation, { guildId: ctx.permissionContext.guildId });
                     return {
-                        valid: validationResult.valid,
-                        errors: validationResult.errors.map(e => e.message),
-                        warnings: validationResult.warnings.map(w => w.message),
+                        valid: validationIssues.length === 0,
+                        errors: validationIssues.filter(i => i.severity === 'critical').map(i => i.message),
+                        warnings: validationIssues.filter(i => i.severity === 'warning').map(i => i.message),
                         bypassAvailable: false
                     };
                 }
@@ -359,8 +365,11 @@ class CommandValidationService {
             const sortedEntries = Array.from(this.validationCache.entries())
                 .sort(([, a], [, b]) => a.timestamp - b.timestamp);
             // Remove oldest 20 entries
-            for (let i = 0; i < 20; i++) {
-                this.validationCache.delete(sortedEntries[i][0]);
+            for (let i = 0; i < 20 && i < sortedEntries.length; i++) {
+                const entry = sortedEntries[i];
+                if (entry) {
+                    this.validationCache.delete(entry[0]);
+                }
             }
         }
     }

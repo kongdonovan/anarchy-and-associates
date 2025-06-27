@@ -6,7 +6,6 @@ const job_commands_1 = require("../../../presentation/commands/job-commands");
 const staff_role_1 = require("../../../domain/entities/staff-role");
 const validation_decorators_1 = require("../../../presentation/decorators/validation-decorators");
 const mongodb_1 = require("mongodb");
-const retainer_1 = require("../../../domain/entities/retainer");
 // Mock Discord.js ApplicationCommandOptionType
 jest.mock('discord.js', () => ({
     ...jest.requireActual('discord.js'),
@@ -187,7 +186,7 @@ describe('Command Validation Tests', () => {
                 mockStaffRepo.findByUserId = jest.fn().mockResolvedValue({
                     userId: mockUser.id,
                     role: staff_role_1.StaffRole.JUNIOR_PARTNER,
-                    status: retainer_1.RetainerStatus.ACTIVE
+                    status: 'active'
                 });
                 mockBusinessRuleService.validateStaffMember = jest.fn().mockResolvedValue({
                     valid: true,
@@ -255,7 +254,7 @@ describe('Command Validation Tests', () => {
                 mockStaffRepo.findByUserId = jest.fn().mockResolvedValue({
                     userId: mockUser.id,
                     role: staff_role_1.StaffRole.SENIOR_PARTNER,
-                    status: retainer_1.RetainerStatus.ACTIVE
+                    status: 'active'
                 });
                 mockBusinessRuleService.validateStaffMember = jest.fn().mockResolvedValue({
                     valid: true,
@@ -278,12 +277,10 @@ describe('Command Validation Tests', () => {
     });
     describe('CaseCommands Validation', () => {
         let caseCommands;
-        let mockCaseRepo;
         let mockPermissionService;
         beforeEach(() => {
             caseCommands = new case_commands_1.CaseCommands();
             // Access private services
-            mockCaseRepo = caseCommands.caseRepository;
             mockPermissionService = caseCommands.permissionService;
         });
         describe('closeCase validation', () => {
@@ -392,7 +389,7 @@ describe('Command Validation Tests', () => {
                     warnings: [],
                     bypassAvailable: false
                 });
-                await jobsCommands.add('Senior Associate', staff_role_1.StaffRole.SENIOR_ASSOCIATE, 'We are looking for a Senior Associate...', 'requirements', 2, mockInteraction);
+                await jobsCommands.add('Senior Associate', 'We are looking for a Senior Associate...', staff_role_1.StaffRole.SENIOR_ASSOCIATE, 'discord-role-id', mockInteraction);
                 expect(mockInteraction.reply).toHaveBeenCalledWith(expect.objectContaining({
                     embeds: expect.arrayContaining([
                         expect.objectContaining({
@@ -420,7 +417,7 @@ describe('Command Validation Tests', () => {
                     warnings: [],
                     bypassAvailable: true
                 });
-                await jobsCommands.add('Senior Associate', staff_role_1.StaffRole.SENIOR_ASSOCIATE, 'We are looking for a Senior Associate...', 'requirements', 2, mockInteraction);
+                await jobsCommands.add('Senior Associate', 'We are looking for a Senior Associate...', staff_role_1.StaffRole.SENIOR_ASSOCIATE, 'discord-role-id', mockInteraction);
                 expect(mockInteraction.reply).toHaveBeenCalledWith(expect.objectContaining({
                     embeds: expect.arrayContaining([
                         expect.objectContaining({

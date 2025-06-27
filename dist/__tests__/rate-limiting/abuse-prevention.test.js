@@ -12,6 +12,8 @@ const case_counter_repository_1 = require("../../infrastructure/repositories/cas
 const staff_role_1 = require("../../domain/entities/staff-role");
 // import { CasePriority } from '../../domain/entities/case'; // Not used
 const test_utils_1 = require("../helpers/test-utils");
+const permission_service_1 = require("../../application/services/permission-service");
+const business_rule_validation_service_1 = require("../../application/services/business-rule-validation-service");
 const database_helpers_1 = require("../helpers/database-helpers");
 /**
  * Rate Limiting and Abuse Prevention Tests
@@ -35,8 +37,17 @@ describe('Rate Limiting and Abuse Prevention Tests', () => {
     let auditLogRepository;
     let guildConfigRepository;
     let caseCounterRepository;
+    let permissionService;
+    let businessRuleValidationService;
     const testGuildId = 'rate-limit-test-guild';
-    // const adminUserId = 'admin-123'; // Not used in these tests
+    const adminUserId = 'admin-123';
+    // Create a test context
+    const context = {
+        guildId: testGuildId,
+        userId: adminUserId,
+        userRoles: ['admin_role'],
+        isGuildOwner: false
+    };
     beforeAll(async () => {
         await database_helpers_1.DatabaseTestHelpers.setupTestDatabase();
     });
@@ -51,8 +62,10 @@ describe('Rate Limiting and Abuse Prevention Tests', () => {
         guildConfigRepository = new guild_config_repository_1.GuildConfigRepository();
         caseCounterRepository = new case_counter_repository_1.CaseCounterRepository();
         // Initialize services
-        staffService = new staff_service_1.StaffService(staffRepository, auditLogRepository);
-        caseService = new case_service_1.CaseService(caseRepository, caseCounterRepository, guildConfigRepository);
+        permissionService = new permission_service_1.PermissionService(guildConfigRepository);
+        businessRuleValidationService = new business_rule_validation_service_1.BusinessRuleValidationService(guildConfigRepository, staffRepository, caseRepository, permissionService);
+        staffService = new staff_service_1.StaffService(staffRepository, auditLogRepository, permissionService, businessRuleValidationService);
+        caseService = new case_service_1.CaseService(caseRepository, caseCounterRepository, guildConfigRepository, permissionService, businessRuleValidationService);
         // Clear state
         await test_utils_1.TestUtils.clearTestDatabase();
         operationQueue.clearQueue();
@@ -73,7 +86,8 @@ describe('Rate Limiting and Abuse Prevention Tests', () => {
                 'senior-staff': [],
                 case: [],
                 config: [],
-                retainer: [],
+                lawyer: [],
+                'lead-attorney': [],
                 repair: []
             },
             adminRoles: [],
@@ -337,7 +351,7 @@ describe('Rate Limiting and Abuse Prevention Tests', () => {
         it('should prevent abuse of staff hiring operations', async () => {
             const abusiveUser = 'abusive-hirer';
             // First hire should succeed
-            const firstHire = await this.staffService.hireStaff(context, {
+            const firstHire = await staffService.hireStaff(context, {
                 guildId: testGuildId,
                 userId: 'hire-victim-1',
                 hiredBy: abusiveUser,
@@ -347,7 +361,7 @@ describe('Rate Limiting and Abuse Prevention Tests', () => {
             expect(firstHire.success).toBe(true);
             // Rapid subsequent hires should be limited by rate limiting
             // (In production, rate limiting would be checked before service calls)
-            const rapidHires = Array.from({ length: 10 }, (_, i) => staffService.hireStaff({
+            const rapidHires = Array.from({ length: 10 }, (_, i) => staffService.hireStaff(context, {
                 guildId: testGuildId,
                 userId: `hire-victim-${i + 2}`,
                 hiredBy: abusiveUser,
@@ -371,7 +385,7 @@ describe('Rate Limiting and Abuse Prevention Tests', () => {
                 if (!rateLimitResult.allowed) {
                     return { blocked: true, reason: 'Rate limited' };
                 }
-                return caseService.createCase({
+                return caseService.createCase(context, {
                     guildId: testGuildId,
                     clientId: `abuse-client-${i}`,
                     clientUsername: `abuseclient${i}`,
@@ -394,7 +408,7 @@ describe('Rate Limiting and Abuse Prevention Tests', () => {
                 // Check rate limit before each operation
                 const rateLimitResult = rateLimiter.checkRateLimit(adminUser);
                 if (rateLimitResult.allowed) {
-                    adminOperations.push(staffService.getStaffList(testGuildId, adminUser));
+                    adminOperations.push(staffService.getStaffList(context));
                 }
                 // Reasonable delay between admin operations
                 await new Promise(resolve => setTimeout(resolve, 100));

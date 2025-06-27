@@ -5,7 +5,7 @@ const logger_1 = require("../../infrastructure/logger");
 const audit_log_1 = require("../../domain/entities/audit-log");
 const case_1 = require("../../domain/entities/case");
 class CrossEntityValidationService {
-    constructor(staffRepository, caseRepository, applicationRepository, jobRepository, retainerRepository, feedbackRepository, reminderRepository, auditLogRepository, businessRuleValidationService) {
+    constructor(staffRepository, caseRepository, applicationRepository, jobRepository, retainerRepository, feedbackRepository, reminderRepository, auditLogRepository) {
         this.staffRepository = staffRepository;
         this.caseRepository = caseRepository;
         this.applicationRepository = applicationRepository;
@@ -14,13 +14,12 @@ class CrossEntityValidationService {
         this.feedbackRepository = feedbackRepository;
         this.reminderRepository = reminderRepository;
         this.auditLogRepository = auditLogRepository;
-        this.businessRuleValidationService = businessRuleValidationService;
         this.validationRules = new Map();
         this.validationCache = new Map();
         this.CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
         // Performance optimization
         this.ruleDependencyGraph = new Map();
-        this.ruleExecutionOrder = [];
+        // private ruleExecutionOrder: string[] = []; // TODO: Use for ordered rule execution
         this.asyncValidationQueue = new Map();
         this.MAX_CONCURRENT_VALIDATIONS = 10;
         this.initializeValidationRules();
@@ -40,12 +39,12 @@ class CrossEntityValidationService {
                     issues.push({
                         severity: 'critical',
                         entityType: 'staff',
-                        entityId: staff._id,
+                        entityId: staff._id.toString(),
                         field: 'status',
                         message: `Invalid staff status: ${staff.status}`,
                         canAutoRepair: true,
                         repairAction: async () => {
-                            await this.staffRepository.update(staff._id, { status: 'inactive' });
+                            await this.staffRepository.update(staff._id.toString(), { status: 'inactive' });
                         }
                     });
                 }
@@ -67,12 +66,12 @@ class CrossEntityValidationService {
                         issues.push({
                             severity: 'critical',
                             entityType: 'case',
-                            entityId: caseEntity._id,
+                            entityId: caseEntity._id.toString(),
                             field: 'leadAttorneyId',
                             message: `Lead attorney ${caseEntity.leadAttorneyId} not found in staff records`,
                             canAutoRepair: true,
                             repairAction: async () => {
-                                await this.caseRepository.update(caseEntity._id, { leadAttorneyId: undefined });
+                                await this.caseRepository.update(caseEntity._id.toString(), { leadAttorneyId: undefined });
                             }
                         });
                     }
@@ -80,7 +79,7 @@ class CrossEntityValidationService {
                         issues.push({
                             severity: 'warning',
                             entityType: 'case',
-                            entityId: caseEntity._id,
+                            entityId: caseEntity._id.toString(),
                             field: 'leadAttorneyId',
                             message: `Lead attorney ${caseEntity.leadAttorneyId} is not active (status: ${leadAttorney.status})`,
                             canAutoRepair: false
@@ -94,13 +93,13 @@ class CrossEntityValidationService {
                         issues.push({
                             severity: 'critical',
                             entityType: 'case',
-                            entityId: caseEntity._id,
+                            entityId: caseEntity._id.toString(),
                             field: 'assignedLawyerIds',
                             message: `Assigned lawyer ${lawyerId} not found in staff records`,
                             canAutoRepair: true,
                             repairAction: async () => {
-                                const updatedLawyers = caseEntity.assignedLawyerIds.filter(id => id !== lawyerId);
-                                await this.caseRepository.update(caseEntity._id, { assignedLawyerIds: updatedLawyers });
+                                const updatedLawyers = caseEntity.assignedLawyerIds.filter((id) => id !== lawyerId);
+                                await this.caseRepository.update(caseEntity._id.toString(), { assignedLawyerIds: updatedLawyers });
                             }
                         });
                     }
@@ -108,7 +107,7 @@ class CrossEntityValidationService {
                         issues.push({
                             severity: 'warning',
                             entityType: 'case',
-                            entityId: caseEntity._id,
+                            entityId: caseEntity._id.toString(),
                             field: 'assignedLawyerIds',
                             message: `Assigned lawyer ${lawyerId} is not active (status: ${lawyer.status})`,
                             canAutoRepair: false
@@ -133,12 +132,12 @@ class CrossEntityValidationService {
                             issues.push({
                                 severity: 'warning',
                                 entityType: 'case',
-                                entityId: caseEntity._id,
+                                entityId: caseEntity._id.toString(),
                                 field: 'channelId',
                                 message: `Case channel ${caseEntity.channelId} not found in Discord`,
                                 canAutoRepair: true,
                                 repairAction: async () => {
-                                    await this.caseRepository.update(caseEntity._id, { channelId: undefined });
+                                    await this.caseRepository.update(caseEntity._id.toString(), { channelId: undefined });
                                 }
                             });
                         }
@@ -163,22 +162,22 @@ class CrossEntityValidationService {
                     issues.push({
                         severity: 'critical',
                         entityType: 'application',
-                        entityId: application._id,
+                        entityId: application._id.toString(),
                         field: 'jobId',
                         message: `Referenced job ${application.jobId} not found`,
                         canAutoRepair: false
                     });
                 }
-                else if (job.status !== 'open' && application.status === 'pending') {
+                else if (!job.isOpen && application.status === 'pending') {
                     issues.push({
                         severity: 'warning',
                         entityType: 'application',
-                        entityId: application._id,
+                        entityId: application._id.toString(),
                         field: 'status',
-                        message: `Application is pending for a ${job.status} job`,
+                        message: `Application is pending for a closed job`,
                         canAutoRepair: true,
                         repairAction: async () => {
-                            await this.applicationRepository.update(application._id, {
+                            await this.applicationRepository.update(application._id.toString(), {
                                 status: 'rejected',
                                 reviewReason: 'Job closed before review'
                             });
@@ -201,7 +200,7 @@ class CrossEntityValidationService {
                         issues.push({
                             severity: 'warning',
                             entityType: 'application',
-                            entityId: application._id,
+                            entityId: application._id.toString(),
                             field: 'reviewedBy',
                             message: `Reviewer ${application.reviewedBy} not found in staff records`,
                             canAutoRepair: false
@@ -224,7 +223,7 @@ class CrossEntityValidationService {
                     issues.push({
                         severity: 'critical',
                         entityType: 'retainer',
-                        entityId: retainer._id,
+                        entityId: retainer._id.toString(),
                         field: 'lawyerId',
                         message: `Lawyer ${retainer.lawyerId} not found in staff records`,
                         canAutoRepair: false
@@ -234,7 +233,7 @@ class CrossEntityValidationService {
                     issues.push({
                         severity: 'warning',
                         entityType: 'retainer',
-                        entityId: retainer._id,
+                        entityId: retainer._id.toString(),
                         field: 'lawyerId',
                         message: `Lawyer ${retainer.lawyerId} is not active (status: ${lawyer.status})`,
                         canAutoRepair: false
@@ -257,12 +256,12 @@ class CrossEntityValidationService {
                         issues.push({
                             severity: 'warning',
                             entityType: 'feedback',
-                            entityId: feedback._id,
+                            entityId: feedback._id.toString(),
                             field: 'targetStaffId',
                             message: `Target staff member ${feedback.targetStaffId} not found`,
                             canAutoRepair: true,
                             repairAction: async () => {
-                                await this.feedbackRepository.update(feedback._id, {
+                                await this.feedbackRepository.update(feedback._id.toString(), {
                                     targetStaffId: undefined,
                                     targetStaffUsername: undefined,
                                     isForFirm: true
@@ -288,12 +287,12 @@ class CrossEntityValidationService {
                         issues.push({
                             severity: 'warning',
                             entityType: 'reminder',
-                            entityId: reminder._id,
+                            entityId: reminder._id.toString(),
                             field: 'caseId',
                             message: `Referenced case ${reminder.caseId} not found`,
                             canAutoRepair: true,
                             repairAction: async () => {
-                                await this.reminderRepository.update(reminder._id, { caseId: undefined });
+                                await this.reminderRepository.update(reminder._id.toString(), { caseId: undefined });
                             }
                         });
                     }
@@ -316,12 +315,12 @@ class CrossEntityValidationService {
                             issues.push({
                                 severity: 'warning',
                                 entityType: 'reminder',
-                                entityId: reminder._id,
+                                entityId: reminder._id.toString(),
                                 field: 'channelId',
                                 message: `Reminder channel ${reminder.channelId} not found in Discord`,
                                 canAutoRepair: true,
                                 repairAction: async () => {
-                                    await this.reminderRepository.update(reminder._id, { isActive: false });
+                                    await this.reminderRepository.update(reminder._id.toString(), { isActive: false });
                                 }
                             });
                         }
@@ -346,29 +345,34 @@ class CrossEntityValidationService {
             this.ruleDependencyGraph.set(name, dependencies);
         }
         // Topological sort to determine execution order
-        this.ruleExecutionOrder = this.topologicalSort();
+        // this.ruleExecutionOrder = this.topologicalSort(); // TODO: Use for ordered rule execution
     }
-    /**
-     * Topological sort for rule dependencies
-     */
-    topologicalSort() {
-        const visited = new Set();
-        const result = [];
-        const visit = (ruleName) => {
-            if (visited.has(ruleName))
-                return;
-            visited.add(ruleName);
-            const dependencies = this.ruleDependencyGraph.get(ruleName) || new Set();
-            for (const dep of dependencies) {
-                visit(dep);
-            }
-            result.push(ruleName);
-        };
-        for (const ruleName of this.validationRules.keys()) {
-            visit(ruleName);
-        }
-        return result;
-    }
+    // TODO: Implement ordered rule execution
+    // /**
+    //  * Topological sort for rule dependencies
+    //  */
+    // private topologicalSort(): string[] {
+    //   const visited = new Set<string>();
+    //   const result: string[] = [];
+    //   
+    //   const visit = (ruleName: string) => {
+    //     if (visited.has(ruleName)) return;
+    //     visited.add(ruleName);
+    //     
+    //     const dependencies = this.ruleDependencyGraph.get(ruleName) || new Set();
+    //     for (const dep of dependencies) {
+    //       visit(dep);
+    //     }
+    //     
+    //     result.push(ruleName);
+    //   };
+    //   
+    //   for (const ruleName of this.validationRules.keys()) {
+    //     visit(ruleName);
+    //   }
+    //   
+    //   return result;
+    // }
     /**
      * Initialize advanced cross-entity validation rules
      */
@@ -380,13 +384,9 @@ class CrossEntityValidationService {
             entityType: 'staff',
             priority: 95,
             dependencies: ['staff-active-check'],
-            validate: async (staff, context) => {
+            validate: async (staff, _context) => {
                 const issues = [];
                 // Check if staff member has appropriate role for their assigned cases
-                const assignedCases = await this.caseRepository.findByFilters({
-                    guildId: staff.guildId,
-                    assignedLawyerIds: { $in: [staff.userId] }
-                });
                 const leadCases = await this.caseRepository.findByFilters({
                     guildId: staff.guildId,
                     leadAttorneyId: staff.userId
@@ -396,7 +396,7 @@ class CrossEntityValidationService {
                     issues.push({
                         severity: 'critical',
                         entityType: 'staff',
-                        entityId: staff._id,
+                        entityId: staff._id.toString(),
                         field: 'role',
                         message: `Staff member with role ${staff.role} cannot be lead attorney on ${leadCases.length} cases`,
                         canAutoRepair: false
@@ -411,32 +411,30 @@ class CrossEntityValidationService {
             description: 'Validate case assignments are balanced',
             entityType: 'staff',
             priority: 85,
-            validate: async (staff, context) => {
+            validate: async (staff, _context) => {
                 const issues = [];
                 if (staff.status !== 'active')
                     return issues;
-                const assignedCases = await this.caseRepository.findByFilters({
-                    guildId: staff.guildId,
-                    assignedLawyerIds: { $in: [staff.userId] },
-                    status: case_1.CaseStatus.IN_PROGRESS
-                });
+                const assignedCases = await this.caseRepository.findAssignedToLawyer(staff.userId);
+                const inProgressCases = assignedCases.filter(c => c.guildId === staff.guildId &&
+                    c.status === case_1.CaseStatus.IN_PROGRESS);
                 // Workload limits by role
                 const workloadLimits = {
-                    'managing_partner': 20,
-                    'senior_partner': 15,
-                    'junior_partner': 12,
-                    'senior_associate': 10,
-                    'junior_associate': 8,
+                    'managing partner': 20,
+                    'senior partner': 15,
+                    'junior partner': 12,
+                    'senior associate': 10,
+                    'junior associate': 8,
                     'paralegal': 5
                 };
                 const limit = workloadLimits[staff.role.toLowerCase()] || 10;
-                if (assignedCases.length > limit) {
+                if (inProgressCases.length > limit) {
                     issues.push({
                         severity: 'warning',
                         entityType: 'staff',
-                        entityId: staff._id,
+                        entityId: staff._id.toString(),
                         field: 'caseLoad',
-                        message: `Staff member has ${assignedCases.length} active cases, exceeding recommended limit of ${limit}`,
+                        message: `Staff member has ${inProgressCases.length} active cases, exceeding recommended limit of ${limit}`,
                         canAutoRepair: false
                     });
                 }
@@ -449,7 +447,7 @@ class CrossEntityValidationService {
             description: 'Detect circular references in entity relationships',
             entityType: 'staff',
             priority: 100,
-            validate: async (staff, context) => {
+            validate: async (staff, _context) => {
                 const issues = [];
                 // Check promotion history for circular references
                 const promotedByChain = new Set();
@@ -459,7 +457,7 @@ class CrossEntityValidationService {
                         issues.push({
                             severity: 'critical',
                             entityType: 'staff',
-                            entityId: staff._id,
+                            entityId: staff._id.toString(),
                             field: 'promotionHistory',
                             message: 'Circular reference detected in promotion history',
                             canAutoRepair: false
@@ -470,7 +468,7 @@ class CrossEntityValidationService {
                         issues.push({
                             severity: 'warning',
                             entityType: 'staff',
-                            entityId: staff._id,
+                            entityId: staff._id.toString(),
                             field: 'promotionHistory',
                             message: 'Duplicate promoter detected in promotion history',
                             canAutoRepair: false
@@ -487,7 +485,7 @@ class CrossEntityValidationService {
             description: 'Validate temporal consistency across entities',
             entityType: 'case',
             priority: 92,
-            validate: async (caseEntity, context) => {
+            validate: async (caseEntity, _context) => {
                 const issues = [];
                 // Check if case was created before assigned lawyers were hired
                 for (const lawyerId of caseEntity.assignedLawyerIds) {
@@ -496,13 +494,13 @@ class CrossEntityValidationService {
                         issues.push({
                             severity: 'critical',
                             entityType: 'case',
-                            entityId: caseEntity._id,
+                            entityId: caseEntity._id.toString(),
                             field: 'assignedLawyerIds',
                             message: `Lawyer ${lawyerId} was hired after case was created`,
                             canAutoRepair: true,
                             repairAction: async () => {
-                                const updatedLawyers = caseEntity.assignedLawyerIds.filter(id => id !== lawyerId);
-                                await this.caseRepository.update(caseEntity._id, { assignedLawyerIds: updatedLawyers });
+                                const updatedLawyers = caseEntity.assignedLawyerIds.filter((id) => id !== lawyerId);
+                                await this.caseRepository.update(caseEntity._id.toString(), { assignedLawyerIds: updatedLawyers });
                             }
                         });
                     }
@@ -512,12 +510,12 @@ class CrossEntityValidationService {
                     issues.push({
                         severity: 'critical',
                         entityType: 'case',
-                        entityId: caseEntity._id,
+                        entityId: caseEntity._id.toString(),
                         field: 'closedAt',
                         message: 'Case closed date is before creation date',
                         canAutoRepair: true,
                         repairAction: async () => {
-                            await this.caseRepository.update(caseEntity._id, { closedAt: undefined });
+                            await this.caseRepository.update(caseEntity._id.toString(), { closedAt: undefined });
                         }
                     });
                 }
@@ -531,19 +529,19 @@ class CrossEntityValidationService {
             entityType: 'application',
             priority: 88,
             dependencies: ['application-job-reference'],
-            validate: async (application, context) => {
+            validate: async (application, _context) => {
                 const issues = [];
-                // Check if review date is after submission date
-                if (application.reviewedAt && application.submittedAt && application.reviewedAt < application.submittedAt) {
+                // Check if review date is after creation date
+                if (application.reviewedAt && application.createdAt && application.reviewedAt < application.createdAt) {
                     issues.push({
                         severity: 'critical',
                         entityType: 'application',
-                        entityId: application._id,
+                        entityId: application._id.toString(),
                         field: 'reviewedAt',
-                        message: 'Application reviewed before it was submitted',
+                        message: 'Application reviewed before it was created',
                         canAutoRepair: true,
                         repairAction: async () => {
-                            await this.applicationRepository.update(application._id, { reviewedAt: undefined });
+                            await this.applicationRepository.update(application._id.toString(), { reviewedAt: undefined });
                         }
                     });
                 }
@@ -552,7 +550,7 @@ class CrossEntityValidationService {
                     issues.push({
                         severity: 'warning',
                         entityType: 'application',
-                        entityId: application._id,
+                        entityId: application._id.toString(),
                         field: 'reviewedBy',
                         message: 'Accepted application has no reviewer',
                         canAutoRepair: false
@@ -562,18 +560,23 @@ class CrossEntityValidationService {
             }
         });
     }
-    /**
-     * Perform validation with memoization
-     */
-    async memoizedValidation(key, validationFn) {
-        const cached = this.validationCache.get(key);
-        if (cached && (Date.now() - cached.timestamp) < this.CACHE_TTL_MS) {
-            return cached.result;
-        }
-        const result = await validationFn();
-        this.validationCache.set(key, { result, timestamp: Date.now() });
-        return result;
-    }
+    // TODO: Implement memoized validation for performance optimization
+    // /**
+    //  * Perform validation with memoization
+    //  */
+    // private async memoizedValidation(
+    //   key: string,
+    //   validationFn: () => Promise<ValidationIssue[]>
+    // ): Promise<ValidationIssue[]> {
+    //   const cached = this.validationCache.get(key);
+    //   if (cached && (Date.now() - cached.timestamp) < this.CACHE_TTL_MS) {
+    //     return cached.result;
+    //   }
+    //   
+    //   const result = await validationFn();
+    //   this.validationCache.set(key, { result, timestamp: Date.now() });
+    //   return result;
+    // }
     /**
      * Async validation with queue management
      */
@@ -619,11 +622,11 @@ class CrossEntityValidationService {
     /**
      * Check data consistency across entities
      */
-    async checkDataConsistency(guildId, context) {
+    async checkDataConsistency(guildId, _context) {
         const issues = [];
         try {
             // Check case assignment consistency
-            const cases = await this.caseRepository.findByGuildId(guildId);
+            const cases = await this.caseRepository.findByFilters({ guildId });
             const staff = await this.staffRepository.findByGuildId(guildId);
             const staffIds = new Set(staff.map(s => s.userId));
             for (const caseEntity of cases) {
@@ -633,13 +636,13 @@ class CrossEntityValidationService {
                         issues.push({
                             severity: 'critical',
                             entityType: 'case',
-                            entityId: caseEntity._id,
+                            entityId: caseEntity._id.toString(),
                             field: 'assignedLawyerIds',
                             message: `Assigned lawyer ${lawyerId} not found in staff records`,
                             canAutoRepair: true,
                             repairAction: async () => {
-                                const updatedLawyers = caseEntity.assignedLawyerIds.filter(id => id !== lawyerId);
-                                await this.caseRepository.update(caseEntity._id, { assignedLawyerIds: updatedLawyers });
+                                const updatedLawyers = caseEntity.assignedLawyerIds.filter((id) => id !== lawyerId);
+                                await this.caseRepository.update(caseEntity._id.toString(), { assignedLawyerIds: updatedLawyers });
                             }
                         });
                     }
@@ -649,13 +652,13 @@ class CrossEntityValidationService {
                     issues.push({
                         severity: 'warning',
                         entityType: 'case',
-                        entityId: caseEntity._id,
+                        entityId: caseEntity._id.toString(),
                         field: 'leadAttorneyId',
                         message: 'Lead attorney is not in assigned lawyers list',
                         canAutoRepair: true,
                         repairAction: async () => {
                             const updatedLawyers = [...caseEntity.assignedLawyerIds, caseEntity.leadAttorneyId];
-                            await this.caseRepository.update(caseEntity._id, { assignedLawyerIds: updatedLawyers });
+                            await this.caseRepository.update(caseEntity._id.toString(), { assignedLawyerIds: updatedLawyers });
                         }
                     });
                 }
@@ -663,13 +666,13 @@ class CrossEntityValidationService {
             // Check application consistency
             const applications = await this.applicationRepository.findByGuild(guildId);
             const jobs = await this.jobRepository.findByGuildId(guildId);
-            const jobIds = new Set(jobs.map(j => j._id));
+            const jobIds = new Set(jobs.map(j => j._id.toString()));
             for (const application of applications) {
                 if (!jobIds.has(application.jobId)) {
                     issues.push({
                         severity: 'critical',
                         entityType: 'application',
-                        entityId: application._id,
+                        entityId: application._id.toString(),
                         field: 'jobId',
                         message: `Application references non-existent job ${application.jobId}`,
                         canAutoRepair: false
@@ -685,41 +688,24 @@ class CrossEntityValidationService {
     /**
      * Check referential integrity
      */
-    async checkReferentialIntegrity(guildId, context) {
+    async checkReferentialIntegrity(guildId, _context) {
         const issues = [];
         try {
-            // Check for feedback referencing non-existent cases
-            const feedbacks = await this.feedbackRepository.findByFilters({ guildId });
-            const cases = await this.caseRepository.findByGuildId(guildId);
-            const caseIds = new Set(cases.map(c => c._id));
-            for (const feedback of feedbacks) {
-                if (feedback.caseId && !caseIds.has(feedback.caseId)) {
-                    issues.push({
-                        severity: 'warning',
-                        entityType: 'feedback',
-                        entityId: feedback._id,
-                        field: 'caseId',
-                        message: `Feedback references non-existent case ${feedback.caseId}`,
-                        canAutoRepair: true,
-                        repairAction: async () => {
-                            await this.feedbackRepository.update(feedback._id, { caseId: undefined });
-                        }
-                    });
-                }
-            }
             // Check for reminders referencing deleted entities
+            const cases = await this.caseRepository.findByFilters({ guildId });
+            const caseIds = new Set(cases.map((c) => c._id.toString()));
             const reminders = await this.reminderRepository.findByFilters({ guildId });
             for (const reminder of reminders) {
                 if (reminder.caseId && !caseIds.has(reminder.caseId)) {
                     issues.push({
                         severity: 'info',
                         entityType: 'reminder',
-                        entityId: reminder._id,
+                        entityId: reminder._id.toString(),
                         field: 'caseId',
                         message: `Reminder references non-existent case ${reminder.caseId}`,
                         canAutoRepair: true,
                         repairAction: async () => {
-                            await this.reminderRepository.update(reminder._id, {
+                            await this.reminderRepository.update(reminder._id.toString(), {
                                 caseId: undefined,
                                 isActive: false
                             });
@@ -804,7 +790,7 @@ class CrossEntityValidationService {
             return bCritical - aCritical;
         });
         // Process repairs
-        for (const [entityKey, entityIssues] of sortedEntities) {
+        for (const [_entityKey, entityIssues] of sortedEntities) {
             const repairableIssues = entityIssues.filter(i => i.canAutoRepair && i.repairAction);
             for (const issue of repairableIssues) {
                 let repaired = false;
@@ -818,14 +804,16 @@ class CrossEntityValidationService {
                             await this.auditLogRepository.add({
                                 guildId: issue.entityType,
                                 action: audit_log_1.AuditAction.SystemRepair,
-                                performedBy: 'SYSTEM',
+                                actorId: 'SYSTEM',
                                 targetId: issue.entityId,
-                                targetType: issue.entityType,
-                                details: `Auto-repaired integrity issue: ${issue.message}`,
-                                metadata: {
-                                    severity: issue.severity,
-                                    field: issue.field,
-                                    retry: retry
+                                timestamp: new Date(),
+                                details: {
+                                    reason: `Auto-repaired integrity issue: ${issue.message}`,
+                                    metadata: {
+                                        severity: issue.severity,
+                                        field: issue.field,
+                                        retry: retry
+                                    }
                                 }
                             });
                         }
@@ -876,7 +864,7 @@ class CrossEntityValidationService {
             // Scan each entity type
             const entityScans = [
                 { type: 'staff', getEntities: () => this.staffRepository.findByGuildId(guildId) },
-                { type: 'case', getEntities: () => this.caseRepository.findByGuildId(guildId) },
+                { type: 'case', getEntities: () => this.caseRepository.findByFilters({ guildId }) },
                 { type: 'application', getEntities: () => this.applicationRepository.findByGuild(guildId) },
                 { type: 'job', getEntities: () => this.jobRepository.findByGuildId(guildId) },
                 { type: 'retainer', getEntities: () => this.retainerRepository.findByGuild(guildId) },
@@ -948,7 +936,7 @@ class CrossEntityValidationService {
         const issues = [];
         try {
             // Check for cases with non-existent clients
-            const cases = await this.caseRepository.findByGuildId(guildId);
+            const cases = await this.caseRepository.findByFilters({ guildId });
             for (const caseEntity of cases) {
                 if (context.client) {
                     try {
@@ -958,7 +946,7 @@ class CrossEntityValidationService {
                             issues.push({
                                 severity: 'info',
                                 entityType: 'case',
-                                entityId: caseEntity._id,
+                                entityId: caseEntity._id.toString(),
                                 field: 'clientId',
                                 message: `Client ${caseEntity.clientId} not found in Discord server`,
                                 canAutoRepair: false
@@ -977,7 +965,7 @@ class CrossEntityValidationService {
                     issues.push({
                         severity: 'warning',
                         entityType: 'staff',
-                        entityId: member._id,
+                        entityId: member._id.toString(),
                         field: 'hiredBy',
                         message: 'Staff member hired by themselves',
                         canAutoRepair: false
@@ -1014,13 +1002,15 @@ class CrossEntityValidationService {
                     await this.auditLogRepository.add({
                         guildId: issue.entityType,
                         action: audit_log_1.AuditAction.SystemRepair,
-                        performedBy: 'SYSTEM',
+                        actorId: 'SYSTEM',
                         targetId: issue.entityId,
-                        targetType: issue.entityType,
-                        details: `Auto-repaired integrity issue: ${issue.message}`,
-                        metadata: {
-                            severity: issue.severity,
-                            field: issue.field
+                        timestamp: new Date(),
+                        details: {
+                            reason: `Auto-repaired integrity issue: ${issue.message}`,
+                            metadata: {
+                                severity: issue.severity,
+                                field: issue.field
+                            }
                         }
                     });
                 }
@@ -1040,7 +1030,7 @@ class CrossEntityValidationService {
         this.validationCache.clear();
         return result;
     }
-    async validateBeforeOperation(entity, entityType, operation, context = {}) {
+    async validateBeforeOperation(entity, entityType, _operation, context = {}) {
         const fullContext = {
             guildId: entity.guildId,
             validationLevel: context.validationLevel || 'strict',

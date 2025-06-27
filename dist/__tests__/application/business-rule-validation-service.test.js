@@ -7,7 +7,6 @@ const case_repository_1 = require("../../infrastructure/repositories/case-reposi
 const permission_service_1 = require("../../application/services/permission-service");
 const staff_role_1 = require("../../domain/entities/staff-role");
 const case_1 = require("../../domain/entities/case");
-const retainer_1 = require("../../domain/entities/retainer");
 // Mock all dependencies
 jest.mock('../../infrastructure/repositories/guild-config-repository');
 jest.mock('../../infrastructure/repositories/staff-repository');
@@ -137,7 +136,7 @@ describe('BusinessRuleValidationService', () => {
             mockStaffRepo.findByUserId.mockResolvedValue({
                 userId,
                 role: staff_role_1.StaffRole.JUNIOR_ASSOCIATE,
-                status: retainer_1.RetainerStatus.SIGNED,
+                status: 'active',
             });
         });
         it('should validate active staff with required permissions', async () => {
@@ -169,7 +168,7 @@ describe('BusinessRuleValidationService', () => {
             mockStaffRepo.findByUserId.mockResolvedValue({
                 userId,
                 role: staff_role_1.StaffRole.PARALEGAL, // Low level role
-                status: retainer_1.RetainerStatus.SIGNED,
+                status: 'active',
             });
             const result = await service.validateStaffMember(testContext, userId, ['admin']);
             expect(result.valid).toBe(false);

@@ -1,7 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RoleSynchronizationEnhancementService = exports.ConflictSeverity = void 0;
-const staff_repository_1 = require("../../infrastructure/repositories/staff-repository");
 const audit_log_repository_1 = require("../../infrastructure/repositories/audit-log-repository");
 const staff_role_1 = require("../../domain/entities/staff-role");
 const audit_log_1 = require("../../domain/entities/audit-log");
@@ -40,7 +39,6 @@ class RoleSynchronizationEnhancementService {
          * Get last sync timestamp for a guild
          */
         this.lastSyncTimestamps = new Map();
-        this.staffRepository = new staff_repository_1.StaffRepository();
         this.auditLogRepository = new audit_log_repository_1.AuditLogRepository();
     }
     /**
@@ -54,7 +52,7 @@ class RoleSynchronizationEnhancementService {
             }
             // Sort roles by hierarchy level (highest first)
             const sortedRoles = staffRoles.sort((a, b) => b.level - a.level);
-            const highestRole = sortedRoles[0];
+            const highestRole = sortedRoles[0]; // Already validated that staffRoles.length > 1
             // Determine severity based on role difference
             const severity = this.calculateConflictSeverity(sortedRoles);
             const conflict = {
@@ -312,8 +310,8 @@ class RoleSynchronizationEnhancementService {
     calculateConflictSeverity(roles) {
         if (roles.length === 0)
             return ConflictSeverity.LOW;
-        const highestLevel = roles[0].level;
-        const lowestLevel = roles[roles.length - 1].level;
+        const highestLevel = roles[0]?.level ?? 0;
+        const lowestLevel = roles[roles.length - 1]?.level ?? 0;
         const levelDifference = highestLevel - lowestLevel;
         // Multiple high-level roles is critical
         const highLevelRoles = roles.filter(r => r.level >= 5).length;
@@ -345,7 +343,7 @@ class RoleSynchronizationEnhancementService {
                         roles: conflict.conflictingRoles.map(r => r.roleName)
                     },
                     after: {
-                        role: result.keptRole
+                        role: conflict.highestRole.staffRole
                     },
                     reason: 'Automatic role conflict resolution',
                     metadata: {

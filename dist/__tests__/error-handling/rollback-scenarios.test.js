@@ -12,6 +12,8 @@ const staff_role_1 = require("../../domain/entities/staff-role");
 const case_1 = require("../../domain/entities/case");
 const test_utils_1 = require("../helpers/test-utils");
 const database_helpers_1 = require("../helpers/database-helpers");
+const permission_service_1 = require("../../application/services/permission-service");
+const business_rule_validation_service_1 = require("../../application/services/business-rule-validation-service");
 /**
  * Error Handling and Rollback Scenario Tests
  *
@@ -32,6 +34,9 @@ describe.skip('Error Handling and Rollback Scenario Tests', () => {
     let auditLogRepository;
     let guildConfigRepository;
     let caseCounterRepository;
+    let permissionService;
+    let businessRuleValidationService;
+    let context;
     const testGuildId = 'error-test-guild';
     const adminUserId = 'admin-123';
     beforeAll(async () => {
@@ -45,8 +50,17 @@ describe.skip('Error Handling and Rollback Scenario Tests', () => {
         guildConfigRepository = new guild_config_repository_1.GuildConfigRepository();
         caseCounterRepository = new case_counter_repository_1.CaseCounterRepository();
         // Initialize services
-        staffService = new staff_service_1.StaffService(staffRepository, auditLogRepository);
-        caseService = new case_service_1.CaseService(caseRepository, caseCounterRepository, guildConfigRepository);
+        permissionService = new permission_service_1.PermissionService(guildConfigRepository);
+        businessRuleValidationService = new business_rule_validation_service_1.BusinessRuleValidationService(guildConfigRepository, staffRepository, caseRepository, permissionService);
+        staffService = new staff_service_1.StaffService(staffRepository, auditLogRepository, permissionService, businessRuleValidationService);
+        caseService = new case_service_1.CaseService(caseRepository, caseCounterRepository, guildConfigRepository, permissionService, businessRuleValidationService);
+        // Create test context
+        context = {
+            guildId: testGuildId,
+            userId: adminUserId,
+            userRoles: ['admin-role'],
+            isGuildOwner: false
+        };
         // Clear state
         await test_utils_1.TestUtils.clearTestDatabase();
         // Setup test guild
@@ -60,15 +74,16 @@ describe.skip('Error Handling and Rollback Scenario Tests', () => {
             applicationChannelId: undefined,
             clientRoleId: undefined,
             permissions: {
-                admin: [],
-                'senior-staff': [],
+                admin: ['admin-role'],
+                'senior-staff': ['admin-role'],
                 case: [],
                 config: [],
-                retainer: [],
+                lawyer: [],
+                'lead-attorney': [],
                 repair: []
             },
-            adminRoles: [],
-            adminUsers: []
+            adminRoles: ['admin-role'],
+            adminUsers: [adminUserId]
         });
     });
     afterAll(async () => {
@@ -79,7 +94,7 @@ describe.skip('Error Handling and Rollback Scenario Tests', () => {
             // Mock the repository add method to simulate database error
             const originalAdd = staffRepository.add;
             staffRepository.add = jest.fn().mockRejectedValue(new Error('Database connection lost'));
-            const result = await this.staffService.hireStaff(context, {
+            const result = await staffService.hireStaff(context, {
                 guildId: testGuildId,
                 userId: 'db-error-user',
                 hiredBy: adminUserId,
@@ -105,7 +120,7 @@ describe.skip('Error Handling and Rollback Scenario Tests', () => {
         it('should handle database failure during case creation', async () => {
             // Simulate database error. This will throw an error, which will be caught by the error handler.
             await database_helpers_1.DatabaseTestHelpers.simulateDatabaseError();
-            await expect(caseService.createCase({
+            await expect(caseService.createCase(context, {
                 guildId: testGuildId,
                 clientId: 'db-error-client',
                 clientUsername: 'dberrorclient',
@@ -126,7 +141,7 @@ describe.skip('Error Handling and Rollback Scenario Tests', () => {
         });
         it('should recover gracefully after database restoration', async () => {
             // First, verify normal operation
-            const beforeError = await this.staffService.hireStaff(context, {
+            const beforeError = await staffService.hireStaff(context, {
                 guildId: testGuildId,
                 userId: 'before-error',
                 hiredBy: adminUserId,
@@ -136,7 +151,7 @@ describe.skip('Error Handling and Rollback Scenario Tests', () => {
             expect(beforeError.success).toBe(true);
             // Simulate database error
             await database_helpers_1.DatabaseTestHelpers.simulateDatabaseError();
-            const duringError = await this.staffService.hireStaff(context, {
+            const duringError = await staffService.hireStaff(context, {
                 guildId: testGuildId,
                 userId: 'during-error',
                 hiredBy: adminUserId,
@@ -147,7 +162,7 @@ describe.skip('Error Handling and Rollback Scenario Tests', () => {
             // Restore database
             await database_helpers_1.DatabaseTestHelpers.restoreDatabase();
             // Verify recovery
-            const afterError = await this.staffService.hireStaff(context, {
+            const afterError = await staffService.hireStaff(context, {
                 guildId: testGuildId,
                 userId: 'after-error',
                 hiredBy: adminUserId,
@@ -164,7 +179,7 @@ describe.skip('Error Handling and Rollback Scenario Tests', () => {
     describe('Partial Operation Failure Scenarios', () => {
         it('should handle promotion failure after successful validation', async () => {
             // Setup: hire a staff member
-            const hireResult = await this.staffService.hireStaff(context, {
+            const hireResult = await staffService.hireStaff(context, {
                 guildId: testGuildId,
                 userId: 'promotion-test',
                 hiredBy: adminUserId,
@@ -177,7 +192,7 @@ describe.skip('Error Handling and Rollback Scenario Tests', () => {
             expect(initialStaff?.role).toBe(staff_role_1.StaffRole.PARALEGAL);
             // Simulate database error during promotion
             await database_helpers_1.DatabaseTestHelpers.simulateDatabaseError();
-            const promotionResult = await this.staffService.promoteStaff(context, {
+            const promotionResult = await staffService.promoteStaff(context, {
                 guildId: testGuildId,
                 userId: 'promotion-test',
                 promotedBy: adminUserId,
@@ -193,7 +208,7 @@ describe.skip('Error Handling and Rollback Scenario Tests', () => {
         });
         it('should handle case acceptance failure', async () => {
             // Create a case
-            const testCase = await this.caseService.createCase(context, {
+            const testCase = await caseService.createCase(context, {
                 guildId: testGuildId,
                 clientId: 'acceptance-test-client',
                 clientUsername: 'acceptanceclient',
@@ -204,12 +219,12 @@ describe.skip('Error Handling and Rollback Scenario Tests', () => {
             const initialCaseId = testCase._id.toString();
             // Simulate database error during acceptance
             await database_helpers_1.DatabaseTestHelpers.simulateDatabaseError();
-            await expect(caseService.acceptCase(initialCaseId, 'lawyer-123'))
+            await expect(caseService.acceptCase(context, initialCaseId))
                 .rejects.toThrow();
             // Restore database
             await database_helpers_1.DatabaseTestHelpers.restoreDatabase();
             // Verify case state is unchanged
-            const unchangedCase = await this.caseService.getCaseById(context, initialCaseId);
+            const unchangedCase = await caseService.getCaseById(context, initialCaseId);
             expect(unchangedCase?.status).toBe('PENDING');
             expect(unchangedCase?.leadAttorneyId).toBeUndefined();
             expect(unchangedCase?.assignedLawyerIds).toEqual([]);
@@ -218,7 +233,7 @@ describe.skip('Error Handling and Rollback Scenario Tests', () => {
             // Note: In a real implementation, audit log failures might be handled differently
             // This test demonstrates the principle of operation resilience
             // Hire staff member (which creates audit log)
-            const result = await this.staffService.hireStaff(context, {
+            const result = await staffService.hireStaff(context, {
                 guildId: testGuildId,
                 userId: 'audit-test',
                 hiredBy: adminUserId,
@@ -237,7 +252,7 @@ describe.skip('Error Handling and Rollback Scenario Tests', () => {
     describe('Transaction Rollback Scenarios', () => {
         it('should maintain data consistency during concurrent operation failures', async () => {
             // Setup: hire multiple staff members
-            const hirePromises = Array.from({ length: 5 }, (_, i) => staffService.hireStaff({
+            const hirePromises = Array.from({ length: 5 }, (_, i) => staffService.hireStaff(context, {
                 guildId: testGuildId,
                 userId: `concurrent-${i}`,
                 hiredBy: adminUserId,
@@ -250,7 +265,7 @@ describe.skip('Error Handling and Rollback Scenario Tests', () => {
             expect(initialStaff).toHaveLength(5);
             // Simulate database error during mass promotion
             await database_helpers_1.DatabaseTestHelpers.simulateDatabaseError();
-            const promotionPromises = initialStaff.map(staff => staffService.promoteStaff({
+            const promotionPromises = initialStaff.map(staff => staffService.promoteStaff(context, {
                 guildId: testGuildId,
                 userId: staff.userId,
                 promotedBy: adminUserId,
@@ -269,7 +284,7 @@ describe.skip('Error Handling and Rollback Scenario Tests', () => {
         it('should handle mixed success/failure scenarios correctly', async () => {
             // Hire staff members up to paralegal limit
             for (let i = 0; i < 10; i++) {
-                await this.staffService.hireStaff(context, {
+                await staffService.hireStaff(context, {
                     guildId: testGuildId,
                     userId: `limit-test-${i}`,
                     hiredBy: adminUserId,
@@ -278,7 +293,7 @@ describe.skip('Error Handling and Rollback Scenario Tests', () => {
                 });
             }
             // Try to hire more (should fail due to limit)
-            const overLimitPromises = Array.from({ length: 3 }, (_, i) => staffService.hireStaff({
+            const overLimitPromises = Array.from({ length: 3 }, (_, i) => staffService.hireStaff(context, {
                 guildId: testGuildId,
                 userId: `over-limit-${i}`,
                 hiredBy: adminUserId,
@@ -308,7 +323,7 @@ describe.skip('Error Handling and Rollback Scenario Tests', () => {
                     throw new Error('Temporary database error');
                 }
                 // Success on final attempt
-                return staffService.hireStaff({
+                return staffService.hireStaff(context, {
                     guildId: testGuildId,
                     userId: 'retry-test',
                     hiredBy: adminUserId,
@@ -339,7 +354,7 @@ describe.skip('Error Handling and Rollback Scenario Tests', () => {
         });
         it('should handle cascading operation failures gracefully', async () => {
             // Create a case
-            const testCase = await this.caseService.createCase(context, {
+            const testCase = await caseService.createCase(context, {
                 guildId: testGuildId,
                 clientId: 'cascade-client',
                 clientUsername: 'cascadeclient',
@@ -347,11 +362,11 @@ describe.skip('Error Handling and Rollback Scenario Tests', () => {
                 description: 'Testing cascading failures'
             });
             // Accept the case
-            const acceptedCase = await caseService.acceptCase(testCase._id.toString(), 'lawyer-123');
+            const acceptedCase = await caseService.acceptCase(context, testCase._id.toString());
             expect(acceptedCase.status).toBe('in-progress');
             // Simulate error during case closure
             await database_helpers_1.DatabaseTestHelpers.simulateDatabaseError();
-            await expect(caseService.closeCase({
+            await expect(caseService.closeCase(context, {
                 caseId: acceptedCase._id.toString(),
                 result: case_1.CaseResult.WIN,
                 closedBy: 'lawyer-123'
@@ -359,12 +374,12 @@ describe.skip('Error Handling and Rollback Scenario Tests', () => {
             // Restore database
             await database_helpers_1.DatabaseTestHelpers.restoreDatabase();
             // Verify case remains in IN_PROGRESS state
-            const currentCase = await this.caseService.getCaseById(context, acceptedCase._id.toString());
+            const currentCase = await caseService.getCaseById(context, acceptedCase._id.toString());
             expect(currentCase?.status).toBe('IN_PROGRESS');
             expect(currentCase?.result).toBeUndefined();
             expect(currentCase?.closedAt).toBeUndefined();
             // Should be able to close successfully after error recovery
-            const finalClosure = await this.caseService.closeCase(context, {
+            const finalClosure = await caseService.closeCase(context, {
                 caseId: acceptedCase._id.toString(),
                 result: case_1.CaseResult.WIN,
                 closedBy: 'lawyer-123'
@@ -376,7 +391,7 @@ describe.skip('Error Handling and Rollback Scenario Tests', () => {
     describe('Error Handling Edge Cases', () => {
         it('should handle invalid data corruption gracefully', async () => {
             // Create valid staff member
-            const validHire = await this.staffService.hireStaff(context, {
+            const validHire = await staffService.hireStaff(context, {
                 guildId: testGuildId,
                 userId: 'corruption-test',
                 hiredBy: adminUserId,
@@ -390,7 +405,7 @@ describe.skip('Error Handling and Rollback Scenario Tests', () => {
                 status: 'corrupted_status'
             });
             // Try to promote corrupted staff
-            const promotionResult = await this.staffService.promoteStaff(context, {
+            const promotionResult = await staffService.promoteStaff(context, {
                 guildId: testGuildId,
                 userId: 'corruption-test',
                 promotedBy: adminUserId,
@@ -402,33 +417,49 @@ describe.skip('Error Handling and Rollback Scenario Tests', () => {
         });
         it('should handle memory/resource exhaustion scenarios', async () => {
             // Create operations that could potentially exhaust resources
-            const resourceIntensiveOperations = Array.from({ length: 100 }, (_, i) => staffService.getStaffList(testGuildId, `requester-${i}`));
+            const resourceIntensiveOperations = Array.from({ length: 100 }, (_, i) => {
+                const reqContext = {
+                    guildId: testGuildId,
+                    userId: `requester-${i}`,
+                    userRoles: [],
+                    isGuildOwner: false
+                };
+                return staffService.getStaffList(reqContext, undefined);
+            });
             // Should handle resource constraints gracefully
             const results = await Promise.allSettled(resourceIntensiveOperations);
             // Some operations might fail due to resource limits, but system should remain stable
             const successCount = results.filter(r => r.status === 'fulfilled').length;
             expect(successCount).toBeGreaterThan(0); // At least some should succeed
             // System should remain responsive after resource pressure
-            const finalTest = await staffService.getStaffList(testGuildId, 'final-test');
+            const finalTest = await staffService.getStaffList(context, undefined);
             expect(finalTest).toBeDefined();
         });
         it('should handle concurrent error scenarios', async () => {
             // Simulate multiple users experiencing errors simultaneously
             await database_helpers_1.DatabaseTestHelpers.simulateDatabaseError();
-            const concurrentErrorOperations = Array.from({ length: 10 }, (_, i) => staffService.hireStaff({
-                guildId: testGuildId,
-                userId: `concurrent-error-${i}`,
-                hiredBy: adminUserId,
-                robloxUsername: `ConcurrentError${i}`,
-                role: staff_role_1.StaffRole.PARALEGAL
-            }));
+            const concurrentErrorOperations = Array.from({ length: 10 }, (_, i) => {
+                const errorContext = {
+                    guildId: testGuildId,
+                    userId: adminUserId,
+                    userRoles: [],
+                    isGuildOwner: false
+                };
+                return staffService.hireStaff(errorContext, {
+                    guildId: testGuildId,
+                    userId: `concurrent-error-${i}`,
+                    hiredBy: adminUserId,
+                    robloxUsername: `ConcurrentError${i}`,
+                    role: staff_role_1.StaffRole.PARALEGAL
+                });
+            });
             const results = await Promise.allSettled(concurrentErrorOperations);
             // All should fail gracefully
             expect(results.every(r => r.status === 'fulfilled' && !r.value.success)).toBe(true);
             // Restore database
             await database_helpers_1.DatabaseTestHelpers.restoreDatabase();
             // System should be stable for new operations
-            const recoveryTest = await this.staffService.hireStaff(context, {
+            const recoveryTest = await staffService.hireStaff(context, {
                 guildId: testGuildId,
                 userId: 'recovery-test',
                 hiredBy: adminUserId,
@@ -446,18 +477,26 @@ describe.skip('Error Handling and Rollback Scenario Tests', () => {
             const testCases = [
                 {
                     name: 'Validation Error',
-                    operation: () => staffService.hireStaff({
-                        guildId: '',
-                        userId: 'test',
-                        hiredBy: adminUserId,
-                        robloxUsername: 'Test',
-                        role: staff_role_1.StaffRole.PARALEGAL
-                    }),
+                    operation: () => {
+                        const emptyContext = {
+                            guildId: '',
+                            userId: adminUserId,
+                            userRoles: [],
+                            isGuildOwner: false
+                        };
+                        return staffService.hireStaff(emptyContext, {
+                            guildId: '',
+                            userId: 'test',
+                            hiredBy: adminUserId,
+                            robloxUsername: 'Test',
+                            role: staff_role_1.StaffRole.PARALEGAL
+                        });
+                    },
                     expectedError: 'validation'
                 },
                 {
                     name: 'Business Logic Error',
-                    operation: () => staffService.hireStaff({
+                    operation: () => staffService.hireStaff(context, {
                         guildId: testGuildId,
                         userId: 'test',
                         hiredBy: adminUserId,
@@ -475,7 +514,7 @@ describe.skip('Error Handling and Rollback Scenario Tests', () => {
         });
         it('should maintain error context for debugging', async () => {
             // Test error context preservation
-            const errorResult = await this.staffService.hireStaff(context, {
+            const errorResult = await staffService.hireStaff(context, {
                 guildId: testGuildId,
                 userId: 'context-test',
                 hiredBy: adminUserId,

@@ -39,7 +39,7 @@ class RoleChangeCascadeService {
         const guildConfigRepository = new guild_config_repository_1.GuildConfigRepository();
         const permissionService = new permission_service_1.PermissionService(guildConfigRepository);
         const businessRuleValidationService = new business_rule_validation_service_1.BusinessRuleValidationService(guildConfigRepository, this.staffRepository, this.caseRepository, permissionService);
-        this.channelPermissionManager = new channel_permission_manager_1.ChannelPermissionManager(this.caseRepository, this.staffRepository, this.auditLogRepository, guildConfigRepository, permissionService, businessRuleValidationService);
+        this.channelPermissionManager = new channel_permission_manager_1.ChannelPermissionManager(this.caseRepository, this.staffRepository, this.auditLogRepository, businessRuleValidationService);
         this.caseService = new case_service_1.CaseService(this.caseRepository, caseCounterRepository, guildConfigRepository, permissionService, businessRuleValidationService);
     }
     /**
@@ -199,12 +199,12 @@ class RoleChangeCascadeService {
         const managingPartners = await this.staffRepository.findByFilters({
             guildId: guild.id,
             role: staff_role_1.StaffRole.MANAGING_PARTNER,
-            status: RetainerStatus.ACTIVE
+            status: 'active'
         });
         const seniorPartners = await this.staffRepository.findByFilters({
             guildId: guild.id,
             role: staff_role_1.StaffRole.SENIOR_PARTNER,
-            status: RetainerStatus.ACTIVE
+            status: 'active'
         });
         const seniorStaff = [...managingPartners, ...seniorPartners];
         // Create urgent notification embed

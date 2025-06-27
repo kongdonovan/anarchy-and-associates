@@ -6,7 +6,6 @@ import { StaffRole, RoleUtils } from '../../domain/entities/staff-role';
 import { AuditAction } from '../../domain/entities/audit-log';
 import { PermissionService, PermissionContext } from './permission-service';
 import { logger } from '../../infrastructure/logger';
-import { CaseStatus, CasePriority } from '../../domain/entities/case';
 
 export interface JobCreateRequest {
   guildId: string;
@@ -271,7 +270,7 @@ export class JobService {
         actorId: context.userId,
         details: {
           before: { status: 'open' },
-          after: { status: CaseStatus.CLOSED },
+          after: { status: 'closed' },
           metadata: {
             jobId,
             title: job.title,

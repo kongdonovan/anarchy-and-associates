@@ -53,22 +53,21 @@ let JobsCommands = class JobsCommands extends base_command_1.BaseCommand {
         const retainerRepository = new retainer_repository_1.RetainerRepository();
         const feedbackRepository = new feedback_repository_1.FeedbackRepository();
         const reminderRepository = new reminder_repository_1.ReminderRepository();
-        this.jobService = new job_service_1.JobService(jobRepository, auditLogRepository, staffRepository);
+        this.jobService = new job_service_1.JobService(jobRepository, auditLogRepository, staffRepository, this.permissionService);
         this.questionService = new job_question_service_1.JobQuestionService();
         this.cleanupService = new job_cleanup_service_1.JobCleanupService(jobRepository, auditLogRepository);
-        this.applicationService = new application_service_1.ApplicationService(applicationRepository, jobRepository, staffRepository, robloxService);
+        this.applicationService = new application_service_1.ApplicationService(applicationRepository, jobRepository, staffRepository, robloxService, this.permissionService);
         this.jobRepository = jobRepository;
         this.guildConfigRepository = guildConfigRepository;
         // Initialize services for validation
         this.permissionService = new permission_service_1.PermissionService(guildConfigRepository);
         this.businessRuleValidationService = new business_rule_validation_service_1.BusinessRuleValidationService(guildConfigRepository, staffRepository, caseRepository, this.permissionService);
-        this.crossEntityValidationService = new cross_entity_validation_service_1.CrossEntityValidationService(staffRepository, caseRepository, applicationRepository, jobRepository, retainerRepository, feedbackRepository, reminderRepository, auditLogRepository, this.businessRuleValidationService);
+        this.crossEntityValidationService = new cross_entity_validation_service_1.CrossEntityValidationService(staffRepository, caseRepository, applicationRepository, jobRepository, retainerRepository, feedbackRepository, reminderRepository, auditLogRepository);
         this.commandValidationService = new command_validation_service_1.CommandValidationService(this.businessRuleValidationService, this.crossEntityValidationService);
         // Initialize validation services in base class
         this.initializeValidationServices(this.commandValidationService, this.businessRuleValidationService, this.crossEntityValidationService, this.permissionService);
     }
     async apply(interaction) {
-        const context = await this.getPermissionContext(interaction);
         try {
             const guildId = interaction.guildId;
             // Get open jobs
@@ -112,7 +111,6 @@ let JobsCommands = class JobsCommands extends base_command_1.BaseCommand {
     async list(status, role, search, page, interaction) {
         try {
             await interaction.deferReply();
-            const guildId = interaction.guildId;
             const currentPage = page || 1;
             const filters = {};
             if (status && status !== 'all') {
@@ -138,7 +136,8 @@ let JobsCommands = class JobsCommands extends base_command_1.BaseCommand {
             if (search) {
                 filters.searchTerm = search;
             }
-            const result = await this.jobService.listJobs(guildId, filters, currentPage, interaction.user.id);
+            const context = await this.getPermissionContext(interaction);
+            const result = await this.jobService.listJobs(context, filters, currentPage);
             if (result.jobs.length === 0) {
                 const embed = new discord_js_1.EmbedBuilder()
                     .setTitle('📋 Job Listings')
@@ -208,6 +207,7 @@ let JobsCommands = class JobsCommands extends base_command_1.BaseCommand {
                 roleId: discordRole,
                 postedBy: interaction.user.id,
             };
+            const context = await this.getPermissionContext(interaction);
             const result = await this.jobService.createJob(context, request);
             if (!result.success) {
                 await interaction.followUp({
@@ -235,7 +235,6 @@ let JobsCommands = class JobsCommands extends base_command_1.BaseCommand {
     async edit(jobId, title, description, role, discordRole, status, interaction) {
         try {
             await interaction.deferReply();
-            const guildId = interaction.guildId;
             const updates = {};
             if (title)
                 updates.title = title;
@@ -270,7 +269,8 @@ let JobsCommands = class JobsCommands extends base_command_1.BaseCommand {
                 });
                 return;
             }
-            const result = await this.jobService.updateJob(guildId, jobId, updates, interaction.user.id);
+            const context = await this.getPermissionContext(interaction);
+            const result = await this.jobService.updateJob(context, jobId, updates);
             if (!result.success) {
                 await interaction.followUp({
                     content: `❌ Failed to update job: ${result.error}`,
@@ -297,8 +297,8 @@ let JobsCommands = class JobsCommands extends base_command_1.BaseCommand {
     async info(jobId, interaction) {
         try {
             await interaction.deferReply();
-            const guildId = interaction.guildId;
-            const job = await this.jobService.getJobDetails(context, guildId, jobId, interaction.user.id);
+            const context = await this.getPermissionContext(interaction);
+            const job = await this.jobService.getJobDetails(context, jobId);
             if (!job) {
                 await interaction.followUp({
                     content: '❌ Job not found.',
@@ -332,8 +332,8 @@ let JobsCommands = class JobsCommands extends base_command_1.BaseCommand {
     async close(jobId, interaction) {
         try {
             await interaction.deferReply();
-            const guildId = interaction.guildId;
-            const result = await this.jobService.closeJob(guildId, jobId, interaction.user.id);
+            const context = await this.getPermissionContext(interaction);
+            const result = await this.jobService.closeJob(context, jobId);
             if (!result.success) {
                 await interaction.followUp({
                     content: `❌ Failed to close job: ${result.error}`,
@@ -360,9 +360,9 @@ let JobsCommands = class JobsCommands extends base_command_1.BaseCommand {
     async remove(jobId, interaction) {
         try {
             await interaction.deferReply();
-            const guildId = interaction.guildId;
+            const context = await this.getPermissionContext(interaction);
             // Get job info before deletion for confirmation
-            const job = await this.jobService.getJobDetails(context, guildId, jobId, interaction.user.id);
+            const job = await this.jobService.getJobDetails(context, jobId);
             if (!job) {
                 await interaction.followUp({
                     content: '❌ Job not found.',
@@ -370,7 +370,7 @@ let JobsCommands = class JobsCommands extends base_command_1.BaseCommand {
                 });
                 return;
             }
-            const result = await this.jobService.removeJob(guildId, jobId, interaction.user.id);
+            const result = await this.jobService.removeJob(context, jobId);
             if (!result.success) {
                 await interaction.followUp({
                     content: `❌ Failed to remove job: ${result.error}`,
@@ -415,8 +415,8 @@ let JobsCommands = class JobsCommands extends base_command_1.BaseCommand {
             }
             const page = parseInt(pageStr);
             const filters = JSON.parse(filtersStr);
-            const guildId = interaction.guildId;
-            const result = await this.jobService.listJobs(guildId, filters, page, interaction.user.id);
+            const context = await this.getPermissionContext(interaction);
+            const result = await this.jobService.listJobs(context, filters, page);
             const embed = new discord_js_1.EmbedBuilder()
                 .setTitle('📋 Job Listings')
                 .setColor('#0099FF')
@@ -549,9 +549,9 @@ let JobsCommands = class JobsCommands extends base_command_1.BaseCommand {
     async add_questions(jobId, templateIds, forceRequired, interaction) {
         try {
             await interaction.deferReply();
-            const guildId = interaction.guildId;
+            const context = await this.getPermissionContext(interaction);
             // Get existing job
-            const existingJob = await this.jobService.getJobDetails(context, guildId, jobId, interaction.user.id);
+            const existingJob = await this.jobService.getJobDetails(context, jobId);
             if (!existingJob) {
                 await interaction.followUp({
                     content: '❌ Job not found.',
@@ -610,7 +610,7 @@ let JobsCommands = class JobsCommands extends base_command_1.BaseCommand {
                 return;
             }
             // Update the job
-            const result = await this.jobService.updateJob(guildId, jobId, { questions: allQuestions }, interaction.user.id);
+            const result = await this.jobService.updateJob(context, jobId, { questions: allQuestions });
             if (!result.success) {
                 await interaction.followUp({
                     content: `❌ Failed to update job: ${result.error}`,
@@ -681,7 +681,6 @@ let JobsCommands = class JobsCommands extends base_command_1.BaseCommand {
     }
     async cleanup_report(interaction) {
         try {
-            const context = await this.getPermissionContext(interaction);
             await interaction.deferReply();
             const guildId = interaction.guildId;
             const report = await this.cleanupService.getCleanupReport(guildId);
@@ -968,6 +967,7 @@ let JobsCommands = class JobsCommands extends base_command_1.BaseCommand {
     async handleApplicationAccept(interaction) {
         try {
             const applicationId = interaction.customId.replace('app_accept_', '');
+            const context = await this.getPermissionContext(interaction);
             // Review the application
             const application = await this.applicationService.reviewApplication(context, {
                 applicationId,
@@ -1094,6 +1094,7 @@ let JobsCommands = class JobsCommands extends base_command_1.BaseCommand {
         try {
             const applicationId = interaction.customId.replace('decline_reason_', '');
             const reason = interaction.fields.getTextInputValue('decline_reason') || undefined;
+            const context = await this.getPermissionContext(interaction);
             // Review the application
             const application = await this.applicationService.reviewApplication(context, {
                 applicationId,

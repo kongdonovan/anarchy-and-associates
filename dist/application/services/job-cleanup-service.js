@@ -3,7 +3,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.JobCleanupService = void 0;
 const audit_log_1 = require("../../domain/entities/audit-log");
 const logger_1 = require("../../infrastructure/logger");
-const case_1 = require("../../domain/entities/case");
 class JobCleanupService {
     constructor(jobRepository, auditLogRepository) {
         this.jobRepository = jobRepository;
@@ -217,7 +216,7 @@ class JobCleanupService {
                                 actorId: 'system',
                                 details: {
                                     before: { status: 'open' },
-                                    after: { status: case_1.CaseStatus.CLOSED },
+                                    after: { status: 'closed' },
                                     metadata: {
                                         jobId: job._id?.toHexString(),
                                         title: job.title,

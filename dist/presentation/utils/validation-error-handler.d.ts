@@ -20,7 +20,7 @@ export declare class ValidationErrorHandler {
     /**
      * Create success embed after validation bypass
      */
-    static createBypassSuccessEmbed(commandName: string, subcommandName?: string, bypassReason: string): EmbedBuilder;
+    static createBypassSuccessEmbed(commandName: string, bypassReason: string, subcommandName?: string): EmbedBuilder;
     /**
      * Create action buttons for validation errors
      */

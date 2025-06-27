@@ -14,7 +14,6 @@ import { BusinessRuleValidationService } from './business-rule-validation-servic
 import { Case, CaseStatus } from '../../domain/entities/case';
 import { AuditAction } from '../../domain/entities/audit-log';
 import { logger } from '../../infrastructure/logger';
-import { CaseStatus, CasePriority } from '../../domain/entities/case';
 
 export interface ChannelArchiveConfig {
   archiveCategoryId?: string;

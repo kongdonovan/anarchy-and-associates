@@ -9,6 +9,7 @@ const permission_utils_1 = require("../../infrastructure/utils/permission-utils"
 const case_1 = require("../../domain/entities/case");
 const test_utils_1 = require("../helpers/test-utils");
 const database_helpers_1 = require("../helpers/database-helpers");
+const business_rule_validation_service_1 = require("../../application/services/business-rule-validation-service");
 /**
  * End-to-End tests for /case reassign and /case unassign Discord commands
  *
@@ -71,8 +72,10 @@ describe('Case Reassignment Commands E2E Tests', () => {
         caseRepository = new case_repository_1.CaseRepository();
         guildConfigRepository = new guild_config_repository_1.GuildConfigRepository();
         const caseCounterRepository = new case_counter_repository_1.CaseCounterRepository();
-        caseService = new case_service_1.CaseService(caseRepository, caseCounterRepository, guildConfigRepository);
         permissionService = new permission_service_1.PermissionService(guildConfigRepository);
+        const businessRuleValidationService = new business_rule_validation_service_1.BusinessRuleValidationService(guildConfigRepository, null, // staffRepository not needed for these tests
+        caseRepository, permissionService);
+        caseService = new case_service_1.CaseService(caseRepository, caseCounterRepository, guildConfigRepository, permissionService, businessRuleValidationService);
         await test_utils_1.TestUtils.clearTestDatabase();
         // Setup test guild configuration with proper permissions
         await guildConfigRepository.add({
@@ -89,11 +92,12 @@ describe('Case Reassignment Commands E2E Tests', () => {
                 'senior-staff': ['hr-role-123'],
                 case: ['case-role-123'],
                 config: ['config-role-123'],
-                retainer: ['retainer-role-123'],
+                lawyer: ['lawyer-role-123', 'lead-attorney-role-123'], // lead attorneys are also lawyers
+                'lead-attorney': ['lead-attorney-role-123'],
                 repair: ['repair-role-123']
             },
             adminRoles: ['admin-role-123'],
-            adminUsers: [adminUserId]
+            adminUsers: [adminUserId, lawyer1Id, lawyer2Id, lawyer3Id] // Include lawyers as admin users for testing
         });
     });
     afterAll(async () => {
@@ -103,11 +107,11 @@ describe('Case Reassignment Commands E2E Tests', () => {
         let case1;
         let case2;
         beforeEach(async () => {
-            // Create test permission context
+            // Create test permission context with case permission
             const context = {
                 guildId: testGuildId,
                 userId: adminUserId,
-                userRoles: ['admin-role-123'],
+                userRoles: ['case-role-123'], // Changed to have case permission
                 isGuildOwner: false
             };
             // Create test cases and assign lawyers
@@ -127,9 +131,21 @@ describe('Case Reassignment Commands E2E Tests', () => {
                 description: 'Second test case for reassignment',
                 priority: case_1.CasePriority.MEDIUM
             });
-            // Accept cases and assign lawyers
-            await caseService.acceptCase(case1._id.toString(), lawyer1Id);
-            await caseService.acceptCase(case2._id.toString(), lawyer2Id);
+            // Accept cases and assign lawyers - need lead-attorney permission context
+            const lawyer1Context = {
+                guildId: testGuildId,
+                userId: lawyer1Id,
+                userRoles: ['lead-attorney-role-123', 'lawyer-role-123'], // Need both permissions
+                isGuildOwner: false
+            };
+            const lawyer2Context = {
+                guildId: testGuildId,
+                userId: lawyer2Id,
+                userRoles: ['lead-attorney-role-123', 'lawyer-role-123'], // Need both permissions
+                isGuildOwner: false
+            };
+            await caseService.acceptCase(lawyer1Context, case1._id.toString());
+            await caseService.acceptCase(lawyer2Context, case2._id.toString());
             // Update case channels for testing
             await caseRepository.update(case1._id.toString(), { channelId: 'case-1-channel' });
             await caseRepository.update(case2._id.toString(), { channelId: 'case-2-channel' });
@@ -157,7 +173,7 @@ describe('Case Reassignment Commands E2E Tests', () => {
             // Perform reassignment
             const currentCase = activeCases[0];
             expect(currentCase).toBeDefined();
-            await caseService.reassignLawyer(currentCase._id.toString(), targetCase._id.toString(), lawyer1Id);
+            await caseService.reassignLawyer(context, currentCase._id.toString(), targetCase._id.toString(), lawyer1Id);
             // Verify the reassignment
             const updatedNewCase = await caseService.getCaseById(context, targetCase._id.toString());
             const updatedOldCase = await caseService.getCaseById(context, currentCase._id.toString());
@@ -179,7 +195,7 @@ describe('Case Reassignment Commands E2E Tests', () => {
             const hasPermission = await permissionService.hasActionPermission(context, 'case');
             expect(hasPermission).toBe(true);
             // Test reassignment workflow
-            await caseService.reassignLawyer(case1._id.toString(), case2._id.toString(), lawyer1Id);
+            await caseService.reassignLawyer(context, case1._id.toString(), case2._id.toString(), lawyer1Id);
             // Verify reassignment
             const updatedCase1 = await caseService.getCaseById(context, case1._id.toString());
             const updatedCase2 = await caseService.getCaseById(context, case2._id.toString());
@@ -213,11 +229,11 @@ describe('Case Reassignment Commands E2E Tests', () => {
             // This would trigger the "Invalid Case Channel" error in the command
         });
         it('should handle error when staff member is already assigned to target case', async () => {
-            // Create test permission context
+            // Create test permission context with case permission
             const context = {
                 guildId: testGuildId,
                 userId: adminUserId,
-                userRoles: ['admin-role-123'],
+                userRoles: ['case-role-123'], // Changed to have case permission
                 isGuildOwner: false
             };
             // Verify lawyer2 is already assigned to case2
@@ -228,16 +244,16 @@ describe('Case Reassignment Commands E2E Tests', () => {
     });
     describe('/case unassign Command Workflow', () => {
         let multiLawyerCase;
-        beforeEach(async () => {
-            // Create test permission context
-            const context = {
+        it('should allow guild owner to unassign staff from cases', async () => {
+            // Setup test data for this specific test
+            const setupContext = {
                 guildId: testGuildId,
-                userId: adminUserId,
-                userRoles: ['admin-role-123'],
-                isGuildOwner: false
+                userId: guildOwnerId,
+                userRoles: [],
+                isGuildOwner: true
             };
             // Create a case with multiple lawyers for unassignment testing
-            multiLawyerCase = await caseService.createCase(context, {
+            multiLawyerCase = await caseService.createCase(setupContext, {
                 guildId: testGuildId,
                 clientId,
                 clientUsername: 'testclient',
@@ -245,20 +261,24 @@ describe('Case Reassignment Commands E2E Tests', () => {
                 description: 'Case with multiple lawyers for testing unassignment',
                 priority: case_1.CasePriority.HIGH
             });
-            // Accept and assign multiple lawyers
-            await caseService.acceptCase(multiLawyerCase._id.toString(), lawyer1Id);
-            await caseService.assignLawyer(context, {
+            // Accept case as lawyer1 (guild owner has all permissions)
+            await caseService.acceptCase(setupContext, multiLawyerCase._id.toString());
+            // Assign additional lawyers using guild owner context
+            await caseService.assignLawyer(setupContext, {
+                caseId: multiLawyerCase._id.toString(),
+                lawyerId: lawyer1Id,
+                assignedBy: guildOwnerId
+            });
+            await caseService.assignLawyer(setupContext, {
                 caseId: multiLawyerCase._id.toString(),
                 lawyerId: lawyer2Id,
-                assignedBy: adminUserId
+                assignedBy: guildOwnerId
             });
-            await caseService.assignLawyer(context, {
+            await caseService.assignLawyer(setupContext, {
                 caseId: multiLawyerCase._id.toString(),
                 lawyerId: lawyer3Id,
-                assignedBy: adminUserId
+                assignedBy: guildOwnerId
             });
-        });
-        it('should allow guild owner to unassign staff from cases', async () => {
             const interaction = createMockInteraction(guildOwnerId, [], true);
             const context = permission_utils_1.PermissionUtils.createPermissionContext(interaction);
             // Verify permission
@@ -272,7 +292,7 @@ describe('Case Reassignment Commands E2E Tests', () => {
             // Unassign from all active cases
             const unassignedCases = [];
             for (const caseData of assignedCases) {
-                await caseService.unassignLawyer(caseData._id.toString(), lawyer2Id);
+                await caseService.unassignLawyer(context, caseData._id.toString(), lawyer2Id);
                 unassignedCases.push(caseData.caseNumber);
             }
             expect(unassignedCases.length).toBeGreaterThan(0);
@@ -291,12 +311,54 @@ describe('Case Reassignment Commands E2E Tests', () => {
             // Command would be blocked by permission guard
         });
         it('should handle unassigning lead attorney correctly', async () => {
+            // Setup test data for this specific test using guild owner
+            const setupContext = {
+                guildId: testGuildId,
+                userId: guildOwnerId,
+                userRoles: [],
+                isGuildOwner: true
+            };
+            // Create a case with multiple lawyers
+            multiLawyerCase = await caseService.createCase(setupContext, {
+                guildId: testGuildId,
+                clientId,
+                clientUsername: 'testclient',
+                title: 'Multi-lawyer Case for Lead Attorney Test',
+                description: 'Case with multiple lawyers for testing lead attorney reassignment',
+                priority: case_1.CasePriority.HIGH
+            });
+            // Accept case as lawyer1 who becomes lead attorney
+            const lawyer1Context = {
+                guildId: testGuildId,
+                userId: lawyer1Id,
+                userRoles: ['lead-attorney-role-123', 'lawyer-role-123'],
+                isGuildOwner: false
+            };
+            await caseService.acceptCase(lawyer1Context, multiLawyerCase._id.toString());
+            // Assign additional lawyers using guild owner context
+            await caseService.assignLawyer(setupContext, {
+                caseId: multiLawyerCase._id.toString(),
+                lawyerId: lawyer2Id,
+                assignedBy: guildOwnerId
+            });
+            await caseService.assignLawyer(setupContext, {
+                caseId: multiLawyerCase._id.toString(),
+                lawyerId: lawyer3Id,
+                assignedBy: guildOwnerId
+            });
+            // Create permission context for this test
+            const context = {
+                guildId: testGuildId,
+                userId: caseManagerUserId,
+                userRoles: ['case-role-123'],
+                isGuildOwner: false
+            };
             // Verify lawyer1 is lead attorney
             const beforeUnassign = await caseService.getCaseById(context, multiLawyerCase._id.toString());
             expect(beforeUnassign?.leadAttorneyId).toBe(lawyer1Id);
             expect(beforeUnassign?.assignedLawyerIds).toHaveLength(3);
             // Unassign the lead attorney
-            await caseService.unassignLawyer(multiLawyerCase._id.toString(), lawyer1Id);
+            await caseService.unassignLawyer(context, multiLawyerCase._id.toString(), lawyer1Id);
             // Verify lead attorney was reassigned
             const afterUnassign = await caseService.getCaseById(context, multiLawyerCase._id.toString());
             expect(afterUnassign?.assignedLawyerIds).not.toContain(lawyer1Id);
@@ -362,14 +424,21 @@ describe('Case Reassignment Commands E2E Tests', () => {
         it('should handle database errors gracefully', async () => {
             // Test with invalid ObjectId format
             const invalidCaseId = 'invalid-case-id';
-            await expect(caseService.reassignLawyer(invalidCaseId, 'valid-case-id', lawyer1Id)).rejects.toThrow();
-        });
-        it('should handle concurrent reassignment attempts', async () => {
-            // Create test permission context
+            // Create a context for this test
             const context = {
                 guildId: testGuildId,
                 userId: adminUserId,
-                userRoles: ['admin-role-123'],
+                userRoles: ['case-role-123'],
+                isGuildOwner: false
+            };
+            await expect(caseService.reassignLawyer(context, invalidCaseId, 'valid-case-id', lawyer1Id)).rejects.toThrow();
+        });
+        it('should handle concurrent reassignment attempts', async () => {
+            // Create test permission context with case permission
+            const context = {
+                guildId: testGuildId,
+                userId: adminUserId,
+                userRoles: ['case-role-123'], // Changed to have case permission
                 isGuildOwner: false
             };
             // Create a case with one lawyer
@@ -381,7 +450,14 @@ describe('Case Reassignment Commands E2E Tests', () => {
                 description: 'Testing concurrent operations',
                 priority: case_1.CasePriority.MEDIUM
             });
-            await caseService.acceptCase(testCase._id.toString(), lawyer1Id);
+            // Accept case with lead-attorney and lawyer permissions
+            const leadAttorneyContext = {
+                guildId: testGuildId,
+                userId: lawyer1Id,
+                userRoles: ['lead-attorney-role-123', 'lawyer-role-123'],
+                isGuildOwner: false
+            };
+            await caseService.acceptCase(leadAttorneyContext, testCase._id.toString());
             // Create two target cases
             const targetCase1 = await caseService.createCase(context, {
                 guildId: testGuildId,
@@ -400,8 +476,8 @@ describe('Case Reassignment Commands E2E Tests', () => {
                 priority: case_1.CasePriority.LOW
             });
             // Attempt concurrent reassignments (one should succeed, one should fail)
-            const reassignPromise1 = caseService.reassignLawyer(testCase._id.toString(), targetCase1._id.toString(), lawyer1Id);
-            const reassignPromise2 = caseService.reassignLawyer(testCase._id.toString(), targetCase2._id.toString(), lawyer1Id);
+            const reassignPromise1 = caseService.reassignLawyer(context, testCase._id.toString(), targetCase1._id.toString(), lawyer1Id);
+            const reassignPromise2 = caseService.reassignLawyer(context, testCase._id.toString(), targetCase2._id.toString(), lawyer1Id);
             // One should succeed, one should fail (or both might succeed depending on implementation)
             const results = await Promise.allSettled([reassignPromise1, reassignPromise2]);
             // At least one operation should complete

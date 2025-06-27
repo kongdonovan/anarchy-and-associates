@@ -6,7 +6,6 @@ import { RetainerRepository } from '../../infrastructure/repositories/retainer-r
 import { FeedbackRepository } from '../../infrastructure/repositories/feedback-repository';
 import { ReminderRepository } from '../../infrastructure/repositories/reminder-repository';
 import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-repository';
-import { BusinessRuleValidationService } from './business-rule-validation-service';
 import { Client } from 'discord.js';
 export interface ValidationRule {
     name: string;
@@ -65,32 +64,22 @@ export declare class CrossEntityValidationService {
     private readonly feedbackRepository;
     private readonly reminderRepository;
     private readonly auditLogRepository;
-    private readonly businessRuleValidationService;
     private validationRules;
     private validationCache;
     private readonly CACHE_TTL_MS;
     private ruleDependencyGraph;
-    private ruleExecutionOrder;
     private asyncValidationQueue;
     private readonly MAX_CONCURRENT_VALIDATIONS;
-    constructor(staffRepository: StaffRepository, caseRepository: CaseRepository, applicationRepository: ApplicationRepository, jobRepository: JobRepository, retainerRepository: RetainerRepository, feedbackRepository: FeedbackRepository, reminderRepository: ReminderRepository, auditLogRepository: AuditLogRepository, businessRuleValidationService: BusinessRuleValidationService);
+    constructor(staffRepository: StaffRepository, caseRepository: CaseRepository, applicationRepository: ApplicationRepository, jobRepository: JobRepository, retainerRepository: RetainerRepository, feedbackRepository: FeedbackRepository, reminderRepository: ReminderRepository, auditLogRepository: AuditLogRepository);
     private initializeValidationRules;
     /**
      * Build dependency graph and determine optimal execution order
      */
     private buildRuleDependencyGraph;
     /**
-     * Topological sort for rule dependencies
-     */
-    private topologicalSort;
-    /**
      * Initialize advanced cross-entity validation rules
      */
     private initializeAdvancedRules;
-    /**
-     * Perform validation with memoization
-     */
-    private memoizedValidation;
     /**
      * Async validation with queue management
      */
@@ -129,7 +118,7 @@ export declare class CrossEntityValidationService {
     repairIntegrityIssues(issues: ValidationIssue[], options?: {
         dryRun?: boolean;
     }): Promise<RepairResult>;
-    validateBeforeOperation(entity: any, entityType: string, operation: 'create' | 'update' | 'delete', context?: Partial<ValidationContext>): Promise<ValidationIssue[]>;
+    validateBeforeOperation(entity: any, entityType: string, _operation: 'create' | 'update' | 'delete', context?: Partial<ValidationContext>): Promise<ValidationIssue[]>;
     batchValidate(entities: Array<{
         entity: any;
         type: string;

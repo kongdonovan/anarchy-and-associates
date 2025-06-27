@@ -33,7 +33,7 @@ import { Job } from '../../domain/entities/job';
 import { Application, ApplicationAnswer } from '../../domain/entities/application';
 import { logger } from '../../infrastructure/logger';
 import { BaseCommand } from './base-command';
-import { ValidateCommand, ValidatePermissions, ValidateBusinessRules, ValidateEntity } from '../decorators/validation-decorators';
+import { ValidatePermissions, ValidateBusinessRules, ValidateEntity } from '../decorators/validation-decorators';
 import { BusinessRuleValidationService } from '../../application/services/business-rule-validation-service';
 import { CommandValidationService } from '../../application/services/command-validation-service';
 import { CrossEntityValidationService } from '../../application/services/cross-entity-validation-service';
@@ -220,14 +220,15 @@ export class JobsCommands extends BaseCommand {
     const feedbackRepository = new FeedbackRepository();
     const reminderRepository = new ReminderRepository();
 
-    this.jobService = new JobService(jobRepository, auditLogRepository, staffRepository);
+    this.jobService = new JobService(jobRepository, auditLogRepository, staffRepository, this.permissionService!);
     this.questionService = new JobQuestionService();
     this.cleanupService = new JobCleanupService(jobRepository, auditLogRepository);
     this.applicationService = new ApplicationService(
       applicationRepository, 
       jobRepository, 
       staffRepository, 
-      robloxService
+      robloxService,
+      this.permissionService!
     );
     this.jobRepository = jobRepository;
     this.guildConfigRepository = guildConfigRepository;
@@ -248,8 +249,7 @@ export class JobsCommands extends BaseCommand {
       retainerRepository,
       feedbackRepository,
       reminderRepository,
-      auditLogRepository,
-      this.businessRuleValidationService
+      auditLogRepository
     );
     this.commandValidationService = new CommandValidationService(
       this.businessRuleValidationService,
@@ -270,7 +270,6 @@ export class JobsCommands extends BaseCommand {
     name: 'apply'
   })
   async apply(interaction: CommandInteraction): Promise<void> {
-      const context = await this.getPermissionContext(interaction);
     try {
       const guildId = interaction.guildId!;
       
@@ -364,7 +363,6 @@ export class JobsCommands extends BaseCommand {
     try {
       await interaction.deferReply();
 
-      const guildId = interaction.guildId!;
       const currentPage = page || 1;
 
       const filters: JobSearchFilters = {};
@@ -395,7 +393,8 @@ export class JobsCommands extends BaseCommand {
         filters.searchTerm = search;
       }
 
-      const result = await this.jobService.listJobs(guildId, filters, currentPage, interaction.user.id);
+      const context = await this.getPermissionContext(interaction);
+      const result = await this.jobService.listJobs(context, filters, currentPage);
 
       if (result.jobs.length === 0) {
         const embed = new EmbedBuilder()
@@ -516,6 +515,7 @@ export class JobsCommands extends BaseCommand {
         postedBy: interaction.user.id,
       };
 
+      const context = await this.getPermissionContext(interaction);
       const result = await this.jobService.createJob(context, request);
 
       if (!result.success) {
@@ -603,7 +603,6 @@ export class JobsCommands extends BaseCommand {
     try {
       await interaction.deferReply();
 
-      const guildId = interaction.guildId!;
       const updates: JobUpdateRequest = {};
 
       if (title) updates.title = title;
@@ -638,7 +637,8 @@ export class JobsCommands extends BaseCommand {
         return;
       }
 
-      const result = await this.jobService.updateJob(guildId, jobId, updates, interaction.user.id);
+      const context = await this.getPermissionContext(interaction);
+      const result = await this.jobService.updateJob(context, jobId, updates);
 
       if (!result.success) {
         await interaction.followUp({
@@ -688,8 +688,8 @@ export class JobsCommands extends BaseCommand {
     try {
       await interaction.deferReply();
 
-      const guildId = interaction.guildId!;
-      const job = await this.jobService.getJobDetails(context, guildId, jobId, interaction.user.id);
+      const context = await this.getPermissionContext(interaction);
+      const job = await this.jobService.getJobDetails(context, jobId);
 
       if (!job) {
         await interaction.followUp({
@@ -756,8 +756,8 @@ export class JobsCommands extends BaseCommand {
     try {
       await interaction.deferReply();
 
-      const guildId = interaction.guildId!;
-      const result = await this.jobService.closeJob(guildId, jobId, interaction.user.id);
+      const context = await this.getPermissionContext(interaction);
+      const result = await this.jobService.closeJob(context, jobId);
 
       if (!result.success) {
         await interaction.followUp({
@@ -808,10 +808,10 @@ export class JobsCommands extends BaseCommand {
     try {
       await interaction.deferReply();
 
-      const guildId = interaction.guildId!;
+      const context = await this.getPermissionContext(interaction);
       
       // Get job info before deletion for confirmation
-      const job = await this.jobService.getJobDetails(context, guildId, jobId, interaction.user.id);
+      const job = await this.jobService.getJobDetails(context, jobId);
       if (!job) {
         await interaction.followUp({
           content: '❌ Job not found.',
@@ -819,8 +819,7 @@ export class JobsCommands extends BaseCommand {
         });
         return;
       }
-
-      const result = await this.jobService.removeJob(guildId, jobId, interaction.user.id);
+      const result = await this.jobService.removeJob(context, jobId);
 
       if (!result.success) {
         await interaction.followUp({
@@ -878,8 +877,8 @@ export class JobsCommands extends BaseCommand {
       const page = parseInt(pageStr);
       const filters = JSON.parse(filtersStr) as JobSearchFilters;
 
-      const guildId = interaction.guildId!;
-      const result = await this.jobService.listJobs(guildId, filters, page, interaction.user.id);
+      const context = await this.getPermissionContext(interaction as any);
+      const result = await this.jobService.listJobs(context, filters, page);
 
       const embed = new EmbedBuilder()
         .setTitle('📋 Job Listings')
@@ -1093,10 +1092,10 @@ export class JobsCommands extends BaseCommand {
     try {
       await interaction.deferReply();
 
-      const guildId = interaction.guildId!;
+      const context = await this.getPermissionContext(interaction);
       
       // Get existing job
-      const existingJob = await this.jobService.getJobDetails(context, guildId, jobId, interaction.user.id);
+      const existingJob = await this.jobService.getJobDetails(context, jobId);
       if (!existingJob) {
         await interaction.followUp({
           content: '❌ Job not found.',
@@ -1166,10 +1165,9 @@ export class JobsCommands extends BaseCommand {
 
       // Update the job
       const result = await this.jobService.updateJob(
-        guildId,
+        context,
         jobId,
-        { questions: allQuestions },
-        interaction.user.id
+        { questions: allQuestions }
       );
 
       if (!result.success) {
@@ -1274,7 +1272,6 @@ export class JobsCommands extends BaseCommand {
   @ValidatePermissions('senior-staff')
   async cleanup_report(interaction: CommandInteraction) {
     try {
-      const context = await this.getPermissionContext(interaction);
       await interaction.deferReply();
 
       const guildId = interaction.guildId!;
@@ -1669,6 +1666,7 @@ export class JobsCommands extends BaseCommand {
   async handleApplicationAccept(interaction: ButtonInteraction): Promise<void> {
     try {
       const applicationId = interaction.customId.replace('app_accept_', '');
+      const context = await this.getPermissionContext(interaction as any);
       
       // Review the application
       const application = await this.applicationService.reviewApplication(context, {
@@ -1827,6 +1825,7 @@ export class JobsCommands extends BaseCommand {
     try {
       const applicationId = interaction.customId.replace('decline_reason_', '');
       const reason = interaction.fields.getTextInputValue('decline_reason') || undefined;
+      const context = await this.getPermissionContext(interaction as any);
       
       // Review the application
       const application = await this.applicationService.reviewApplication(context, {

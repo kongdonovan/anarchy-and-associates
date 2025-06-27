@@ -56,7 +56,7 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
         // Initialize services
         this.permissionService = new permission_service_1.PermissionService(guildConfigRepository);
         this.businessRuleValidationService = new business_rule_validation_service_1.BusinessRuleValidationService(guildConfigRepository, staffRepository, caseRepository, this.permissionService);
-        this.crossEntityValidationService = new cross_entity_validation_service_1.CrossEntityValidationService(staffRepository, caseRepository, applicationRepository, jobRepository, retainerRepository, feedbackRepository, reminderRepository, auditLogRepository, this.businessRuleValidationService);
+        this.crossEntityValidationService = new cross_entity_validation_service_1.CrossEntityValidationService(staffRepository, caseRepository, applicationRepository, jobRepository, retainerRepository, feedbackRepository, reminderRepository, auditLogRepository);
         this.commandValidationService = new command_validation_service_1.CommandValidationService(this.businessRuleValidationService, this.crossEntityValidationService);
         // Initialize validation services in base class
         this.initializeValidationServices(this.commandValidationService, this.businessRuleValidationService, this.crossEntityValidationService, this.permissionService);
@@ -90,6 +90,7 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
                 description: details,
                 priority: case_1.CasePriority.MEDIUM
             };
+            const context = await this.getPermissionContext(interaction);
             const newCase = await this.caseService.createCase(context, caseRequest);
             // Create case channel
             await this.createCaseChannel(newCase, interaction);
@@ -131,6 +132,7 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
                 lawyerId: lawyer.id,
                 assignedBy: interaction.user.id
             };
+            const context = await this.getPermissionContext(interaction);
             const updatedCase = await this.caseService.assignLawyer(context, assignmentRequest);
             const embed = this.createSuccessEmbed('Lawyer Assigned', `${lawyer.displayName} has been assigned to case **${updatedCase.caseNumber}**.\n\n` +
                 `${updatedCase.leadAttorneyId === lawyer.id ? '**Lead Attorney:** Yes' : '**Lead Attorney:** No'}\n` +
@@ -152,6 +154,7 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
         try {
             await this.deferReply(interaction);
             // Get the case
+            const context = await this.getPermissionContext(interaction);
             const caseData = await this.caseService.getCaseByCaseNumber(context, caseNumber);
             if (!caseData) {
                 const embed = this.createErrorEmbed('Case Not Found', `Case ${caseNumber} not found.`);
@@ -178,13 +181,11 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
                 await interaction.followUp({ embeds: [embed], ephemeral: true });
             }
             // Perform the transfer
-            await this.caseService.reassignLawyer(caseData._id.toString(), caseData._id.toString(), // Same case, just changing lawyers
+            await this.caseService.reassignLawyer(context, caseData._id.toString(), caseData._id.toString(), // Same case, just changing lawyers
             toLawyer.id);
             // Remove the original lawyer
-            await this.caseService.unassignLawyer(caseData._id.toString(), fromLawyer.id);
-            // Update channel permissions if Discord client is available
-            const caseServiceWithClient = this.getCaseServiceWithClient(interaction.client);
-            await caseServiceWithClient.updateCaseChannelPermissions(caseData._id.toString());
+            await this.caseService.unassignLawyer(context, caseData._id.toString(), fromLawyer.id);
+            // Channel permissions will be updated automatically by the case service
             // Send notifications
             const notificationEmbed = this.createInfoEmbed('Case Transfer Notification', `Case **${caseNumber}** has been transferred.\n\n` +
                 `**From:** ${fromLawyer.displayName}\n` +
@@ -207,13 +208,15 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
             // Log audit
             await this.auditLogRepository.add({
                 guildId: interaction.guildId,
-                action: audit_log_1.AuditAction.CASE_TRANSFER,
-                performedBy: interaction.user.id,
+                action: audit_log_1.AuditAction.CASE_ASSIGNED,
+                actorId: interaction.user.id,
                 targetId: caseData._id.toString(),
+                timestamp: new Date(),
                 details: {
-                    caseNumber,
-                    fromLawyer: fromLawyer.id,
-                    toLawyer: toLawyer.id,
+                    metadata: {
+                        fromLawyer: fromLawyer.id,
+                        toLawyer: toLawyer.id
+                    },
                     reason
                 }
             });
@@ -264,7 +267,7 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
             const embed = this.createInfoEmbed('Select Cases to Close', `Found ${openCases.length} open cases. Select the ones you want to close with result: **${result}**`);
             // Store result in custom ID for later use
             interaction.client.caseClosureResult = result;
-            await this.safeReply(interaction, { embeds: [embed], components: [row] });
+            await interaction.reply({ embeds: [embed], components: [row] });
         }
         catch (error) {
             this.logCommandError(interaction, 'bulk_close_failed', error);
@@ -282,6 +285,7 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
             let failedCount = 0;
             const closureDetails = [];
             // Process each selected case
+            const context = await this.getPermissionContext(interaction);
             for (const caseId of selectedCaseIds) {
                 try {
                     const caseData = await this.caseService.getCaseById(context, caseId);
@@ -319,14 +323,17 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
             // Log audit
             await this.auditLogRepository.add({
                 guildId: interaction.guildId,
-                action: audit_log_1.AuditAction.BULK_OPERATION,
-                performedBy: closedBy,
+                action: audit_log_1.AuditAction.CASE_CLOSED,
+                actorId: closedBy,
+                timestamp: new Date(),
                 details: {
-                    operation: 'bulk_case_close',
-                    totalCases: selectedCaseIds.length,
-                    successCount,
-                    failedCount,
-                    result
+                    metadata: {
+                        totalCases: selectedCaseIds.length,
+                        successCount,
+                        failedCount,
+                        result,
+                        bulkOperation: true
+                    }
                 }
             });
         }
@@ -343,30 +350,30 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
             const startDate = new Date();
             startDate.setDate(startDate.getDate() - period);
             // Get all cases
-            const allCases = await this.caseRepository.findByGuildId(guildId);
-            const recentCases = allCases.filter(c => c.createdAt && c.createdAt >= startDate);
+            const allCases = await this.caseRepository.findByFilters({ guildId });
+            const recentCases = allCases.filter((c) => c.createdAt && c.createdAt >= startDate);
             // Calculate statistics
             const stats = {
                 total: allCases.length,
                 recent: recentCases.length,
                 byStatus: {
-                    pending: allCases.filter(c => c.status === case_1.CaseStatus.PENDING).length,
-                    inProgress: allCases.filter(c => c.status === case_1.CaseStatus.IN_PROGRESS).length,
-                    closed: allCases.filter(c => c.status === case_1.CaseStatus.CLOSED).length
+                    pending: allCases.filter((c) => c.status === case_1.CaseStatus.PENDING).length,
+                    inProgress: allCases.filter((c) => c.status === case_1.CaseStatus.IN_PROGRESS).length,
+                    closed: allCases.filter((c) => c.status === case_1.CaseStatus.CLOSED).length
                 },
                 byResult: {
-                    win: allCases.filter(c => c.result === case_1.CaseResult.WIN).length,
-                    loss: allCases.filter(c => c.result === case_1.CaseResult.LOSS).length,
-                    settlement: allCases.filter(c => c.result === case_1.CaseResult.SETTLEMENT).length,
-                    dismissed: allCases.filter(c => c.result === case_1.CaseResult.DISMISSED).length,
-                    withdrawn: allCases.filter(c => c.result === case_1.CaseResult.WITHDRAWN).length
+                    win: allCases.filter((c) => c.result === case_1.CaseResult.WIN).length,
+                    loss: allCases.filter((c) => c.result === case_1.CaseResult.LOSS).length,
+                    settlement: allCases.filter((c) => c.result === case_1.CaseResult.SETTLEMENT).length,
+                    dismissed: allCases.filter((c) => c.result === case_1.CaseResult.DISMISSED).length,
+                    withdrawn: allCases.filter((c) => c.result === case_1.CaseResult.WITHDRAWN).length
                 }
             };
             // Calculate lawyer workload
             const lawyerWorkload = new Map();
-            const activeCases = allCases.filter(c => c.status === case_1.CaseStatus.IN_PROGRESS);
-            activeCases.forEach(caseData => {
-                caseData.assignedLawyerIds.forEach(lawyerId => {
+            const activeCases = allCases.filter((c) => c.status === case_1.CaseStatus.IN_PROGRESS);
+            activeCases.forEach((caseData) => {
+                caseData.assignedLawyerIds.forEach((lawyerId) => {
                     lawyerWorkload.set(lawyerId, (lawyerWorkload.get(lawyerId) || 0) + 1);
                 });
             });
@@ -375,7 +382,7 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
                 .sort((a, b) => b[1] - a[1])
                 .slice(0, 5);
             // Calculate average case duration
-            const closedCases = allCases.filter(c => c.status === case_1.CaseStatus.CLOSED && c.closedAt && c.createdAt);
+            const closedCases = allCases.filter((c) => c.status === case_1.CaseStatus.CLOSED && c.closedAt && c.createdAt);
             let avgDuration = 0;
             if (closedCases.length > 0) {
                 const totalDuration = closedCases.reduce((sum, c) => {
@@ -385,7 +392,7 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
                 avgDuration = totalDuration / closedCases.length;
             }
             // Get client satisfaction (from feedback)
-            const feedbacks = await this.feedbackRepository.findByGuildId(guildId);
+            const feedbacks = await this.feedbackRepository.findByFilters({ guildId });
             const avgRating = feedbacks.length > 0
                 ? feedbacks.reduce((sum, f) => sum + f.rating, 0) / feedbacks.length
                 : 0;
@@ -520,7 +527,7 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
             await interaction.deferUpdate();
             const guildId = interaction.guildId;
             const templateId = interaction.values[0];
-            const template = CaseCommands_1.caseTemplates.get(guildId)?.get(templateId);
+            const template = templateId ? CaseCommands_1.caseTemplates.get(guildId)?.get(templateId) : undefined;
             if (!template) {
                 const embed = this.createErrorEmbed('Template Not Found', 'The selected template no longer exists.');
                 await interaction.editReply({ embeds: [embed], components: [] });
@@ -541,6 +548,7 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
                 description: storedDetails.details,
                 priority: template.priority
             };
+            const context = await this.getPermissionContext(interaction);
             const newCase = await this.caseService.createCase(context, caseRequest);
             // Create case channel
             await this.createCaseChannel(newCase, interaction);
@@ -561,6 +569,7 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
     async debugPermissions(caseNumber, user, interaction) {
         try {
             await this.deferReply(interaction, true);
+            const context = await this.getPermissionContext(interaction);
             const caseData = await this.caseService.getCaseByCaseNumber(context, caseNumber);
             if (!caseData) {
                 const embed = this.createErrorEmbed('Case Not Found', `Case ${caseNumber} not found.`);
@@ -662,6 +671,7 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
                 resultNotes: notes,
                 closedBy: interaction.user.id
             };
+            const context = await this.getPermissionContext(interaction);
             const closedCase = await this.caseService.closeCase(context, closureRequest);
             // Archive the channel
             await this.archiveCaseChannel(closedCase, interaction);
@@ -700,9 +710,10 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
             if (search)
                 filters.title = search;
             // Get cases with pagination
-            const cases = await this.caseService.searchCases(filters, { field: 'createdAt', direction: 'desc' }, { limit: pageSize, skip });
+            const context = await this.getPermissionContext(interaction);
+            const cases = await this.caseService.searchCases(context, filters, { field: 'createdAt', direction: 'desc' }, { limit: pageSize, skip });
             // Get total count for pagination info
-            const allCases = await this.caseService.searchCases(filters);
+            const allCases = await this.caseService.searchCases(context, filters);
             const totalPages = Math.ceil(allCases.length / pageSize);
             const embed = embed_utils_1.EmbedUtils.createAALegalEmbed({
                 title: '📋 Case List',
@@ -781,9 +792,10 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
                 await interaction.reply({ embeds: [embed], ephemeral: true });
                 return;
             }
+            // Get context first
+            const context = await this.getPermissionContext(interaction);
             // Use the existing reassignLawyer method from the service
-            await this.caseService.reassignLawyer(currentCase._id.toString(), newCase._id.toString(), staff.id);
-            // Get updated case data
+            await this.caseService.reassignLawyer(context, currentCase._id.toString(), newCase._id.toString(), staff.id);
             const updatedNewCase = await this.caseService.getCaseById(context, newCase._id.toString());
             const embed = this.createSuccessEmbed('Staff Reassigned', `${staff.displayName} has been reassigned from case **${currentCase.caseNumber}** to case **${newCase.caseNumber}**.\n\n` +
                 `**New Case:** ${newCase.title}\n` +
@@ -815,10 +827,11 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
                 return;
             }
             // Unassign from all active cases
+            const context = await this.getPermissionContext(interaction);
             const unassignedCases = [];
             for (const caseData of assignedCases) {
                 try {
-                    await this.caseService.unassignLawyer(caseData._id.toString(), staff.id);
+                    await this.caseService.unassignLawyer(context, caseData._id.toString(), staff.id);
                     unassignedCases.push(caseData.caseNumber);
                 }
                 catch (error) {
@@ -849,6 +862,7 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
     async caseInfo(caseNumber, interaction) {
         try {
             let caseData = null;
+            const context = await this.getPermissionContext(interaction);
             if (caseNumber) {
                 // Find case by case number
                 caseData = await this.caseService.getCaseByCaseNumber(context, caseNumber);
@@ -1081,6 +1095,7 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
                 await interaction.reply({ embeds: [embed], ephemeral: true });
                 return;
             }
+            const context = await this.getPermissionContext(interaction);
             const caseData = await this.caseService.getCaseById(context, caseId);
             if (!caseData) {
                 const embed = this.createErrorEmbed('Case Not Found', 'The case information could not be retrieved.');
@@ -1115,7 +1130,7 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
             }
             await this.deferReply(interaction);
             const caseServiceWithClient = this.getCaseServiceWithClient(interaction.client);
-            const updatedCase = await caseServiceWithClient.setLeadAttorney(caseData._id.toString(), attorney.id, interaction.user.id);
+            const updatedCase = await caseServiceWithClient.setLeadAttorney(context, caseData._id.toString(), attorney.id);
             const embed = this.createSuccessEmbed('Lead Attorney Updated', `**Case:** ${updatedCase.caseNumber}\n` +
                 `**New Lead Attorney:** <@${attorney.id}>\n` +
                 `**Previous Lead Attorney:** ${caseData.leadAttorneyId ? `<@${caseData.leadAttorneyId}>` : 'None'}\n\n` +
@@ -1140,7 +1155,7 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
         const context = await this.getPermissionContext(interaction);
         try {
             const guild = await interaction.client.guilds.fetch(caseData.guildId);
-            const caseReviewCategoryId = await this.caseService.getCaseReviewCategoryId(context, caseData.guildId);
+            const caseReviewCategoryId = await this.caseService.getCaseReviewCategoryId(caseData.guildId);
             if (!caseReviewCategoryId) {
                 throw new Error('Case review category not configured');
             }
@@ -1214,7 +1229,8 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
             const caseId = interaction.customId.replace('case_accept_', '');
             // Accept the case and assign the accepting user as lead attorney
             const caseServiceWithClient = this.getCaseServiceWithClient(interaction.client);
-            const acceptedCase = await caseServiceWithClient.acceptCase(caseId, interaction.user.id);
+            const context = await this.getPermissionContext(interaction);
+            const acceptedCase = await caseServiceWithClient.acceptCase(context, caseId);
             // Update the original message
             const embed = this.createSuccessEmbed('✅ Case Accepted', `This case has been accepted by ${interaction.user.displayName}.\n\n` +
                 `**Case Number:** ${acceptedCase.caseNumber}\n` +
@@ -1312,6 +1328,7 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
                 return;
             }
             // Check permissions - only client and lead counsel
+            const context = await this.getPermissionContext(interaction);
             const caseData = await this.caseService.getCaseById(context, caseId);
             if (!caseData) {
                 const embed = this.createErrorEmbed('Case Not Found', 'The case could not be found.');
@@ -1354,7 +1371,8 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
             const caseId = interaction.customId.replace('case_decline_reason_', '');
             const reason = interaction.fields.getTextInputValue('decline_reason') || 'No reason provided';
             // Decline the case
-            const declinedCase = await this.caseService.declineCase(caseId, interaction.user.id, reason);
+            const context = await this.getPermissionContext(interaction);
+            const declinedCase = await this.caseService.declineCase(context, caseId, reason);
             const embed = this.createErrorEmbed('❌ Case Declined', `This case has been declined by ${interaction.user.displayName}.\n\n` +
                 `**Case Number:** ${declinedCase.caseNumber}\n` +
                 `**Reason:** ${reason}\n\n` +
@@ -1386,7 +1404,6 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
         }
     }
     async archiveCaseChannel(caseData, interaction) {
-        const context = await this.getPermissionContext(interaction);
         try {
             const guild = await interaction.client.guilds.fetch(caseData.guildId);
             const archiveCategoryId = await this.caseService.getCaseArchiveCategoryId(caseData.guildId);
@@ -1434,7 +1451,6 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
         }
     }
     async updateCaseOverviewMessage(closedCase, guildId, interaction) {
-        const context = await this.getPermissionContext(interaction);
         try {
             const guild = await interaction.client.guilds.fetch(guildId);
             const channel = await guild.channels.fetch(closedCase.channelId);
@@ -1490,36 +1506,36 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
         try {
             await this.deferReply(interaction);
             // Get all cases
-            let cases = await this.caseRepository.findByGuildId(interaction.guildId);
+            let cases = await this.caseRepository.findByFilters({ guildId: interaction.guildId });
             // Apply search query
             if (searchQuery) {
                 const query = searchQuery.toLowerCase();
-                cases = cases.filter(c => c.caseNumber.toLowerCase().includes(query) ||
+                cases = cases.filter((c) => c.caseNumber.toLowerCase().includes(query) ||
                     c.title.toLowerCase().includes(query) ||
                     c.description.toLowerCase().includes(query) ||
                     c.clientUsername.toLowerCase().includes(query));
             }
             // Apply status filter
             if (status && status !== 'all') {
-                cases = cases.filter(c => c.status === status);
+                cases = cases.filter((c) => c.status === status);
             }
             // Apply priority filter
             if (priority && priority !== 'all') {
-                cases = cases.filter(c => c.priority === priority);
+                cases = cases.filter((c) => c.priority === priority);
             }
             // Apply lawyer filter
             if (lawyer) {
-                cases = cases.filter(c => c.assignedLawyerIds.includes(lawyer.id));
+                cases = cases.filter((c) => c.assignedLawyerIds.includes(lawyer.id));
             }
             // Apply client filter
             if (client) {
-                cases = cases.filter(c => c.clientId === client.id);
+                cases = cases.filter((c) => c.clientId === client.id);
             }
             // Apply date filter
             if (daysAgo) {
                 const cutoffDate = new Date();
                 cutoffDate.setDate(cutoffDate.getDate() - daysAgo);
-                cases = cases.filter(c => new Date(c.createdAt) >= cutoffDate);
+                cases = cases.filter((c) => new Date(c.createdAt) >= cutoffDate);
             }
             // Sort by creation date (newest first)
             cases.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -1541,9 +1557,9 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
                     name: `${statusEmoji} ${caseItem.caseNumber} - ${caseItem.title}`,
                     value: [
                         `**Client:** <@${caseItem.clientId}> (${caseItem.clientUsername})`,
-                        `**Status:** ${caseItem.status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}`,
+                        `**Status:** ${caseItem.status.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())}`,
                         `**Priority:** ${priorityEmoji} ${caseItem.priority.toUpperCase()}`,
-                        `**Lawyers:** ${caseItem.assignedLawyerIds.length > 0 ? caseItem.assignedLawyerIds.map(id => `<@${id}>`).join(', ') : 'None assigned'}`,
+                        `**Lawyers:** ${caseItem.assignedLawyerIds.length > 0 ? caseItem.assignedLawyerIds.map((id) => `<@${id}>`).join(', ') : 'None assigned'}`,
                         `**Created:** <t:${Math.floor(new Date(caseItem.createdAt).getTime() / 1000)}:R>`
                     ].join('\n'),
                     inline: false
@@ -1593,7 +1609,7 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
     async exportCases(format = 'csv', interaction) {
         try {
             await this.deferReply(interaction, true);
-            const cases = await this.caseRepository.findByGuildId(interaction.guildId);
+            const cases = await this.caseRepository.findByFilters({ guildId: interaction.guildId });
             if (cases.length === 0) {
                 const embed = this.createErrorEmbed('No Data', 'There are no cases to export.');
                 await this.safeReply(interaction, { embeds: [embed], ephemeral: true });
@@ -1607,7 +1623,7 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
                     name: `cases_export_${new Date().toISOString().split('T')[0]}.csv`
                 });
                 const embed = this.createSuccessEmbed('Export Complete', `Successfully exported ${cases.length} cases to CSV format.`);
-                await this.safeReply(interaction, {
+                await interaction.reply({
                     embeds: [embed],
                     files: [attachment],
                     ephemeral: true
@@ -1621,7 +1637,7 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
                     name: `case_summary_${new Date().toISOString().split('T')[0]}.txt`
                 });
                 const embed = this.createSuccessEmbed('Report Generated', `Successfully generated summary report for ${cases.length} cases.`);
-                await this.safeReply(interaction, {
+                await interaction.reply({
                     embeds: [embed],
                     files: [attachment],
                     ephemeral: true
@@ -1650,15 +1666,16 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
             }
             // Add note to case
             const note = {
+                id: new Date().getTime().toString(),
                 content,
-                authorId: interaction.user.id,
-                authorName: interaction.user.username,
-                timestamp: new Date(),
-                clientVisible
+                createdBy: interaction.user.id,
+                createdAt: new Date(),
+                isInternal: !clientVisible
             };
             // Update case with new note
+            caseData.notes.push(note);
             await this.caseRepository.update(caseData._id.toString(), {
-                $push: { notes: note }
+                notes: caseData.notes
             });
             const embed = this.createSuccessEmbed('Note Added', `Successfully added ${clientVisible ? 'client-visible' : 'internal'} note to case **${caseData.caseNumber}**.`);
             await interaction.reply({ embeds: [embed] });
@@ -1761,7 +1778,7 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
             '',
             'STATUS BREAKDOWN',
             '-'.repeat(20),
-            ...Object.entries(statusCounts).map(([status, count]) => `${status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}: ${count} (${((count / totalCases) * 100).toFixed(1)}%)`),
+            ...Object.entries(statusCounts).map(([status, count]) => `${status.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())}: ${count} (${((count / totalCases) * 100).toFixed(1)}%)`),
             '',
             'PRIORITY BREAKDOWN',
             '-'.repeat(20),
@@ -1769,7 +1786,7 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
             '',
             'CASE RESULTS (Closed Cases)',
             '-'.repeat(20),
-            ...Object.entries(resultCounts).map(([result, count]) => `${result.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}: ${count}`),
+            ...Object.entries(resultCounts).map(([result, count]) => `${result.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())}: ${count}`),
             '',
             'PERFORMANCE METRICS',
             '-'.repeat(20),
@@ -1802,12 +1819,11 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
             case case_1.CasePriority.LOW: return '🟢';
             case case_1.CasePriority.MEDIUM: return '🟡';
             case case_1.CasePriority.HIGH: return '🟠';
-            case case_1.CasePriority.CRITICAL: return '🔴';
+            case case_1.CasePriority.URGENT: return '🔴';
             default: return '⚪';
         }
     }
     analyzeTrends(cases, periodDays) {
-        const now = new Date();
         const periodStart = new Date();
         periodStart.setDate(periodStart.getDate() - periodDays);
         const recentCases = cases.filter(c => c.createdAt && c.createdAt >= periodStart);
@@ -2205,26 +2221,13 @@ __decorate([
         description: 'Filter by case status',
         name: 'status',
         type: discord_js_1.ApplicationCommandOptionType.String,
-        required: false,
-        choices: [
-            { name: 'All', value: 'all' },
-            { name: 'Pending', value: 'pending' },
-            { name: 'In Progress', value: 'in_progress' },
-            { name: 'Closed', value: 'closed' }
-        ]
+        required: false
     })),
     __param(2, (0, discordx_1.SlashOption)({
         description: 'Filter by priority level',
         name: 'priority',
         type: discord_js_1.ApplicationCommandOptionType.String,
-        required: false,
-        choices: [
-            { name: 'All', value: 'all' },
-            { name: 'Low', value: 'low' },
-            { name: 'Medium', value: 'medium' },
-            { name: 'High', value: 'high' },
-            { name: 'Critical', value: 'critical' }
-        ]
+        required: false
     })),
     __param(3, (0, discordx_1.SlashOption)({
         description: 'Filter by assigned lawyer',
@@ -2260,11 +2263,7 @@ __decorate([
         description: 'Export format',
         name: 'format',
         type: discord_js_1.ApplicationCommandOptionType.String,
-        required: false,
-        choices: [
-            { name: 'CSV', value: 'csv' },
-            { name: 'Summary Report', value: 'summary' }
-        ]
+        required: false
     })),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, discord_js_1.CommandInteraction]),

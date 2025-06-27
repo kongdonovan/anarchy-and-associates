@@ -9,7 +9,6 @@ jest.mock('../../../infrastructure/repositories/audit-log-repository');
 jest.mock('../../../infrastructure/logger');
 describe('RoleSynchronizationEnhancementService', () => {
     let service;
-    let mockStaffRepository;
     let mockAuditLogRepository;
     // Discord.js mocks
     let mockGuild;
@@ -22,7 +21,6 @@ describe('RoleSynchronizationEnhancementService', () => {
         // Create service instance
         service = new role_synchronization_enhancement_service_1.RoleSynchronizationEnhancementService();
         // Get mocked repositories
-        mockStaffRepository = service.staffRepository;
         mockAuditLogRepository = service.auditLogRepository;
         // Setup Discord.js mocks
         mockUser = {

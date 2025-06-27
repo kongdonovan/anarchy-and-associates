@@ -2,12 +2,12 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ChannelPermissionManager = void 0;
 const discord_js_1 = require("discord.js");
-const case_1 = require("../../domain/entities/case");
 const staff_role_1 = require("../../domain/entities/staff-role");
 const audit_log_1 = require("../../domain/entities/audit-log");
 const logger_1 = require("../../infrastructure/logger");
+const case_1 = require("../../domain/entities/case");
 class ChannelPermissionManager {
-    constructor(caseRepository, staffRepository, auditLogRepository, guildConfigRepository, permissionService, businessRuleValidationService) {
+    constructor(caseRepository, staffRepository, auditLogRepository, businessRuleValidationService) {
         // Channel type patterns for automatic detection
         this.CHANNEL_PATTERNS = {
             case: /^case-|^aa-\d{4}-\d+-/i,
@@ -118,8 +118,6 @@ class ChannelPermissionManager {
         this.caseRepository = caseRepository;
         this.staffRepository = staffRepository;
         this.auditLogRepository = auditLogRepository;
-        this.guildConfigRepository = guildConfigRepository;
-        this.permissionService = permissionService;
         this.businessRuleValidationService = businessRuleValidationService;
     }
     /**

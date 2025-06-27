@@ -254,7 +254,8 @@ class AnarchyServerSetupService {
                             'senior-staff': [],
                             case: [],
                             config: [],
-                            retainer: [],
+                            lawyer: [],
+                            'lead-attorney': [],
                             repair: []
                         },
                         adminRoles: [],
@@ -439,7 +440,8 @@ class AnarchyServerSetupService {
                     'senior-staff': [],
                     case: [],
                     config: [],
-                    retainer: [],
+                    lawyer: [],
+                    'lead-attorney': [],
                     repair: []
                 },
                 adminRoles: [],

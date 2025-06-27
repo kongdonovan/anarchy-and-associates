@@ -28,7 +28,8 @@ let RetainerCommands = class RetainerCommands {
         const retainerRepository = new retainer_repository_1.RetainerRepository();
         const guildConfigRepository = new guild_config_repository_1.GuildConfigRepository();
         const robloxService = roblox_service_1.RobloxService.getInstance();
-        this.retainerService = new retainer_service_1.RetainerService(retainerRepository, guildConfigRepository, robloxService);
+        const permissionService = new permission_service_1.PermissionService(guildConfigRepository);
+        this.retainerService = new retainer_service_1.RetainerService(retainerRepository, guildConfigRepository, robloxService, permissionService);
     }
     async signRetainer(client, interaction) {
         try {
@@ -48,6 +49,7 @@ let RetainerCommands = class RetainerCommands {
                 clientId,
                 lawyerId
             };
+            const context = permission_utils_1.PermissionUtils.createPermissionContext(interaction);
             const retainer = await this.retainerService.createRetainer(context, request);
             // Send DM to client with retainer agreement
             await this.sendRetainerDM(retainer, client, interaction.user);
@@ -70,12 +72,17 @@ let RetainerCommands = class RetainerCommands {
         }
     }
     async listRetainers(interaction) {
-        const context = await this.getPermissionContext(interaction);
         try {
-            const guildId = interaction.guildId;
-            const activeRetainers = await this.retainerService.getActiveRetainers(context, guildId);
-            const pendingRetainers = await this.retainerService.getPendingRetainers(guildId);
-            const stats = await this.retainerService.getRetainerStats(guildId);
+            const member = interaction.guild?.members.cache.get(interaction.user.id);
+            const context = {
+                guildId: interaction.guildId,
+                userId: interaction.user.id,
+                userRoles: member?.roles.cache.map(role => role.id) || [],
+                isGuildOwner: interaction.guild?.ownerId === interaction.user.id
+            };
+            const activeRetainers = await this.retainerService.getActiveRetainers(context);
+            const pendingRetainers = await this.retainerService.getPendingRetainers(context);
+            const stats = await this.retainerService.getRetainerStats(context);
             const embed = embed_utils_1.EmbedUtils.createAALegalEmbed({
                 title: '📋 Retainer Agreements',
                 color: 'info'

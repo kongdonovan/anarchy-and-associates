@@ -41,7 +41,7 @@ class RoleTrackingService {
         const guildConfigRepository = new guild_config_repository_1.GuildConfigRepository();
         const permissionService = new permission_service_1.PermissionService(guildConfigRepository);
         const businessRuleValidationService = new business_rule_validation_service_1.BusinessRuleValidationService(guildConfigRepository, this.staffRepository, caseRepository, permissionService);
-        this.channelPermissionManager = new channel_permission_manager_1.ChannelPermissionManager(caseRepository, this.staffRepository, this.auditLogRepository, guildConfigRepository, permissionService, businessRuleValidationService);
+        this.channelPermissionManager = new channel_permission_manager_1.ChannelPermissionManager(caseRepository, this.staffRepository, this.auditLogRepository, businessRuleValidationService);
         // Initialize the cascade service
         this.roleChangeCascadeService = new role_change_cascade_service_1.RoleChangeCascadeService();
         // Initialize the role synchronization enhancement service
@@ -147,7 +147,7 @@ class RoleTrackingService {
             if (existingStaff) {
                 // Reactivate existing staff member
                 await this.staffRepository.update(existingStaff._id.toString(), {
-                    status: RetainerStatus.ACTIVE,
+                    status: 'active',
                     role: staffRole,
                     hiredAt: new Date() // Update hire date for rehiring
                 });
@@ -170,7 +170,7 @@ class RoleTrackingService {
                             reason: 'Initial hiring via Discord role assignment',
                             actionType: 'hire'
                         }],
-                    status: RetainerStatus.ACTIVE,
+                    status: 'active',
                     discordRoleId: this.findDiscordRoleId(member.guild, role)
                 };
                 await this.staffRepository.add(newStaff);

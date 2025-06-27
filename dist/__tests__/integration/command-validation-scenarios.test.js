@@ -14,11 +14,10 @@ const retainer_repository_1 = require("../../infrastructure/repositories/retaine
 const feedback_repository_1 = require("../../infrastructure/repositories/feedback-repository");
 const reminder_repository_1 = require("../../infrastructure/repositories/reminder-repository");
 const staff_role_1 = require("../../domain/entities/staff-role");
-const mongodb_memory_server_1 = require("mongodb-memory-server");
-const mongodb_1 = require("mongodb");
+const case_1 = require("../../domain/entities/case");
 const validation_error_handler_1 = require("../../presentation/utils/validation-error-handler");
+const mongo_client_1 = require("../../infrastructure/database/mongo-client");
 describe('Command Validation Scenarios', () => {
-    let mongoServer;
     let mongoClient;
     let commandValidationService;
     let businessRuleValidationService;
@@ -30,21 +29,18 @@ describe('Command Validation Scenarios', () => {
     let guildConfigRepository;
     let auditLogRepository;
     beforeAll(async () => {
-        mongoServer = await mongodb_memory_server_1.MongoMemoryServer.create();
-        const mongoUri = mongoServer.getUri();
-        mongoClient = new mongodb_1.MongoClient(mongoUri);
+        mongoClient = mongo_client_1.MongoDbClient.getInstance();
         await mongoClient.connect();
     });
     afterAll(async () => {
-        await mongoClient.close();
-        await mongoServer.stop();
+        await mongoClient.disconnect();
     });
     beforeEach(async () => {
         // Clear database
-        const db = mongoClient.db();
-        const collections = await db.collections();
+        const db = mongoClient.getDatabase();
+        const collections = await db.listCollections().toArray();
         for (const collection of collections) {
-            await collection.deleteMany({});
+            await db.collection(collection.name).deleteMany({});
         }
         // Initialize repositories
         staffRepository = new staff_repository_1.StaffRepository();
@@ -59,7 +55,7 @@ describe('Command Validation Scenarios', () => {
         // Initialize services
         permissionService = new permission_service_1.PermissionService(guildConfigRepository);
         businessRuleValidationService = new business_rule_validation_service_1.BusinessRuleValidationService(guildConfigRepository, staffRepository, caseRepository, permissionService);
-        crossEntityValidationService = new cross_entity_validation_service_1.CrossEntityValidationService(staffRepository, caseRepository, applicationRepository, jobRepository, retainerRepository, feedbackRepository, reminderRepository, auditLogRepository, businessRuleValidationService);
+        crossEntityValidationService = new cross_entity_validation_service_1.CrossEntityValidationService(staffRepository, caseRepository, applicationRepository, jobRepository, retainerRepository, feedbackRepository, reminderRepository, auditLogRepository);
         commandValidationService = new command_validation_service_1.CommandValidationService(businessRuleValidationService, crossEntityValidationService);
     });
     describe('Staff Hire Command Validation', () => {
@@ -68,12 +64,12 @@ describe('Command Validation Scenarios', () => {
             await staffRepository.add({
                 guildId: 'guild123',
                 userId: 'existing1',
-                discordUsername: 'Existing1#0001',
                 robloxUsername: 'ExistingRoblox1',
                 role: staff_role_1.StaffRole.JUNIOR_ASSOCIATE,
                 hiredAt: new Date(),
                 hiredBy: 'manager123',
-                status: RetainerStatus.ACTIVE,
+                promotionHistory: [],
+                status: 'active',
             });
             const mockInteraction = createMockInteraction('staff', 'hire', {
                 role: staff_role_1.StaffRole.JUNIOR_ASSOCIATE,
@@ -88,12 +84,12 @@ describe('Command Validation Scenarios', () => {
             await staffRepository.add({
                 guildId: 'guild123',
                 userId: 'manager123',
-                discordUsername: 'Manager#0001',
                 robloxUsername: 'ManagerRoblox',
                 role: staff_role_1.StaffRole.SENIOR_PARTNER,
                 hiredAt: new Date(),
                 hiredBy: 'owner123',
-                status: RetainerStatus.ACTIVE,
+                promotionHistory: [],
+                status: 'active',
             });
             const validationContext = await commandValidationService.extractValidationContext(mockInteraction, permissionContext);
             const result = await commandValidationService.validateCommand(validationContext);
@@ -107,12 +103,12 @@ describe('Command Validation Scenarios', () => {
                 await staffRepository.add({
                     guildId: 'guild123',
                     userId: `junior${i}`,
-                    discordUsername: `Junior${i}#0001`,
                     robloxUsername: `JuniorRoblox${i}`,
                     role: staff_role_1.StaffRole.JUNIOR_ASSOCIATE,
                     hiredAt: new Date(),
                     hiredBy: 'manager123',
-                    status: RetainerStatus.ACTIVE,
+                    promotionHistory: [],
+                    status: 'active',
                 });
             }
             const mockInteraction = createMockInteraction('staff', 'hire', {
@@ -136,12 +132,12 @@ describe('Command Validation Scenarios', () => {
                 await staffRepository.add({
                     guildId: 'guild123',
                     userId: `junior${i}`,
-                    discordUsername: `Junior${i}#0001`,
                     robloxUsername: `JuniorRoblox${i}`,
                     role: staff_role_1.StaffRole.JUNIOR_ASSOCIATE,
                     hiredAt: new Date(),
                     hiredBy: 'owner123',
-                    status: RetainerStatus.ACTIVE,
+                    promotionHistory: [],
+                    status: 'active',
                 });
             }
             const mockInteraction = createMockInteraction('staff', 'hire', {
@@ -164,15 +160,15 @@ describe('Command Validation Scenarios', () => {
     });
     describe('Staff Fire Command Validation', () => {
         it('should validate entity relationships before firing', async () => {
-            const staffMember = await staffRepository.add({
+            await staffRepository.add({
                 guildId: 'guild123',
                 userId: 'staff123',
-                discordUsername: 'Staff#0001',
                 robloxUsername: 'StaffRoblox',
                 role: staff_role_1.StaffRole.JUNIOR_ASSOCIATE,
                 hiredAt: new Date(),
                 hiredBy: 'manager123',
-                status: RetainerStatus.ACTIVE,
+                promotionHistory: [],
+                status: 'active',
             });
             // Create a case assigned to this staff member
             await caseRepository.add({
@@ -180,15 +176,14 @@ describe('Command Validation Scenarios', () => {
                 caseNumber: 'CASE-001',
                 title: 'Test Case',
                 description: 'Test',
-                status: 'in_progress',
-                priority: CasePriority.MEDIUM,
-                assignedTo: ['staff123'],
-                leadAttorney: 'staff123',
-                client: {
-                    userId: 'client123',
-                    username: 'Client#0001',
-                },
-                createdBy: 'manager123',
+                status: case_1.CaseStatus.IN_PROGRESS,
+                priority: case_1.CasePriority.MEDIUM,
+                assignedLawyerIds: ['staff123'],
+                leadAttorneyId: 'staff123',
+                clientId: 'client123',
+                clientUsername: 'Client#0001',
+                documents: [],
+                notes: [],
             });
             const mockInteraction = createMockInteraction('staff', 'fire', {
                 user: 'staff123',
@@ -217,14 +212,13 @@ describe('Command Validation Scenarios', () => {
                     caseNumber: `CASE-00${i}`,
                     title: `Case ${i}`,
                     description: 'Test case',
-                    status: 'in_progress',
-                    priority: CasePriority.MEDIUM,
-                    assignedTo: [],
-                    client: {
-                        userId: clientId,
-                        username: 'Client#0001',
-                    },
-                    createdBy: 'attorney123',
+                    status: case_1.CaseStatus.IN_PROGRESS,
+                    priority: case_1.CasePriority.MEDIUM,
+                    assignedLawyerIds: [],
+                    clientId: clientId,
+                    clientUsername: 'Client#0001',
+                    documents: [],
+                    notes: [],
                 });
             }
             const mockInteraction = createMockInteraction('case', 'create', {
@@ -251,14 +245,13 @@ describe('Command Validation Scenarios', () => {
                     caseNumber: `CASE-00${i}`,
                     title: `Case ${i}`,
                     description: 'Test case',
-                    status: 'in_progress',
-                    priority: CasePriority.MEDIUM,
-                    assignedTo: [],
-                    client: {
-                        userId: clientId,
-                        username: 'Client#0001',
-                    },
-                    createdBy: 'attorney123',
+                    status: case_1.CaseStatus.IN_PROGRESS,
+                    priority: case_1.CasePriority.MEDIUM,
+                    assignedLawyerIds: [],
+                    clientId: clientId,
+                    clientUsername: 'Client#0001',
+                    documents: [],
+                    notes: [],
                 });
             }
             const mockInteraction = createMockInteraction('case', 'create', {

@@ -3,7 +3,6 @@ import { JobRepository } from '../../infrastructure/repositories/job-repository'
 import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-repository';
 import { AuditAction } from '../../domain/entities/audit-log';
 import { logger } from '../../infrastructure/logger';
-import { CaseStatus, CasePriority } from '../../domain/entities/case';
 
 export interface CleanupResult {
   success: boolean;
@@ -276,7 +275,7 @@ export class JobCleanupService {
                 actorId: 'system',
                 details: {
                   before: { status: 'open' },
-                  after: { status: CaseStatus.CLOSED },
+                  after: { status: 'closed' },
                   metadata: {
                     jobId: job._id?.toHexString(),
                     title: job.title,

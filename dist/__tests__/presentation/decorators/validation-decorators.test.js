@@ -81,19 +81,19 @@ describe('Validation Decorators', () => {
             createInfoEmbed(title, message) {
                 return { title, message };
             }
-            async testMethod(interaction) {
+            async testMethod(_interaction) {
                 return 'success';
             }
-            async testPermissionMethod(interaction) {
+            async testPermissionMethod(_interaction) {
                 return 'success';
             }
-            async testEntityMethod(interaction) {
+            async testEntityMethod(_interaction) {
                 return 'success';
             }
-            async testBusinessRuleMethod(interaction) {
+            async testBusinessRuleMethod(_interaction) {
                 return 'success';
             }
-            async testCombinedMethod(interaction) {
+            async testCombinedMethod(_interaction) {
                 return 'success';
             }
         }
@@ -230,7 +230,10 @@ describe('Validation Decorators', () => {
                 valid: false,
                 errors: ['You do not have admin permission'],
                 warnings: [],
-                bypassAvailable: false
+                bypassAvailable: false,
+                hasPermission: false,
+                requiredPermission: 'admin',
+                grantedPermissions: []
             });
             mockCommandValidationService.validateCommand.mockImplementation(async (context, options) => {
                 // Execute the custom rules that were added by the decorator
@@ -263,11 +266,15 @@ describe('Validation Decorators', () => {
                 commandName: 'test',
                 options: { user: 'user456' }
             });
-            mockCrossEntityValidationService.validateBeforeOperation.mockResolvedValue({
-                valid: false,
-                errors: [{ message: 'Staff member has active cases' }],
-                warnings: []
-            });
+            mockCrossEntityValidationService.validateBeforeOperation.mockResolvedValue([
+                {
+                    severity: 'critical',
+                    entityType: 'staff',
+                    entityId: 'user456',
+                    message: 'Staff member has active cases',
+                    canAutoRepair: false
+                }
+            ]);
             mockCommandValidationService.validateCommand.mockImplementation(async (context, options) => {
                 const customRules = options?.customRules || [];
                 for (const rule of customRules) {
@@ -302,7 +309,10 @@ describe('Validation Decorators', () => {
                 valid: false,
                 errors: ['Managing Partner role limit reached (1/1)'],
                 warnings: [],
-                bypassAvailable: true
+                bypassAvailable: true,
+                currentCount: 1,
+                maxCount: 1,
+                roleName: 'Managing Partner'
             });
             mockCommandValidationService.validateCommand.mockImplementation(async (context, options) => {
                 const customRules = options?.customRules || [];
@@ -335,25 +345,29 @@ describe('Validation Decorators', () => {
                 valid: true,
                 errors: [],
                 warnings: [],
-                bypassAvailable: false
+                bypassAvailable: false,
+                hasPermission: true,
+                requiredPermission: 'admin',
+                grantedPermissions: ['admin']
             });
             mockBusinessRuleValidationService.validateRoleLimit.mockResolvedValue({
                 valid: true,
                 errors: [],
                 warnings: [],
-                bypassAvailable: false
+                bypassAvailable: false,
+                currentCount: 0,
+                maxCount: 10,
+                roleName: 'Junior Associate'
             });
             mockBusinessRuleValidationService.validateStaffMember.mockResolvedValue({
                 valid: true,
                 errors: [],
                 warnings: [],
-                bypassAvailable: false
+                bypassAvailable: false,
+                isActiveStaff: true,
+                hasRequiredPermissions: true
             });
-            mockCrossEntityValidationService.validateBeforeOperation.mockResolvedValue({
-                valid: true,
-                errors: [],
-                warnings: []
-            });
+            mockCrossEntityValidationService.validateBeforeOperation.mockResolvedValue([]);
             mockCommandValidationService.validateCommand.mockResolvedValue({
                 isValid: true,
                 errors: [],

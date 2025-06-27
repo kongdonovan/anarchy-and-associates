@@ -141,7 +141,7 @@ class StaffService {
                         actionType: 'hire',
                     },
                 ],
-                status: RetainerStatus.ACTIVE,
+                status: 'active',
             };
             const staff = await this.staffRepository.add(staffData);
             // Log the action
@@ -153,7 +153,7 @@ class StaffService {
                 details: {
                     after: {
                         role,
-                        status: RetainerStatus.ACTIVE,
+                        status: 'active',
                     },
                     reason,
                     metadata: {
@@ -359,7 +359,7 @@ class StaffService {
                 details: {
                     before: {
                         role: staff.role,
-                        status: RetainerStatus.ACTIVE,
+                        status: 'active',
                     },
                     reason,
                     metadata: {

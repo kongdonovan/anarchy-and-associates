@@ -31,7 +31,7 @@ class MetricsService {
             // Database metrics
             const [allStaff, activeStaff, allCases, openCases, allApplications, pendingApplications, allJobs, openJobs, allRetainers, allFeedback] = await Promise.all([
                 this.staffRepository.findByFilters({ guildId: guild.id }),
-                this.staffRepository.findByFilters({ guildId: guild.id, status: RetainerStatus.ACTIVE }),
+                this.staffRepository.findByFilters({ guildId: guild.id, status: 'active' }),
                 this.caseRepository.findByFilters({ guildId: guild.id }),
                 this.caseRepository.findByFilters({ guildId: guild.id, status: case_1.CaseStatus.IN_PROGRESS }),
                 this.applicationRepository.findByFilters({ guildId: guild.id }),
@@ -98,7 +98,7 @@ class MetricsService {
         const staffRecord = await this.staffRepository.findByFilters({
             guildId: guild.id,
             userId: userId,
-            status: RetainerStatus.ACTIVE
+            status: 'active'
         });
         if (staffRecord.length === 0) {
             throw new Error('User is not an active staff member');
@@ -138,7 +138,7 @@ class MetricsService {
         // Get all active staff
         const allStaff = await this.staffRepository.findByFilters({
             guildId: guild.id,
-            status: RetainerStatus.ACTIVE
+            status: 'active'
         });
         // Generate stats for each lawyer
         const lawyerStatsPromises = allStaff.map(async (staff) => {

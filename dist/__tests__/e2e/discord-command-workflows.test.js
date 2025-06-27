@@ -14,6 +14,7 @@ const test_utils_1 = require("../helpers/test-utils");
 const database_helpers_1 = require("../helpers/database-helpers");
 const operation_queue_1 = require("../../infrastructure/queue/operation-queue");
 const rate_limiter_1 = require("../../infrastructure/rate-limiting/rate-limiter");
+const business_rule_validation_service_1 = require("../../application/services/business-rule-validation-service");
 /**
  * End-to-End Discord Command Workflow Tests
  *
@@ -48,24 +49,17 @@ describe('Discord Command Workflows E2E Tests', () => {
         await database_helpers_1.DatabaseTestHelpers.setupTestDatabase();
     });
     beforeEach(async () => {
-        // Create test permission context
-        const context = {
-            guildId: testGuildId,
-            userId: adminUserId,
-            userRoles: ['admin-role-123'],
-            isGuildOwner: false
-        };
         // Initialize repositories
         staffRepository = new staff_repository_1.StaffRepository();
         caseRepository = new case_repository_1.CaseRepository();
         auditLogRepository = new audit_log_repository_1.AuditLogRepository();
         guildConfigRepository = new guild_config_repository_1.GuildConfigRepository();
         caseCounterRepository = new case_counter_repository_1.CaseCounterRepository();
-        // Initialize services
-        const businessRuleValidationService = new BusinessRuleValidationService(guildConfigRepository, staffRepository, caseRepository, permissionService);
+        // Initialize services - order matters!
+        permissionService = new permission_service_1.PermissionService(guildConfigRepository);
+        const businessRuleValidationService = new business_rule_validation_service_1.BusinessRuleValidationService(guildConfigRepository, staffRepository, caseRepository, permissionService);
         staffService = new staff_service_1.StaffService(staffRepository, auditLogRepository, permissionService, businessRuleValidationService);
         caseService = new case_service_1.CaseService(caseRepository, caseCounterRepository, guildConfigRepository, permissionService, businessRuleValidationService);
-        permissionService = new permission_service_1.PermissionService(guildConfigRepository);
         // Initialize infrastructure
         operationQueue = operation_queue_1.OperationQueue.getInstance();
         rateLimiter = rate_limiter_1.RateLimiter.getInstance();
@@ -89,7 +83,8 @@ describe('Discord Command Workflows E2E Tests', () => {
                 'senior-staff': ['hr-role-123'],
                 case: ['case-role-123'],
                 config: ['config-role-123'],
-                retainer: ['retainer-role-123'],
+                lawyer: ['lawyer-role-123', 'lead-attorney-role-123'], // lead attorneys are also lawyers
+                'lead-attorney': ['lead-attorney-role-123'],
                 repair: ['repair-role-123']
             },
             adminRoles: ['admin-role-123'],
@@ -122,7 +117,7 @@ describe('Discord Command Workflows E2E Tests', () => {
             const rateLimitResult = rateLimiter.checkRateLimit(adminUserId);
             expect(rateLimitResult.allowed).toBe(true);
             // 3. Queue operation to prevent concurrent conflicts
-            const hireResult = await operationQueue.enqueue(() => staffService.hireStaff({
+            const hireResult = await operationQueue.enqueue(() => staffService.hireStaff(context, {
                 guildId: testGuildId,
                 userId: regularUserId,
                 hiredBy: adminUserId,
@@ -193,7 +188,7 @@ describe('Discord Command Workflows E2E Tests', () => {
                 role: staff_role_1.StaffRole.PARALEGAL
             });
             // Simulate /staff promote command
-            const promotionResult = await operationQueue.enqueue(() => staffService.promoteStaff({
+            const promotionResult = await operationQueue.enqueue(() => staffService.promoteStaff(context, {
                 guildId: testGuildId,
                 userId: regularUserId,
                 promotedBy: adminUserId,
@@ -240,7 +235,7 @@ describe('Discord Command Workflows E2E Tests', () => {
             const hasPermission = await permissionService.hasActionPermission(mockPermissionContext, 'case');
             expect(hasPermission).toBe(true);
             // 2. Create case
-            const newCase = await operationQueue.enqueue(() => caseService.createCase({
+            const newCase = await operationQueue.enqueue(() => caseService.createCase(mockPermissionContext, {
                 guildId: testGuildId,
                 clientId: clientUserId,
                 clientUsername: 'TestClient',
@@ -253,27 +248,32 @@ describe('Discord Command Workflows E2E Tests', () => {
             expect(newCase.status).toBe(case_1.CaseStatus.PENDING);
             expect(newCase.priority).toBe(case_1.CasePriority.HIGH);
             expect(newCase.clientId).toBe(clientUserId);
-            // 4. Simulate /case accept command
-            const acceptedCase = await operationQueue.enqueue(() => caseService.acceptCase(newCase._id.toString(), regularUserId), regularUserId, testGuildId, false);
+            // 4. Simulate /case accept command - need lead-attorney permission
+            const leadAttorneyContext = {
+                guildId: testGuildId,
+                userId: regularUserId,
+                userRoles: ['lead-attorney-role-123'],
+                isGuildOwner: false
+            };
+            const acceptedCase = await operationQueue.enqueue(() => caseService.acceptCase(leadAttorneyContext, newCase._id.toString()), regularUserId, testGuildId, false);
             // 5. Verify case acceptance
             expect(acceptedCase.status).toBe(case_1.CaseStatus.IN_PROGRESS);
             expect(acceptedCase.leadAttorneyId).toBe(regularUserId);
             expect(acceptedCase.assignedLawyerIds).toContain(regularUserId);
             // 6. Verify case can be retrieved by lawyer
-            const lawyerCases = await caseService.getCasesByLawyer(regularUserId);
+            const lawyerCases = await caseService.getCasesByLawyer(mockPermissionContext, regularUserId);
             expect(lawyerCases).toHaveLength(1);
             expect(lawyerCases[0]?._id?.toString()).toBe(newCase._id?.toString());
         });
         it('should handle case closure workflow with all results', async () => {
-            // Create and accept a case
-            const testCase = await caseService.createCase(context, {
+            // Create permission context for this test
+            const context = {
                 guildId: testGuildId,
-                clientId: clientUserId,
-                clientUsername: 'ClosureClient',
-                title: 'Test Case for Closure',
-                description: 'Testing case closure workflow'
-            });
-            await caseService.acceptCase(testCase._id.toString(), regularUserId);
+                userId: adminUserId,
+                userRoles: ['case-role-123'],
+                isGuildOwner: false
+            };
+            // We create separate cases in the loop below for each closure result
             // Test different closure results
             const results = [case_1.CaseResult.WIN, case_1.CaseResult.LOSS, case_1.CaseResult.SETTLEMENT];
             for (const [index, result] of results.entries()) {
@@ -285,23 +285,37 @@ describe('Discord Command Workflows E2E Tests', () => {
                     title: `Test Case ${result}`,
                     description: `Testing ${result} closure`
                 });
-                const openSeparateCase = await caseService.acceptCase(separateCase._id.toString(), regularUserId);
-                // Simulate /case close command
-                const closedCase = await operationQueue.enqueue(() => caseService.closeCase({
+                // Create a new context for each lawyer accepting their case with all needed permissions
+                const lawyerAcceptContext = {
+                    guildId: testGuildId,
+                    userId: `lawyer-${index}`,
+                    userRoles: ['lead-attorney-role-123', 'lawyer-role-123', 'case-role-123'], // Need case permission for closing
+                    isGuildOwner: false
+                };
+                const openSeparateCase = await caseService.acceptCase(lawyerAcceptContext, separateCase._id.toString());
+                // Simulate /case close command using the same lawyer who accepted
+                const closedCase = await operationQueue.enqueue(() => caseService.closeCase(lawyerAcceptContext, {
                     caseId: openSeparateCase._id.toString(),
                     result,
                     resultNotes: `Case closed with ${result}`,
-                    closedBy: regularUserId
+                    closedBy: `lawyer-${index}` // Use the lawyer who accepted the case
                 }), regularUserId, testGuildId, false);
                 expect(closedCase.status).toBe(case_1.CaseStatus.CLOSED);
                 expect(closedCase.result).toBe(result);
-                expect(closedCase.closedBy).toBe(regularUserId);
+                expect(closedCase.closedBy).toBe(`lawyer-${index}`);
                 expect(closedCase.closedAt).toBeDefined();
                 const closedAtDate = new Date(closedCase.closedAt);
                 expect(closedAtDate.getTime()).toBeGreaterThan(0);
             }
         });
         it('should handle concurrent case operations safely', async () => {
+            // Create permission context for this test
+            const context = {
+                guildId: testGuildId,
+                userId: adminUserId,
+                userRoles: ['case-role-123'],
+                isGuildOwner: false
+            };
             // Create a case
             const testCase = await caseService.createCase(context, {
                 guildId: testGuildId,
@@ -315,10 +329,29 @@ describe('Discord Command Workflows E2E Tests', () => {
             const lawyer1 = 'lawyer-1';
             const lawyer2 = 'lawyer-2';
             const lawyer3 = 'lawyer-3';
+            // Create contexts for each lawyer with proper permissions
+            const lawyer1Context = {
+                guildId: testGuildId,
+                userId: lawyer1,
+                userRoles: ['lead-attorney-role-123', 'lawyer-role-123'],
+                isGuildOwner: false
+            };
+            const lawyer2Context = {
+                guildId: testGuildId,
+                userId: lawyer2,
+                userRoles: ['lead-attorney-role-123', 'lawyer-role-123'],
+                isGuildOwner: false
+            };
+            const lawyer3Context = {
+                guildId: testGuildId,
+                userId: lawyer3,
+                userRoles: ['lead-attorney-role-123', 'lawyer-role-123'],
+                isGuildOwner: false
+            };
             const acceptPromises = [
-                operationQueue.enqueue(() => caseService.acceptCase(caseId, lawyer1), lawyer1, testGuildId, false),
-                operationQueue.enqueue(() => caseService.acceptCase(caseId, lawyer2), lawyer2, testGuildId, false),
-                operationQueue.enqueue(() => caseService.acceptCase(caseId, lawyer3), lawyer3, testGuildId, false)
+                operationQueue.enqueue(() => caseService.acceptCase(lawyer1Context, caseId), lawyer1, testGuildId, false),
+                operationQueue.enqueue(() => caseService.acceptCase(lawyer2Context, caseId), lawyer2, testGuildId, false),
+                operationQueue.enqueue(() => caseService.acceptCase(lawyer3Context, caseId), lawyer3, testGuildId, false)
             ];
             const results = await Promise.allSettled(acceptPromises);
             // Operations may succeed depending on business logic
@@ -341,13 +374,13 @@ describe('Discord Command Workflows E2E Tests', () => {
             };
             // Guild owners should have all permissions
             const adminPerm = await permissionService.hasActionPermission(guildOwnerContext, 'admin');
-            const hrPerm = await permissionService.hasActionPermission($1, 'senior-staff');
+            const hrPerm = await permissionService.hasActionPermission(guildOwnerContext, 'senior-staff');
             const casePerm = await permissionService.hasActionPermission(guildOwnerContext, 'case');
             expect(adminPerm).toBe(true);
             expect(hrPerm).toBe(true);
             expect(casePerm).toBe(true);
             // Guild owner should be able to hire Managing Partner
-            const hireResult = await operationQueue.enqueue(() => staffService.hireStaff({
+            const hireResult = await operationQueue.enqueue(() => staffService.hireStaff(guildOwnerContext, {
                 guildId: testGuildId,
                 userId: 'managing-partner',
                 hiredBy: guildOwnerId,
@@ -367,10 +400,10 @@ describe('Discord Command Workflows E2E Tests', () => {
                 isGuildOwner: false
             };
             const adminPerm = await permissionService.hasActionPermission(hrContext, 'admin');
-            const hrPerm = await permissionService.hasActionPermission($1, 'senior-staff');
+            const hrPerm = await permissionService.hasActionPermission(hrContext, 'senior-staff');
             const casePerm = await permissionService.hasActionPermission(hrContext, 'case');
             expect(adminPerm).toBe(false);
-            expect(hrPerm).toBe(true);
+            expect(hrPerm).toBe(true); // hr-role-123 is mapped to senior-staff permission
             expect(casePerm).toBe(false);
         });
         it('should handle permission revocation during operation', async () => {
@@ -378,7 +411,7 @@ describe('Discord Command Workflows E2E Tests', () => {
             // while an operation is in progress
             const userContext = {
                 guildId: testGuildId,
-                userId: 'temp-admin',
+                userId: adminUserId, // Use existing admin user
                 userRoles: ['admin-role-123'],
                 isGuildOwner: false
             };
@@ -395,16 +428,17 @@ describe('Discord Command Workflows E2E Tests', () => {
                 if (!currentPermission) {
                     throw new Error('Permission revoked during operation');
                 }
-                return staffService.hireStaff({
+                return staffService.hireStaff(userContext, {
                     guildId: testGuildId,
                     userId: 'late-hire',
-                    hiredBy: 'temp-admin',
+                    hiredBy: adminUserId, // Use adminUserId
                     robloxUsername: 'LateHire',
                     role: staff_role_1.StaffRole.PARALEGAL
                 });
             };
             // This should succeed since permissions are maintained
-            const result = await operationQueue.enqueue(longOperation, 'temp-admin', testGuildId, false);
+            const result = await operationQueue.enqueue(longOperation, adminUserId, // Use adminUserId
+            testGuildId, false);
             expect(result.success).toBe(true);
         });
     });
@@ -423,12 +457,19 @@ describe('Discord Command Workflows E2E Tests', () => {
             expect(rateLimited.allowed).toBe(false);
         });
         it('should handle high-volume concurrent operations', async () => {
+            // Create permission context for this test
+            const context = {
+                guildId: testGuildId,
+                userId: adminUserId,
+                userRoles: ['admin-role-123'],
+                isGuildOwner: false
+            };
             // Simulate many users performing operations simultaneously
             const userCount = 20;
             const operations = [];
             for (let i = 0; i < userCount; i++) {
                 const userId = `user-${i}`;
-                const operation = operationQueue.enqueue(() => staffService.hireStaff({
+                const operation = operationQueue.enqueue(() => staffService.hireStaff(context, {
                     guildId: testGuildId,
                     userId,
                     hiredBy: adminUserId,
@@ -447,13 +488,27 @@ describe('Discord Command Workflows E2E Tests', () => {
             expect(endTime - startTime).toBeLessThan(10000);
             // Verify database consistency - staff list reflects actual successful hires
             // (which may be limited by role constraints)
-            const staffList = await staffService.getStaffList(testGuildId, adminUserId);
+            // Create admin context to view staff list
+            const adminContext = {
+                guildId: testGuildId,
+                userId: adminUserId,
+                userRoles: ['admin-role-123'],
+                isGuildOwner: false
+            };
+            const staffList = await staffService.getStaffList(adminContext);
             const actualSuccessCount = results.filter(r => r.status === 'fulfilled' && r.value.success).length;
             expect(staffList.staff.length).toBeGreaterThanOrEqual(actualSuccessCount);
         });
     });
     describe('Error Recovery and Rollback', () => {
         it('should handle database failures gracefully', async () => {
+            // Create permission context for this test
+            const context = {
+                guildId: testGuildId,
+                userId: adminUserId,
+                userRoles: ['admin-role-123'],
+                isGuildOwner: false
+            };
             // Test with edge case data that may cause issues
             const result = await staffService.hireStaff(context, {
                 guildId: testGuildId,
@@ -464,7 +519,8 @@ describe('Discord Command Workflows E2E Tests', () => {
             });
             // Service handles edge cases gracefully
             expect(result).toBeDefined();
-            // Test normal operation works
+            expect(result.success).toBe(true); // Should succeed
+            // Test another normal operation works
             const normalResult = await staffService.hireStaff(context, {
                 guildId: testGuildId,
                 userId: 'db-retry-test',
@@ -475,6 +531,13 @@ describe('Discord Command Workflows E2E Tests', () => {
             expect(normalResult.success).toBe(true);
         });
         it('should maintain data consistency during failures', async () => {
+            // Create permission context for this test
+            const context = {
+                guildId: testGuildId,
+                userId: adminUserId,
+                userRoles: ['admin-role-123'],
+                isGuildOwner: false
+            };
             // Create initial state
             const staff = await staffService.hireStaff(context, {
                 guildId: testGuildId,
@@ -493,7 +556,8 @@ describe('Discord Command Workflows E2E Tests', () => {
             });
             // Service handles operations gracefully
             expect(promotionResult).toBeDefined();
-            // Verify staff state
+            expect(promotionResult.success).toBe(true);
+            // Verify staff state - use the existing context which has admin permission
             const currentStaff = await staffService.getStaffInfo(context, 'consistency-test');
             expect(currentStaff).toBeDefined();
         });
@@ -514,11 +578,12 @@ describe('Discord Command Workflows E2E Tests', () => {
                 applicationChannelId: undefined,
                 clientRoleId: undefined,
                 permissions: {
-                    admin: [],
+                    admin: ['admin-role-123'], // Add admin permission for testing
                     'senior-staff': [],
-                    case: [],
+                    case: ['case-role-123'], // Add case permission for testing
                     config: [],
-                    retainer: [],
+                    lawyer: ['lawyer-role-123'],
+                    'lead-attorney': ['lead-attorney-role-123'],
                     repair: []
                 },
                 adminRoles: [],
@@ -534,25 +599,39 @@ describe('Discord Command Workflows E2E Tests', () => {
                 applicationChannelId: undefined,
                 clientRoleId: undefined,
                 permissions: {
-                    admin: [],
+                    admin: ['admin-role-123'], // Add admin permission for testing
                     'senior-staff': [],
-                    case: [],
+                    case: ['case-role-123'], // Add case permission for testing
                     config: [],
-                    retainer: [],
+                    lawyer: ['lawyer-role-123'],
+                    'lead-attorney': ['lead-attorney-role-123'],
                     repair: []
                 },
                 adminRoles: [],
                 adminUsers: [adminUserId]
             });
+            // Create permission contexts for both guilds with admin permission
+            const context1 = {
+                guildId: guild1,
+                userId: adminUserId,
+                userRoles: ['admin-role-123'],
+                isGuildOwner: false
+            };
+            const context2 = {
+                guildId: guild2,
+                userId: adminUserId,
+                userRoles: ['admin-role-123'],
+                isGuildOwner: false
+            };
             // Hire same user in different guilds with different roles
-            const hire1 = await staffService.hireStaff(context, {
+            const hire1 = await staffService.hireStaff(context1, {
                 guildId: guild1,
                 userId,
                 hiredBy: adminUserId,
                 robloxUsername: 'Guild1User',
                 role: staff_role_1.StaffRole.MANAGING_PARTNER
             });
-            const hire2 = await staffService.hireStaff(context, {
+            const hire2 = await staffService.hireStaff(context2, {
                 guildId: guild2,
                 userId,
                 hiredBy: adminUserId,
@@ -561,30 +640,55 @@ describe('Discord Command Workflows E2E Tests', () => {
             });
             expect(hire1.success).toBe(true);
             expect(hire2.success).toBe(true);
-            // Verify isolation
-            const guild1Staff = await staffService.getStaffList(guild1, adminUserId);
-            const guild2Staff = await staffService.getStaffList(guild2, adminUserId);
+            // Verify isolation - need to ensure contexts have admin permission
+            const adminContext1 = {
+                guildId: guild1,
+                userId: adminUserId,
+                userRoles: ['admin-role-123'],
+                isGuildOwner: false
+            };
+            const adminContext2 = {
+                guildId: guild2,
+                userId: adminUserId,
+                userRoles: ['admin-role-123'],
+                isGuildOwner: false
+            };
+            const guild1Staff = await staffService.getStaffList(adminContext1);
+            const guild2Staff = await staffService.getStaffList(adminContext2);
             expect(guild1Staff.staff).toHaveLength(1);
             expect(guild2Staff.staff).toHaveLength(1);
             expect(guild1Staff.staff[0]?.role).toBe(staff_role_1.StaffRole.MANAGING_PARTNER);
             expect(guild2Staff.staff[0]?.role).toBe(staff_role_1.StaffRole.PARALEGAL);
             // Cases should also be isolated
-            await caseService.createCase(context, {
+            // Create contexts with case permissions for case creation
+            const caseContext1 = {
+                guildId: guild1,
+                userId: adminUserId,
+                userRoles: ['case-role-123'],
+                isGuildOwner: false
+            };
+            const caseContext2 = {
+                guildId: guild2,
+                userId: adminUserId,
+                userRoles: ['case-role-123'],
+                isGuildOwner: false
+            };
+            await caseService.createCase(caseContext1, {
                 guildId: guild1,
                 clientId: 'client-1',
                 clientUsername: 'client1',
                 title: 'Guild 1 Case',
                 description: 'Case for guild 1'
             });
-            await caseService.createCase(context, {
+            await caseService.createCase(caseContext2, {
                 guildId: guild2,
                 clientId: 'client-1',
                 clientUsername: 'client1',
                 title: 'Guild 2 Case',
                 description: 'Case for guild 2'
             });
-            const guild1Cases = await caseService.searchCases({ guildId: guild1 });
-            const guild2Cases = await caseService.searchCases({ guildId: guild2 });
+            const guild1Cases = await caseService.searchCases(caseContext1, { guildId: guild1 });
+            const guild2Cases = await caseService.searchCases(caseContext2, { guildId: guild2 });
             expect(guild1Cases).toHaveLength(1);
             expect(guild2Cases).toHaveLength(1);
             expect(guild1Cases[0]?.title).toBe('Guild 1 Case');

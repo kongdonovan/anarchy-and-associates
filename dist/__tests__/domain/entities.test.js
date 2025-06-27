@@ -1,7 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const entities_1 = require("../../domain/entities");
-const retainer_1 = require("../../domain/entities/retainer");
 const mongodb_1 = require("mongodb");
 const case_1 = require("../../domain/entities/case");
 describe('Domain Entities', () => {
@@ -18,6 +17,7 @@ describe('Domain Entities', () => {
                     case: ['role3'],
                     config: ['role4'],
                     lawyer: ['role5'],
+                    'lead-attorney': ['role5a'],
                     repair: ['role6'],
                 },
                 adminRoles: ['admin_role'],
@@ -40,7 +40,7 @@ describe('Domain Entities', () => {
                 hiredAt: new Date(),
                 hiredBy: 'hr_user',
                 promotionHistory: [],
-                status: retainer_1.RetainerStatus.ACTIVE,
+                status: 'active',
                 createdAt: new Date(),
                 updatedAt: new Date(),
             };

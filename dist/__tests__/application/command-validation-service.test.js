@@ -13,18 +13,52 @@ describe('CommandValidationService', () => {
     beforeEach(() => {
         // Create mock services
         mockBusinessRuleValidationService = {
-            validateRoleLimit: jest.fn(),
-            validateClientCaseLimit: jest.fn(),
-            validateStaffMember: jest.fn(),
-            validatePermission: jest.fn(),
-            validateMultiple: jest.fn(),
+            validateRoleLimit: jest.fn().mockResolvedValue({
+                valid: true,
+                errors: [],
+                warnings: [],
+                bypassAvailable: false,
+                currentCount: 0,
+                maxCount: 10,
+                roleName: staff_role_1.StaffRole.JUNIOR_ASSOCIATE
+            }),
+            validateClientCaseLimit: jest.fn().mockResolvedValue({
+                valid: true,
+                errors: [],
+                warnings: [],
+                bypassAvailable: false,
+                currentCases: 0,
+                maxCases: 5,
+                clientId: 'client123'
+            }),
+            validateStaffMember: jest.fn().mockResolvedValue({
+                valid: true,
+                errors: [],
+                warnings: [],
+                bypassAvailable: false
+            }),
+            validatePermission: jest.fn().mockResolvedValue({
+                valid: true,
+                errors: [],
+                warnings: [],
+                bypassAvailable: false,
+                hasPermission: true,
+                requiredPermission: 'senior-staff',
+                grantedPermissions: ['senior-staff']
+            }),
+            validateMultiple: jest.fn().mockResolvedValue({
+                valid: true,
+                errors: [],
+                warnings: [],
+                bypassAvailable: false
+            }),
         };
         mockCrossEntityValidationService = {
-            validateBeforeOperation: jest.fn(),
-            validateEntity: jest.fn(),
-            scanForIntegrityIssues: jest.fn(),
-            repairIntegrityIssues: jest.fn(),
-            batchValidate: jest.fn(),
+            validateBeforeOperation: jest.fn().mockResolvedValue([]),
+            validateEntity: jest.fn().mockResolvedValue([]),
+            scanForIntegrityIssues: jest.fn().mockResolvedValue([]),
+            repairIntegrityIssues: jest.fn().mockResolvedValue({ repaired: 0, failed: 0 }),
+            batchValidate: jest.fn().mockResolvedValue([]),
         };
         // Create service instance
         commandValidationService = new command_validation_service_1.CommandValidationService(mockBusinessRuleValidationService, mockCrossEntityValidationService);
@@ -49,6 +83,7 @@ describe('CommandValidationService', () => {
             },
             reply: jest.fn(),
             showModal: jest.fn(),
+            isChatInputCommand: jest.fn().mockReturnValue(true),
         };
         // Create mock permission context
         mockPermissionContext = {
@@ -244,7 +279,7 @@ describe('CommandValidationService', () => {
             const result = await commandValidationService.validateCommand(context);
             expect(result.isValid).toBe(false);
             expect(result.errors).toContain('Entity has dependencies');
-            expect(mockCrossEntityValidationService.validateBeforeOperation).toHaveBeenCalledWith('staff', 'delete', 'guild123', { user: 'targetUser123' });
+            expect(mockCrossEntityValidationService.validateBeforeOperation).toHaveBeenCalledWith({ user: 'targetUser123', guildId: 'guild123' }, 'staff', 'delete', { guildId: 'guild123' });
         });
         it('should include warnings in validation result', async () => {
             mockBusinessRuleValidationService.validateClientCaseLimit.mockResolvedValue({

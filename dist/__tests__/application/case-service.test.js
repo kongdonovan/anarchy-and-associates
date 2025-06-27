@@ -51,7 +51,8 @@ describe('CaseService Unit Tests', () => {
         mockPermissionService = {
             hasActionPermission: jest.fn(),
             hasHRPermissionWithContext: jest.fn(),
-            hasPermission: jest.fn()
+            hasPermission: jest.fn(),
+            hasLeadAttorneyPermissionWithContext: jest.fn()
         };
         mockBusinessRuleValidationService = {
             validateClientCaseLimit: jest.fn(),
@@ -184,12 +185,32 @@ describe('CaseService Unit Tests', () => {
             }));
         });
         it('should throw error when case counter fails', async () => {
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
+            mockBusinessRuleValidationService.validateClientCaseLimit.mockResolvedValue({
+                valid: true,
+                errors: [],
+                warnings: [],
+                bypassAvailable: false,
+                currentCases: 0,
+                maxCases: 3,
+                clientId: testClientId
+            });
             mockCaseCounterRepository.getNextCaseNumber.mockRejectedValue(new Error('Counter service unavailable'));
             await expect(caseService.createCase(mockPermissionContext, mockCaseRequest))
                 .rejects.toThrow('Counter service unavailable');
             expect(mockCaseRepository.add).not.toHaveBeenCalled();
         });
         it('should throw error when repository add fails', async () => {
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
+            mockBusinessRuleValidationService.validateClientCaseLimit.mockResolvedValue({
+                valid: true,
+                errors: [],
+                warnings: [],
+                bypassAvailable: false,
+                currentCases: 0,
+                maxCases: 3,
+                clientId: testClientId
+            });
             mockCaseCounterRepository.getNextCaseNumber.mockResolvedValue(1);
             mockCaseRepository.add.mockRejectedValue(new Error('Database error'));
             await expect(caseService.createCase(mockPermissionContext, mockCaseRequest))
@@ -244,18 +265,47 @@ describe('CaseService Unit Tests', () => {
             assignedLawyerIds: [testLawyerId]
         });
         it('should assign lawyer successfully', async () => {
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
+            mockBusinessRuleValidationService.validatePermission.mockResolvedValue({
+                valid: true,
+                errors: [],
+                warnings: [],
+                bypassAvailable: false,
+                hasPermission: true,
+                requiredPermission: 'lawyer',
+                grantedPermissions: ['lawyer']
+            });
             mockCaseRepository.assignLawyer.mockResolvedValue(mockAssignedCase);
             const result = await caseService.assignLawyer(mockPermissionContext, mockAssignmentRequest);
             expect(mockCaseRepository.assignLawyer).toHaveBeenCalledWith(testCaseId, testLawyerId);
             expect(result).toEqual(mockAssignedCase);
         });
         it('should throw error when case not found for assignment', async () => {
-            mockCaseRepository.assignLawyer.mockResolvedValue(null);
             mockPermissionService.hasActionPermission.mockResolvedValue(true);
+            mockBusinessRuleValidationService.validatePermission.mockResolvedValue({
+                valid: true,
+                errors: [],
+                warnings: [],
+                bypassAvailable: false,
+                hasPermission: true,
+                requiredPermission: 'lawyer',
+                grantedPermissions: ['lawyer']
+            });
+            mockCaseRepository.assignLawyer.mockResolvedValue(null);
             await expect(caseService.assignLawyer(mockPermissionContext, mockAssignmentRequest))
                 .rejects.toThrow('Case not found or assignment failed');
         });
         it('should throw error when assignment fails in repository', async () => {
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
+            mockBusinessRuleValidationService.validatePermission.mockResolvedValue({
+                valid: true,
+                errors: [],
+                warnings: [],
+                bypassAvailable: false,
+                hasPermission: true,
+                requiredPermission: 'lawyer',
+                grantedPermissions: ['lawyer']
+            });
             mockCaseRepository.assignLawyer.mockRejectedValue(new Error('Assignment constraint violation'));
             await expect(caseService.assignLawyer(mockPermissionContext, mockAssignmentRequest))
                 .rejects.toThrow('Assignment constraint violation');
@@ -375,6 +425,7 @@ describe('CaseService Unit Tests', () => {
             assignedLawyerIds: [testLawyerId]
         });
         it('should update case status successfully', async () => {
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
             mockCaseRepository.update.mockResolvedValue(mockUpdatedCase);
             const result = await caseService.updateCaseStatus(mockPermissionContext, testCaseId, case_1.CaseStatus.IN_PROGRESS);
             expect(mockCaseRepository.update).toHaveBeenCalledWith(testCaseId, {
@@ -383,6 +434,7 @@ describe('CaseService Unit Tests', () => {
             expect(result).toEqual(mockUpdatedCase);
         });
         it('should throw error when case not found for status update', async () => {
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
             mockCaseRepository.update.mockResolvedValue(null);
             await expect(caseService.updateCaseStatus(mockPermissionContext, testCaseId, case_1.CaseStatus.IN_PROGRESS)).rejects.toThrow('Case not found');
         });
@@ -433,6 +485,7 @@ describe('CaseService Unit Tests', () => {
             });
         });
         it('should close case successfully with all details', async () => {
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
             mockCaseRepository.conditionalUpdate.mockResolvedValue(mockClosedCase);
             const result = await caseService.closeCase(mockPermissionContext, mockClosureRequest);
             expect(mockCaseRepository.conditionalUpdate).toHaveBeenCalledWith(testCaseId, { status: case_1.CaseStatus.IN_PROGRESS }, {
@@ -449,6 +502,7 @@ describe('CaseService Unit Tests', () => {
                 ...mockClosureRequest,
                 resultNotes: undefined
             };
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
             mockCaseRepository.conditionalUpdate.mockResolvedValue({
                 ...mockClosedCase,
                 resultNotes: undefined
@@ -470,6 +524,7 @@ describe('CaseService Unit Tests', () => {
                 case_1.CaseResult.DISMISSED,
                 case_1.CaseResult.WITHDRAWN
             ];
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
             for (const result of validResults) {
                 const request = { ...mockClosureRequest, result };
                 mockCaseRepository.conditionalUpdate.mockResolvedValue({
@@ -489,6 +544,7 @@ describe('CaseService Unit Tests', () => {
             expect(mockCaseRepository.update).not.toHaveBeenCalled();
         });
         it('should throw error when case already closed', async () => {
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
             mockCaseRepository.findById.mockResolvedValue({
                 ...mockClosedCase,
                 status: case_1.CaseStatus.CLOSED
@@ -498,6 +554,7 @@ describe('CaseService Unit Tests', () => {
             expect(mockCaseRepository.update).not.toHaveBeenCalled();
         });
         it('should throw error when trying to close pending case', async () => {
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
             mockCaseRepository.findById.mockResolvedValue({
                 ...mockClosedCase,
                 status: case_1.CaseStatus.PENDING
@@ -506,6 +563,7 @@ describe('CaseService Unit Tests', () => {
                 .rejects.toThrow('Case cannot be closed - current status: pending');
         });
         it('should throw error when update fails', async () => {
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
             mockCaseRepository.conditionalUpdate.mockResolvedValue(null);
             mockCaseRepository.findById.mockResolvedValue(null);
             await expect(caseService.closeCase(mockPermissionContext, mockClosureRequest))
@@ -541,6 +599,7 @@ describe('CaseService Unit Tests', () => {
             });
             mockCaseRepository.findById.mockResolvedValue(pendingCase);
             mockCaseRepository.conditionalUpdate.mockResolvedValue(mockAcceptedCase);
+            mockPermissionService.hasLeadAttorneyPermissionWithContext.mockResolvedValue(true);
             const result = await caseService.acceptCase(mockPermissionContext, testCaseId);
             expect(mockCaseRepository.conditionalUpdate).toHaveBeenCalledWith(testCaseId, { status: case_1.CaseStatus.PENDING }, expect.objectContaining({
                 status: case_1.CaseStatus.IN_PROGRESS,
@@ -550,12 +609,14 @@ describe('CaseService Unit Tests', () => {
             expect(result).toEqual(mockAcceptedCase);
         });
         it('should throw error when case not found', async () => {
+            mockPermissionService.hasLeadAttorneyPermissionWithContext.mockResolvedValue(true);
             mockCaseRepository.conditionalUpdate.mockResolvedValue(null);
             mockCaseRepository.findById.mockResolvedValue(null);
             await expect(caseService.acceptCase(mockPermissionContext, testCaseId))
                 .rejects.toThrow('Case not found');
         });
         it('should throw error when case not in pending status', async () => {
+            mockPermissionService.hasLeadAttorneyPermissionWithContext.mockResolvedValue(true);
             mockCaseRepository.conditionalUpdate.mockResolvedValue(null);
             mockCaseRepository.findById.mockResolvedValue({
                 ...mockAcceptedCase,
@@ -575,6 +636,7 @@ describe('CaseService Unit Tests', () => {
                 clientId: testClientId,
                 clientUsername: 'testclient'
             });
+            mockPermissionService.hasLeadAttorneyPermissionWithContext.mockResolvedValue(true);
             // First attempt: case is pending
             mockCaseRepository.findById.mockResolvedValueOnce(pendingCase);
             mockCaseRepository.conditionalUpdate.mockResolvedValueOnce(mockAcceptedCase);
@@ -609,6 +671,7 @@ describe('CaseService Unit Tests', () => {
             assignedLawyerIds: []
         });
         it('should decline case with reason successfully', async () => {
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
             mockCaseRepository.update.mockResolvedValue(mockDeclinedCase);
             const result = await caseService.declineCase(mockPermissionContext, testCaseId, 'Conflict of interest');
             expect(mockCaseRepository.update).toHaveBeenCalledWith(testCaseId, {
@@ -621,6 +684,7 @@ describe('CaseService Unit Tests', () => {
             expect(result).toEqual(mockDeclinedCase);
         });
         it('should decline case without reason', async () => {
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
             mockCaseRepository.update.mockResolvedValue({
                 ...mockDeclinedCase,
                 resultNotes: 'Case declined by staff'
@@ -635,6 +699,7 @@ describe('CaseService Unit Tests', () => {
             });
         });
         it('should throw error when decline update fails', async () => {
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
             mockCaseRepository.update.mockResolvedValue(null);
             await expect(caseService.declineCase(mockPermissionContext, testCaseId))
                 .rejects.toThrow('Case not found or decline failed');
@@ -657,17 +722,20 @@ describe('CaseService Unit Tests', () => {
             assignedLawyerIds: [testLawyerId]
         });
         it('should retrieve case by ID successfully', async () => {
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
             mockCaseRepository.findById.mockResolvedValue(mockCase);
             const result = await caseService.getCaseById(mockPermissionContext, testCaseId);
             expect(mockCaseRepository.findById).toHaveBeenCalledWith(testCaseId);
             expect(result).toEqual(mockCase);
         });
         it('should return null when case not found', async () => {
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
             mockCaseRepository.findById.mockResolvedValue(null);
             const result = await caseService.getCaseById(mockPermissionContext, 'non-existent-id');
             expect(result).toBeNull();
         });
         it('should handle invalid case ID format', async () => {
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
             mockCaseRepository.findById.mockRejectedValue(new Error('Invalid ObjectId format'));
             await expect(caseService.getCaseById(mockPermissionContext, 'invalid-id'))
                 .rejects.toThrow('Invalid ObjectId format');
@@ -697,6 +765,7 @@ describe('CaseService Unit Tests', () => {
                 }]
         });
         it('should add document successfully', async () => {
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
             mockCaseRepository.addDocument.mockResolvedValue(mockCaseWithDocument);
             const result = await caseService.addDocument(mockPermissionContext, testCaseId, 'Test Document', 'Document content');
             expect(mockCaseRepository.addDocument).toHaveBeenCalledWith(testCaseId, {
@@ -709,11 +778,13 @@ describe('CaseService Unit Tests', () => {
             expect(result).toEqual(mockCaseWithDocument);
         });
         it('should throw error when case not found for document addition', async () => {
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
             mockCaseRepository.addDocument.mockResolvedValue(null);
             await expect(caseService.addDocument(mockPermissionContext, testCaseId, 'Test Document', 'Document content')).rejects.toThrow('Case not found');
         });
         it('should handle very long document content', async () => {
             const longContent = 'A'.repeat(100000);
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
             mockCaseRepository.addDocument.mockResolvedValue(mockCaseWithDocument);
             await caseService.addDocument(mockPermissionContext, testCaseId, 'Long Document', longContent);
             expect(mockCaseRepository.addDocument).toHaveBeenCalledWith(testCaseId, expect.objectContaining({
@@ -745,6 +816,7 @@ describe('CaseService Unit Tests', () => {
                 }]
         });
         it('should add internal note successfully', async () => {
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
             mockCaseRepository.addNote.mockResolvedValue(mockCaseWithNote);
             const result = await caseService.addNote(mockPermissionContext, testCaseId, 'Internal case note', true);
             expect(mockCaseRepository.addNote).toHaveBeenCalledWith(testCaseId, {
@@ -767,6 +839,7 @@ describe('CaseService Unit Tests', () => {
                         isInternal: false
                     }]
             };
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
             mockCaseRepository.addNote.mockResolvedValue(mockCaseWithPublicNote);
             await caseService.addNote(mockPermissionContext, testCaseId, 'Public case note', false);
             expect(mockCaseRepository.addNote).toHaveBeenCalledWith(testCaseId, expect.objectContaining({
@@ -774,6 +847,7 @@ describe('CaseService Unit Tests', () => {
             }));
         });
         it('should default to internal note when not specified', async () => {
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
             mockCaseRepository.addNote.mockResolvedValue(mockCaseWithNote);
             await caseService.addNote(mockPermissionContext, testCaseId, 'Default note');
             expect(mockCaseRepository.addNote).toHaveBeenCalledWith(testCaseId, expect.objectContaining({
@@ -781,6 +855,7 @@ describe('CaseService Unit Tests', () => {
             }));
         });
         it('should throw error when case not found for note addition', async () => {
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
             mockCaseRepository.addNote.mockResolvedValue(null);
             await expect(caseService.addNote(mockPermissionContext, testCaseId, 'Test note', true)).rejects.toThrow('Case not found');
         });
@@ -805,6 +880,7 @@ describe('CaseService Unit Tests', () => {
         ];
         it('should search cases with filters', async () => {
             const filters = { guildId: testGuildId, status: case_1.CaseStatus.IN_PROGRESS };
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
             mockCaseRepository.searchCases.mockResolvedValue(mockSearchResults);
             const result = await caseService.searchCases(mockPermissionContext, filters);
             expect(mockCaseRepository.searchCases).toHaveBeenCalledWith(filters, undefined, undefined);
@@ -814,11 +890,13 @@ describe('CaseService Unit Tests', () => {
             const filters = { guildId: testGuildId };
             const sort = { field: 'createdAt', direction: 'desc' };
             const pagination = { limit: 10, skip: 0 };
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
             mockCaseRepository.searchCases.mockResolvedValue(mockSearchResults);
             await caseService.searchCases(mockPermissionContext, filters, sort, pagination);
             expect(mockCaseRepository.searchCases).toHaveBeenCalledWith(filters, sort, pagination);
         });
         it('should return empty array when no cases match', async () => {
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
             mockCaseRepository.searchCases.mockResolvedValue([]);
             const result = await caseService.searchCases(mockPermissionContext, { guildId: 'non-existent' });
             expect(result).toEqual([]);
@@ -877,11 +955,23 @@ describe('CaseService Unit Tests', () => {
     });
     describe('Error Handling', () => {
         it('should handle repository connection failures', async () => {
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
             mockCaseRepository.findById.mockRejectedValue(new Error('Database connection lost'));
             await expect(caseService.getCaseById(mockPermissionContext, testCaseId))
                 .rejects.toThrow('Database connection lost');
         });
         it('should handle malformed case data', async () => {
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
+            mockBusinessRuleValidationService.validateClientCaseLimit.mockResolvedValue({
+                valid: true,
+                errors: [],
+                warnings: [],
+                bypassAvailable: false,
+                currentCases: 0,
+                maxCases: 3,
+                clientId: ''
+            });
+            mockCaseCounterRepository.getNextCaseNumber.mockResolvedValue(1);
             mockCaseRepository.add.mockRejectedValue(new Error('Document validation failed'));
             const invalidRequest = {
                 guildId: '',
@@ -894,6 +984,7 @@ describe('CaseService Unit Tests', () => {
                 .rejects.toThrow();
         });
         it('should handle concurrent modification errors', async () => {
+            mockPermissionService.hasActionPermission.mockResolvedValue(true);
             mockCaseRepository.update.mockRejectedValue(new Error('Document was modified by another operation'));
             await expect(caseService.updateCaseStatus(mockPermissionContext, testCaseId, case_1.CaseStatus.CLOSED)).rejects.toThrow('Document was modified by another operation');
         });

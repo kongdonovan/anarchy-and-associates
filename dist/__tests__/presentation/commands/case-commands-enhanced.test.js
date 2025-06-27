@@ -50,7 +50,6 @@ describe('Enhanced Case Commands', () => {
     let caseCommands;
     let mockInteraction;
     let mockCaseRepo;
-    let mockCaseService;
     let mockGuild;
     let mockMember;
     let mockUser;
@@ -67,6 +66,8 @@ describe('Enhanced Case Commands', () => {
         assignedLawyerIds: ['lawyer123'],
         leadAttorneyId: 'lawyer123',
         channelId: 'channel123',
+        documents: [],
+        notes: [],
         createdAt: new Date('2024-01-01'),
         updatedAt: new Date('2024-01-01'),
         ...overrides
@@ -125,7 +126,6 @@ describe('Enhanced Case Commands', () => {
         caseCommands = new case_commands_1.CaseCommands();
         // Access private services
         mockCaseRepo = caseCommands.caseRepository;
-        mockCaseService = caseCommands.caseService;
     });
     describe('searchCases command', () => {
         beforeEach(() => {
@@ -156,7 +156,7 @@ describe('Enhanced Case Commands', () => {
                     clientId: 'client456'
                 })
             ];
-            mockCaseRepo.findByGuildId = jest.fn().mockResolvedValue([
+            mockCaseRepo.findByFilters = jest.fn().mockResolvedValue([
                 ...mockCases,
                 createMockCase({
                     caseNumber: 'CASE-003',
@@ -167,14 +167,14 @@ describe('Enhanced Case Commands', () => {
             ]);
             await caseCommands.searchCases('legal', 'in_progress', 'high', { id: 'lawyer123', displayName: 'Test Lawyer' }, { id: 'client456', displayName: 'Test Client' }, 30, mockInteraction);
             expect(mockInteraction.deferReply).toHaveBeenCalled();
-            expect(mockCaseRepo.findByGuildId).toHaveBeenCalledWith('guild123');
+            expect(mockCaseRepo.findByFilters).toHaveBeenCalledWith({ guildId: 'guild123' });
             // Verify the results embed
-            const replyCall = mockInteraction.editReply.mock.calls[0][0];
-            expect(replyCall.embeds[0]?.data?.title).toContain('Search Results (2 case');
-            expect(replyCall.embeds[0]?.data?.fields).toHaveLength(3); // 2 cases + search criteria
+            const replyCall = mockInteraction.editReply.mock.calls[0]?.[0];
+            expect(replyCall?.embeds?.[0]?.data?.title).toContain('Search Results (2 case');
+            expect(replyCall?.embeds?.[0]?.data?.fields || []).toHaveLength(3); // 2 cases + search criteria
         });
         it('should handle empty search results', async () => {
-            mockCaseRepo.findByGuildId = jest.fn().mockResolvedValue([]);
+            mockCaseRepo.findByFilters = jest.fn().mockResolvedValue([]);
             await caseCommands.searchCases('nonexistent', undefined, undefined, undefined, undefined, undefined, mockInteraction);
             expect(mockInteraction.editReply).toHaveBeenCalledWith(expect.objectContaining({
                 embeds: expect.arrayContaining([
@@ -194,18 +194,18 @@ describe('Enhanced Case Commands', () => {
                 caseNumber: 'CASE-OLD',
                 createdAt: new Date('2023-01-01')
             });
-            mockCaseRepo.findByGuildId = jest.fn().mockResolvedValue([recentCase, oldCase]);
+            mockCaseRepo.findByFilters = jest.fn().mockResolvedValue([recentCase, oldCase]);
             mockInteraction.options.getInteger = jest.fn().mockReturnValue(7); // 7 days
             await caseCommands.searchCases(undefined, undefined, undefined, undefined, undefined, 7, mockInteraction);
-            const replyCall = mockInteraction.editReply.mock.calls[0][0];
-            expect(replyCall.embeds[0]?.data?.title).toContain('Search Results (1 case)');
+            const replyCall = mockInteraction.editReply.mock.calls[0]?.[0];
+            expect(replyCall?.embeds[0]?.data?.title).toContain('Search Results (1 case)');
         });
     });
     describe('exportCases command', () => {
         const mockCases = [
             createMockCase({
                 status: case_1.CaseStatus.CLOSED,
-                result: case_1.CaseResult.SETTLED,
+                result: case_1.CaseResult.SETTLEMENT,
                 closedAt: new Date('2024-02-01')
             }),
             createMockCase({
@@ -215,27 +215,27 @@ describe('Enhanced Case Commands', () => {
             })
         ];
         it('should export cases to CSV format', async () => {
-            mockCaseRepo.findByGuildId = jest.fn().mockResolvedValue(mockCases);
+            mockCaseRepo.findByFilters = jest.fn().mockResolvedValue(mockCases);
             mockInteraction.options.getString = jest.fn().mockReturnValue('csv');
             await caseCommands.exportCases('csv', mockInteraction);
             expect(mockInteraction.deferReply).toHaveBeenCalledWith(true);
-            const replyCall = mockInteraction.editReply.mock.calls[0][0];
-            expect(replyCall.embeds[0]?.data?.title).toBe('Export Complete');
-            expect(replyCall.files).toHaveLength(1);
+            const replyCall = mockInteraction.editReply.mock.calls[0]?.[0];
+            expect(replyCall?.embeds[0]?.data?.title).toBe('Export Complete');
+            expect(replyCall?.files).toHaveLength(1);
             expect(replyCall.files[0]).toBeInstanceOf(discord_js_1.AttachmentBuilder);
             expect(replyCall.files[0].name).toContain('cases_export_');
         });
         it('should generate summary report', async () => {
-            mockCaseRepo.findByGuildId = jest.fn().mockResolvedValue(mockCases);
+            mockCaseRepo.findByFilters = jest.fn().mockResolvedValue(mockCases);
             mockInteraction.options.getString = jest.fn().mockReturnValue('summary');
             await caseCommands.exportCases('summary', mockInteraction);
-            const replyCall = mockInteraction.editReply.mock.calls[0][0];
-            expect(replyCall.embeds[0]?.data?.title).toBe('Report Generated');
-            expect(replyCall.files).toHaveLength(1);
+            const replyCall = mockInteraction.editReply.mock.calls[0]?.[0];
+            expect(replyCall?.embeds[0]?.data?.title).toBe('Report Generated');
+            expect(replyCall?.files).toHaveLength(1);
             expect(replyCall.files[0].name).toContain('case_summary_');
         });
         it('should handle empty case list', async () => {
-            mockCaseRepo.findByGuildId = jest.fn().mockResolvedValue([]);
+            mockCaseRepo.findByFilters = jest.fn().mockResolvedValue([]);
             await caseCommands.exportCases('csv', mockInteraction);
             expect(mockInteraction.editReply).toHaveBeenCalledWith(expect.objectContaining({
                 embeds: expect.arrayContaining([
@@ -343,7 +343,7 @@ describe('Enhanced Case Commands', () => {
                     createMockCase({
                         status: case_1.CaseStatus.CLOSED,
                         priority: case_1.CasePriority.HIGH,
-                        result: case_1.CaseResult.WON,
+                        result: case_1.CaseResult.WIN,
                         closedAt: new Date('2024-02-01'),
                         createdAt: new Date('2024-01-01')
                     }),
@@ -379,7 +379,7 @@ describe('Enhanced Case Commands', () => {
                 expect(caseCommands.getCasePriorityEmoji(case_1.CasePriority.LOW)).toBe('🟢');
                 expect(caseCommands.getCasePriorityEmoji(case_1.CasePriority.MEDIUM)).toBe('🟡');
                 expect(caseCommands.getCasePriorityEmoji(case_1.CasePriority.HIGH)).toBe('🟠');
-                expect(caseCommands.getCasePriorityEmoji(case_1.CasePriority.CRITICAL)).toBe('🔴');
+                expect(caseCommands.getCasePriorityEmoji(case_1.CasePriority.URGENT)).toBe('🔴');
             });
         });
     });
@@ -406,16 +406,16 @@ describe('Enhanced Case Commands', () => {
                 title: 'Case with special chars: $%&@#',
                 description: 'Description with newlines\nand\ttabs'
             });
-            mockCaseRepo.findByGuildId = jest.fn().mockResolvedValue([specialCase]);
+            mockCaseRepo.findByFilters = jest.fn().mockResolvedValue([specialCase]);
             await caseCommands.searchCases('$%&@#', undefined, undefined, undefined, undefined, undefined, mockInteraction);
-            const replyCall = mockInteraction.editReply.mock.calls[0][0];
-            expect(replyCall.embeds[0]?.data?.title).toContain('Search Results (1 case)');
+            const replyCall = mockInteraction.editReply.mock.calls[0]?.[0];
+            expect(replyCall?.embeds[0]?.data?.title).toContain('Search Results (1 case)');
         });
         it('should handle export with very long case titles', async () => {
             const longTitleCase = createMockCase({
                 title: 'A'.repeat(500) // Very long title
             });
-            mockCaseRepo.findByGuildId = jest.fn().mockResolvedValue([longTitleCase]);
+            mockCaseRepo.findByFilters = jest.fn().mockResolvedValue([longTitleCase]);
             await caseCommands.exportCases('csv', mockInteraction);
             // Should not throw error
             expect(mockInteraction.editReply).toHaveBeenCalled();

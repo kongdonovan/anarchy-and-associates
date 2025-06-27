@@ -12,7 +12,7 @@ describe('Retainer and Feedback Entities', () => {
           clientId: 'client123',
           lawyerId: 'lawyer123',
           agreementTemplate: 'This is a legal retainer agreement...',
-          status: 'pending',
+          status: RetainerStatus.PENDING,
           createdAt: new Date(),
           updatedAt: new Date()
         };
@@ -28,9 +28,9 @@ describe('Retainer and Feedback Entities', () => {
 
       it('should handle all valid retainer statuses', () => {
         const validStatuses = [
-          'pending',
-          'signed',
-          'cancelled'
+          RetainerStatus.PENDING,
+          RetainerStatus.SIGNED,
+          RetainerStatus.CANCELLED
         ];
 
         validStatuses.forEach(status => {
@@ -59,7 +59,7 @@ describe('Retainer and Feedback Entities', () => {
             clientId: 'client123',
               lawyerId: 'lawyer123',
             agreementTemplate: 'Test agreement',
-            status: 'pending',
+            status: RetainerStatus.PENDING,
             createdAt: new Date(),
             updatedAt: new Date()
           };
@@ -81,7 +81,7 @@ describe('Retainer and Feedback Entities', () => {
           clientId: 'client123',
           lawyerId: 'lawyer123',
           agreementTemplate: 'Test agreement',
-          status: 'signed',
+          status: RetainerStatus.SIGNED,
           signedAt: signedDate,
           clientRobloxUsername: robloxUsername,
           digitalSignature: robloxUsername,
@@ -104,7 +104,7 @@ describe('Retainer and Feedback Entities', () => {
           clientId: 'client123',
           lawyerId: 'lawyer123',
           agreementTemplate: 'Test agreement',
-          status: 'cancelled',
+          status: RetainerStatus.CANCELLED,
           createdAt: new Date(),
           updatedAt: cancelledDate
         };
@@ -159,7 +159,7 @@ describe('Retainer and Feedback Entities', () => {
           clientId,
           lawyerId: 'lawyer1',
           agreementTemplate: 'Pending agreement',
-          status: 'pending',
+          status: RetainerStatus.PENDING,
           createdAt: new Date(),
           updatedAt: new Date()
         };
@@ -170,7 +170,7 @@ describe('Retainer and Feedback Entities', () => {
           clientId,
           lawyerId: 'lawyer2',
           agreementTemplate: 'Active agreement',
-          status: 'signed',
+          status: RetainerStatus.SIGNED,
           signedAt: new Date(),
           clientRobloxUsername: 'TestUser123',
           digitalSignature: 'TestUser123',
@@ -209,7 +209,7 @@ describe('Retainer and Feedback Entities', () => {
           clientId: 'client123',
           lawyerId: 'lawyer123',
           agreementTemplate: longAgreementText,
-          status: 'pending',
+          status: RetainerStatus.PENDING,
           createdAt: new Date(),
           updatedAt: new Date()
         };
@@ -234,7 +234,7 @@ describe('Retainer and Feedback Entities', () => {
           clientId: 'client123',
           lawyerId: 'lawyer123',
           agreementTemplate: specialAgreementText,
-          status: 'pending',
+          status: RetainerStatus.PENDING,
           createdAt: new Date(),
           updatedAt: new Date()
         };
@@ -590,7 +590,7 @@ describe('Retainer and Feedback Entities', () => {
           clientId: 'client123',
           lawyerId: 'lawyer1',
           agreementTemplate: 'Guild 1 retainer',
-          status: 'pending',
+          status: RetainerStatus.PENDING,
           createdAt: new Date(),
           updatedAt: new Date()
         },
@@ -600,7 +600,7 @@ describe('Retainer and Feedback Entities', () => {
           clientId: 'client123',
           lawyerId: 'lawyer2',
           agreementTemplate: 'Guild 2 retainer',
-          status: 'signed',
+          status: RetainerStatus.SIGNED,
           signedAt: new Date(),
           clientRobloxUsername: 'TestUser123',
           digitalSignature: 'TestUser123',

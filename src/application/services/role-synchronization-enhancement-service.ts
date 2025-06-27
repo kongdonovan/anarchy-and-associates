@@ -1,7 +1,6 @@
-import { GuildMember, Guild, TextChannel, EmbedBuilder } from 'discord.js';
-import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
+import { GuildMember, Guild } from 'discord.js';
 import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-repository';
-import { StaffRole, ROLE_HIERARCHY, RoleUtils } from '../../domain/entities/staff-role';
+import { StaffRole, RoleUtils } from '../../domain/entities/staff-role';
 import { AuditAction } from '../../domain/entities/audit-log';
 import { logger } from '../../infrastructure/logger';
 import { EmbedUtils } from '../../infrastructure/utils/embed-utils';
@@ -74,7 +73,6 @@ export interface ConflictReport {
 }
 
 export class RoleSynchronizationEnhancementService {
-  private staffRepository: StaffRepository;
   private auditLogRepository: AuditLogRepository;
   
   // Map Discord role names to staff roles (same as RoleTrackingService)
@@ -101,7 +99,6 @@ export class RoleSynchronizationEnhancementService {
   private conflictHistory: Map<string, ConflictResolutionResult[]> = new Map();
 
   constructor() {
-    this.staffRepository = new StaffRepository();
     this.auditLogRepository = new AuditLogRepository();
   }
 
@@ -118,7 +115,7 @@ export class RoleSynchronizationEnhancementService {
 
       // Sort roles by hierarchy level (highest first)
       const sortedRoles = staffRoles.sort((a, b) => b.level - a.level);
-      const highestRole = sortedRoles[0];
+      const highestRole = sortedRoles[0]!; // Already validated that staffRoles.length > 1
 
       // Determine severity based on role difference
       const severity = this.calculateConflictSeverity(sortedRoles);
@@ -433,8 +430,8 @@ export class RoleSynchronizationEnhancementService {
   private calculateConflictSeverity(roles: Array<{ level: number }>): ConflictSeverity {
     if (roles.length === 0) return ConflictSeverity.LOW;
 
-    const highestLevel = roles[0].level;
-    const lowestLevel = roles[roles.length - 1].level;
+    const highestLevel = roles[0]?.level ?? 0;
+    const lowestLevel = roles[roles.length - 1]?.level ?? 0;
     const levelDifference = highestLevel - lowestLevel;
 
     // Multiple high-level roles is critical
@@ -475,7 +472,7 @@ export class RoleSynchronizationEnhancementService {
             roles: conflict.conflictingRoles.map(r => r.roleName)
           },
           after: {
-            role: result.keptRole
+            role: conflict.highestRole.staffRole
           },
           reason: 'Automatic role conflict resolution',
           metadata: {

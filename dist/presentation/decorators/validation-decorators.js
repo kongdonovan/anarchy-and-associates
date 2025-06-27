@@ -163,7 +163,7 @@ function ValidateBusinessRules(...rules) {
     return function (target, propertyKey, descriptor) {
         const methodKey = `${target.constructor.name}.${propertyKey}`;
         // Add business rule validations
-        const businessRules = rules.map((ruleName, index) => ({
+        const businessRules = rules.map((ruleName) => ({
             name: `business_rule_${ruleName}`,
             priority: 1,
             bypassable: true,

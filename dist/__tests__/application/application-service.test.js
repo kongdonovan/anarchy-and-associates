@@ -698,6 +698,7 @@ describe('ApplicationService Unit Tests', () => {
             });
         });
         it('should handle repository errors', async () => {
+            mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
             mockApplicationRepository.findByGuild.mockRejectedValue(new Error('Database error'));
             await expect(applicationService.getApplicationStats(mockPermissionContext))
                 .rejects.toThrow('Database error');

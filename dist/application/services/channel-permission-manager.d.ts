@@ -1,9 +1,7 @@
 import { Guild, GuildMember } from 'discord.js';
-import { PermissionService } from './permission-service';
 import { CaseRepository } from '../../infrastructure/repositories/case-repository';
 import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
 import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-repository';
-import { GuildConfigRepository } from '../../infrastructure/repositories/guild-config-repository';
 import { BusinessRuleValidationService } from './business-rule-validation-service';
 import { StaffRole } from '../../domain/entities/staff-role';
 export interface ChannelPermissionUpdate {
@@ -32,12 +30,10 @@ export declare class ChannelPermissionManager {
     private caseRepository;
     private staffRepository;
     private auditLogRepository;
-    private guildConfigRepository;
-    private permissionService;
     private businessRuleValidationService;
     private readonly CHANNEL_PATTERNS;
     private readonly PERMISSION_MATRIX;
-    constructor(caseRepository: CaseRepository, staffRepository: StaffRepository, auditLogRepository: AuditLogRepository, guildConfigRepository: GuildConfigRepository, permissionService: PermissionService, businessRuleValidationService: BusinessRuleValidationService);
+    constructor(caseRepository: CaseRepository, staffRepository: StaffRepository, auditLogRepository: AuditLogRepository, businessRuleValidationService: BusinessRuleValidationService);
     /**
      * Handle role change and update all relevant channel permissions
      */

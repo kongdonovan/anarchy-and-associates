@@ -1,6 +1,5 @@
 import { CommandInteraction } from 'discord.js';
 import { CommandValidationService, CommandValidationRule, CommandValidationOptions } from '../../application/services/command-validation-service';
-import { PermissionContext } from '../../application/services/permission-service';
 import { logger } from '../../infrastructure/logger';
 
 // Store validation rules for methods
@@ -202,7 +201,7 @@ export function ValidateBusinessRules(...rules: string[]) {
     const methodKey = `${target.constructor.name}.${propertyKey}`;
 
     // Add business rule validations
-    const businessRules: CommandValidationRule[] = rules.map((ruleName, index) => ({
+    const businessRules: CommandValidationRule[] = rules.map((ruleName) => ({
       name: `business_rule_${ruleName}`,
       priority: 1,
       bypassable: true,

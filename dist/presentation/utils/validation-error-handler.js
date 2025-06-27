@@ -3,7 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ValidationErrorHandler = void 0;
 const discord_js_1 = require("discord.js");
 const embed_utils_1 = require("../../infrastructure/utils/embed-utils");
-const role_utils_1 = require("../../infrastructure/utils/role-utils");
+const staff_role_1 = require("../../domain/entities/staff-role");
 class ValidationErrorHandler {
     /**
      * Convert validation errors to user-friendly embed
@@ -108,7 +108,7 @@ class ValidationErrorHandler {
     /**
      * Create success embed after validation bypass
      */
-    static createBypassSuccessEmbed(commandName, subcommandName, bypassReason) {
+    static createBypassSuccessEmbed(commandName, bypassReason, subcommandName) {
         return new discord_js_1.EmbedBuilder()
             .setTitle('✅ Validation Override Successful')
             .setColor(0x00FF00)
@@ -168,11 +168,11 @@ class ValidationErrorHandler {
             inline: true
         });
         // Add role hierarchy info
-        const hierarchy = role_utils_1.RoleUtils.getRoleHierarchy();
+        const hierarchy = staff_role_1.RoleUtils.getAllRolesSortedByLevel();
         embed.addFields({
             name: '📈 Role Limits',
-            value: hierarchy.map(role => {
-                const maxCount = role_utils_1.RoleUtils.getRoleMaxCount(role);
+            value: hierarchy.map((role) => {
+                const maxCount = staff_role_1.RoleUtils.getRoleMaxCount(role);
                 return `**${role}**: Max ${maxCount}`;
             }).join('\n'),
             inline: false

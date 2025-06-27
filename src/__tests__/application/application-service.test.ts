@@ -13,7 +13,6 @@ import { Staff } from '../../domain/entities/staff';
 import { StaffRole } from '../../domain/entities/staff-role';
 import { TestUtils } from '../helpers/test-utils';
 import { CaseStatus } from '../../domain/entities/case';
-import { RetainerStatus } from '../../domain/entities/retainer';
 
 /**
  * Unit tests for ApplicationService
@@ -877,6 +876,7 @@ describe('ApplicationService Unit Tests', () => {
     });
 
     it('should handle repository errors', async () => {
+      mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
       mockApplicationRepository.findByGuild.mockRejectedValue(new Error('Database error'));
 
       await expect(applicationService.getApplicationStats(mockPermissionContext))

@@ -1,0 +1,181 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": ["./src/index.ts"],
+  "entryPointStrategy": "expand",
+  "out": "./docs/generated",
+  "exclude": [
+    "**/__tests__/**/*",
+    "**/test/**/*",
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    "**/scripts/**/*",
+    "**/dev-server.ts",
+    "**/simple-dev.ts",
+    "**/node_modules/**/*"
+  ],
+  "excludeExternals": false,
+  "includeVersion": true,
+  "name": "Anarchy & Associates Discord Bot",
+  "readme": "./CLAUDE.md",
+  "theme": "default",
+  "plugin": [
+    "typedoc-plugin-markdown",
+    "typedoc-plugin-merge-modules",
+    "@mxssfd/typedoc-theme"
+  ],
+  "githubPages": false,
+  "hideGenerator": false,
+  "categorizeByGroup": true,
+  "defaultCategory": "Other",
+  "categoryOrder": [
+    "Domain",
+    "Application",
+    "Infrastructure",
+    "Presentation",
+    "*"
+  ],
+  "groupOrder": [
+    "Domain",
+    "Application Services",
+    "Infrastructure",
+    "Presentation",
+    "*"
+  ],
+  "navigation": {
+    "includeCategories": true,
+    "includeGroups": true,
+    "includeFolders": false
+  },
+  "searchInComments": true,
+  "searchInDocuments": true,
+  "skipErrorChecking": false,
+  "validation": {
+    "notExported": false,
+    "invalidLink": true,
+    "notDocumented": false
+  },
+  "visibilityFilters": {
+    "protected": true,
+    "private": true,
+    "inherited": true,
+    "external": false
+  },
+  "sort": ["source-order"],
+  "kindSortOrder": [
+    "Module",
+    "Namespace",
+    "Enum",
+    "Class",
+    "Interface",
+    "TypeAlias",
+    "Function",
+    "Variable",
+    "Constructor",
+    "Property",
+    "Method",
+    "Reference"
+  ],
+  "preserveLinkText": true,
+  "blockTags": [
+    "@alpha",
+    "@beta",
+    "@deprecated",
+    "@example",
+    "@experimental",
+    "@hidden",
+    "@ignore",
+    "@internal",
+    "@override",
+    "@readonly",
+    "@sealed",
+    "@virtual",
+    "@group",
+    "@category",
+    "@module"
+  ],
+  "modifierTags": [
+    "@public",
+    "@private",
+    "@protected",
+    "@readonly",
+    "@override"
+  ],
+  "commentStyle": "all",
+  "useTsLinkResolution": true,
+  "preserveWatchOutput": false,
+  "cleanOutputDir": true,
+  "titleLink": "/",
+  "navigationLinks": {
+    "GitHub": "https://github.com/anarchy-associates/discord-bot",
+    "README": "./README.md",
+    "Architecture": "./CLAUDE.md"
+  },
+  "sidebarLinks": {
+    "Project Documentation": "./CLAUDE.md",
+    "Command Overview": "./COMMAND_OVERVIEW.md",
+    "Configuration": "./CONFIGURATION.md"
+  },
+  "requiredToBeDocumented": [
+    "Enum",
+    "Class",
+    "Interface",
+    "Function"
+  ],
+  "media": "./docs/media",
+  "lightHighlightTheme": "github-light",
+  "darkHighlightTheme": "github-dark",
+  "markedOptions": {
+    "mangle": false,
+    "headerIds": true
+  },
+  "htmlLang": "en",
+  "cacheBust": true,
+  "gaID": "",
+  "gaSite": "",
+  "hostedBaseUrl": "",
+  "hideParameterTypesInTitle": false,
+  "notUseCodeBlocks": false,
+  "outputFileStrategy": "members",
+  "memberPageTitle": "{name} | {kind}",
+  "indexPageTitle": "API Documentation",
+  "parametersFormat": "table",
+  "typeDeclarationFormat": "table",
+  "tableColumnSettings": {
+    "hideDefaults": false,
+    "hideInherited": false,
+    "hideModifiers": false,
+    "hideOverrides": false,
+    "hideSources": false,
+    "hideValues": false
+  },
+  "textContentMappings": {
+    "title.indexPage": "Anarchy & Associates Discord Bot - API Documentation",
+    "title.memberPage": "{name}",
+    "footer.text": "Copyright © 2024 Anarchy & Associates"
+  },
+  "remarkPlugins": [],
+  "includeReadme": true,
+  "treatWarningsAsErrors": false,
+  "logLevel": "Info",
+  "pretty": true,
+  "emit": "docs",
+  "jsDocCompatibility": true,
+  "excludePrivate": false,
+  "excludeProtected": false,
+  "excludeInternal": true,
+  "disableSources": false,
+  "disableGit": false,
+  "gitRevision": "main",
+  "gitRemote": "origin",
+  "publicPath": "/",
+  "htmlNamingConvention": "kebab-case",
+  "fileExtension": ".html",
+  "hideInPageTOC": false,
+  "hideBreadcrumbs": false,
+  "hidePageHeader": false,
+  "includeHierarchySummary": true,
+  "themeColor": "#7289da",
+  "customCss": "./docs/custom.css",
+  "customJs": "./docs/custom.js",
+  "favicon": "./docs/favicon.ico"
+}

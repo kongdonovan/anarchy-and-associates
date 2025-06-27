@@ -53,7 +53,7 @@ export declare class CommandValidationService {
     /**
      * Create validation bypass modal
      */
-    createBypassModal(bypassRequests: ValidationBypassRequest[]): ModalBuilder;
+    createBypassModal(_bypassRequests: ValidationBypassRequest[]): ModalBuilder;
     /**
      * Create validation bypass buttons
      */

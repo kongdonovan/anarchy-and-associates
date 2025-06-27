@@ -28,7 +28,7 @@ module.exports = {
   globalTeardown: '<rootDir>/src/__tests__/globalTeardown.ts',
   setupFilesAfterEnv: ['<rootDir>/src/__tests__/setup.ts'],
   testTimeout: 30000,
-  maxWorkers: 2, // Reduced for better database connection management
+  maxWorkers: 1, // Run tests sequentially to avoid interference
   // Run core tests first, then integration/performance tests
   testSequencer: '<rootDir>/src/__tests__/testSequencer.js',
   coverageThreshold: {

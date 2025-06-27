@@ -50,7 +50,7 @@ let RepairCommands = class RepairCommands {
         const retainerRepository = new retainer_repository_1.RetainerRepository();
         const feedbackRepository = new feedback_repository_1.FeedbackRepository();
         const reminderRepository = new reminder_repository_1.ReminderRepository();
-        this.crossEntityValidationService = new cross_entity_validation_service_1.CrossEntityValidationService(staffRepository, caseRepository, applicationRepository, jobRepository, retainerRepository, feedbackRepository, reminderRepository, auditLogRepository, businessRuleValidationService);
+        this.crossEntityValidationService = new cross_entity_validation_service_1.CrossEntityValidationService(staffRepository, caseRepository, applicationRepository, jobRepository, retainerRepository, feedbackRepository, reminderRepository, auditLogRepository);
     }
     async getPermissionContext(interaction) {
         const member = interaction.guild?.members.cache.get(interaction.user.id);
@@ -644,7 +644,7 @@ let RepairCommands = class RepairCommands {
                         // Run repairs
                         const repairResult = await this.crossEntityValidationService.repairIntegrityIssues(report.issues);
                         // Create repair result embed
-                        const repairResultEmbed = this.createRepairResultEmbed(repairResult);
+                        const repairResultEmbed = this.createValidationRepairResultEmbed(repairResult);
                         await interaction.editReply({
                             embeds: [reportEmbed, repairResultEmbed],
                             content: null
@@ -712,7 +712,7 @@ let RepairCommands = class RepairCommands {
         }
         return embed;
     }
-    createRepairResultEmbed(result) {
+    createValidationRepairResultEmbed(result) {
         const embed = new discord_js_1.EmbedBuilder()
             .setTitle('Auto-Repair Results')
             .setColor(result.issuesFailed === 0 ? 0x00FF00 : 0xFFA500)
@@ -869,13 +869,12 @@ __decorate([
         name: 'integrity-check',
         description: 'Scan for data integrity issues across all entities'
     }),
-    (0, discordx_1.SlashOption)({
+    __param(1, (0, discordx_1.SlashOption)({
         name: 'auto-repair',
         description: 'Automatically repair issues that can be fixed',
         type: discord_js_1.ApplicationCommandOptionType.Boolean,
         required: false
-    }),
-    __param(1, (0, discordx_1.SlashOption)({ name: 'auto-repair' })),
+    })),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [discord_js_1.CommandInteraction, Boolean]),
     __metadata("design:returntype", Promise)

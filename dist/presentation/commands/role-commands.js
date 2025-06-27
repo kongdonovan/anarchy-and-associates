@@ -43,7 +43,6 @@ let RoleCommands = class RoleCommands {
         return embed_utils_1.EmbedUtils.createErrorEmbed('Error', message);
     }
     async syncRoles(interaction) {
-        const context = await this.getPermissionContext(interaction);
         try {
             if (!interaction.guildId || !interaction.guild) {
                 await interaction.reply({
@@ -94,7 +93,6 @@ let RoleCommands = class RoleCommands {
         }
     }
     async roleStatus(interaction) {
-        const context = await this.getPermissionContext(interaction);
         try {
             if (!interaction.guildId || !interaction.guild) {
                 await interaction.reply({
@@ -376,7 +374,7 @@ let RoleCommands = class RoleCommands {
                         }
                         collector.stop();
                     });
-                    collector.on('end', async (collected, reason) => {
+                    collector.on('end', async (_collected, reason) => {
                         if (reason === 'time') {
                             const timeoutEmbed = embed_utils_1.EmbedUtils.createErrorEmbed('Timeout', 'The conflict resolution request has timed out. No changes were made.');
                             await interaction.editReply({ embeds: [timeoutEmbed], components: [] });

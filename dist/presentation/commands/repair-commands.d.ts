@@ -8,6 +8,7 @@ export declare class RepairCommands {
     constructor();
     private getPermissionContext;
     private checkAdminPermission;
+    private createRepairResultEmbed;
     private createHealthCheckEmbed;
     repairStaffRoles(dryRun: boolean | undefined, interaction: CommandInteraction): Promise<void>;
     repairJobRoles(dryRun: boolean | undefined, interaction: CommandInteraction): Promise<void>;
@@ -22,5 +23,6 @@ export declare class RepairCommands {
     configureAutoCleanup(enabled: boolean, interaction: CommandInteraction): Promise<void>;
     integrityCheck(interaction: CommandInteraction, autoRepair?: boolean): Promise<void>;
     private createIntegrityReportEmbed;
+    private createValidationRepairResultEmbed;
 }
 //# sourceMappingURL=repair-commands.d.ts.map

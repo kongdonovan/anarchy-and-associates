@@ -82,7 +82,7 @@ describe('Validation Decorators', () => {
                     this.commandValidationService = mockCommandValidationService;
                     this.getPermissionContext = testInstance.getPermissionContext;
                 }
-                async testMethod(interaction) {
+                async testMethod(_interaction) {
                     return 'success';
                 }
             }
@@ -116,7 +116,7 @@ describe('Validation Decorators', () => {
                     this.getPermissionContext = testInstance.getPermissionContext;
                     this.createErrorEmbed = testInstance.createErrorEmbed;
                 }
-                async testMethod(interaction) {
+                async testMethod(_interaction) {
                     return 'should not reach here';
                 }
             }
@@ -149,7 +149,20 @@ describe('Validation Decorators', () => {
                 errors: ['Role limit exceeded'],
                 warnings: [],
                 requiresConfirmation: true,
-                bypassRequests: [{}],
+                bypassRequests: [{
+                        validationResult: {
+                            valid: false,
+                            errors: ['Role limit exceeded'],
+                            warnings: [],
+                            bypassAvailable: true
+                        },
+                        context: {
+                            interaction: mockInteraction,
+                            permissionContext,
+                            commandName: 'test',
+                            options: {}
+                        }
+                    }],
             });
             mockCommandValidationService.extractValidationContext.mockResolvedValue({
                 interaction: mockInteraction,
@@ -164,7 +177,7 @@ describe('Validation Decorators', () => {
                     this.commandValidationService = mockCommandValidationService;
                     this.getPermissionContext = testInstance.getPermissionContext;
                 }
-                async testMethod(interaction) {
+                async testMethod(_interaction) {
                     return 'should not reach here';
                 }
             }
@@ -214,7 +227,7 @@ describe('Validation Decorators', () => {
                     this.businessRuleValidationService = mockBusinessRuleValidationService;
                     this.getPermissionContext = testInstance.getPermissionContext;
                 }
-                async testMethod(interaction) {
+                async testMethod(_interaction) {
                     return 'success';
                 }
             }
@@ -241,11 +254,7 @@ describe('Validation Decorators', () => {
                 }
                 return { isValid: true, errors: [], warnings: [] };
             });
-            mockCrossEntityValidationService.validateBeforeOperation.mockResolvedValue({
-                valid: true,
-                errors: [],
-                warnings: [],
-            });
+            mockCrossEntityValidationService.validateBeforeOperation.mockResolvedValue([]);
             mockCommandValidationService.extractValidationContext.mockResolvedValue({
                 interaction: mockInteraction,
                 permissionContext: testInstance.getPermissionContext(),
@@ -258,7 +267,7 @@ describe('Validation Decorators', () => {
                     this.crossEntityValidationService = mockCrossEntityValidationService;
                     this.getPermissionContext = testInstance.getPermissionContext;
                 }
-                async testMethod(interaction) {
+                async testMethod(_interaction) {
                     return 'success';
                 }
             }
@@ -307,7 +316,7 @@ describe('Validation Decorators', () => {
                     this.businessRuleValidationService = mockBusinessRuleValidationService;
                     this.getPermissionContext = testInstance.getPermissionContext;
                 }
-                async testMethod(interaction) {
+                async testMethod(_interaction) {
                     return 'success';
                 }
             }
@@ -351,7 +360,7 @@ describe('Validation Decorators', () => {
                     this.businessRuleValidationService = mockBusinessRuleValidationService;
                     this.getPermissionContext = testInstance.getPermissionContext;
                 }
-                async testMethod(interaction) {
+                async testMethod(_interaction) {
                     return 'success';
                 }
             }
@@ -369,7 +378,7 @@ describe('Validation Decorators', () => {
     describe('Multiple decorators', () => {
         it('should apply multiple validation decorators in order', async () => {
             const executionOrder = [];
-            mockCommandValidationService.validateCommand.mockImplementation(async (context, options) => {
+            mockCommandValidationService.validateCommand.mockImplementation(async (_context, options) => {
                 // Track execution of rules
                 options?.customRules?.forEach(rule => {
                     executionOrder.push(rule.name);
@@ -390,7 +399,7 @@ describe('Validation Decorators', () => {
                     this.crossEntityValidationService = mockCrossEntityValidationService;
                     this.getPermissionContext = testInstance.getPermissionContext;
                 }
-                async testMethod(interaction) {
+                async testMethod(_interaction) {
                     return 'success';
                 }
             }

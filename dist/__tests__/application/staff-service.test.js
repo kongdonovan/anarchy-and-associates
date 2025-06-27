@@ -232,6 +232,17 @@ describe('StaffService', () => {
             mockStaffRepository.findByUserId.mockResolvedValue(mockStaff);
             mockStaffRepository.canHireRole.mockResolvedValue(true);
             mockAuditLogRepository.logAction.mockResolvedValue({});
+            // Add default mock for validateRoleLimit
+            mockBusinessRuleValidationService.validateRoleLimit.mockResolvedValue({
+                valid: true,
+                errors: [],
+                warnings: [],
+                bypassAvailable: false,
+                currentCount: 3,
+                maxCount: 10,
+                roleName: staff_role_1.StaffRole.JUNIOR_ASSOCIATE,
+                metadata: {}
+            });
         });
         it('should successfully promote a staff member', async () => {
             const updatedStaff = { ...mockStaff, role: promotionRequest.newRole };
@@ -257,7 +268,16 @@ describe('StaffService', () => {
             expect(mockStaffRepository.updateStaffRole).not.toHaveBeenCalled();
         });
         it('should reject if role limit reached for new role', async () => {
-            mockStaffRepository.canHireRole.mockResolvedValue(false);
+            mockBusinessRuleValidationService.validateRoleLimit.mockResolvedValue({
+                valid: false,
+                errors: ['Cannot promote to Junior Associate. Maximum limit of 10 reached'],
+                warnings: [],
+                bypassAvailable: false,
+                currentCount: 10,
+                maxCount: 10,
+                roleName: staff_role_1.StaffRole.JUNIOR_ASSOCIATE,
+                metadata: {}
+            });
             const result = await staffService.promoteStaff(testContext, promotionRequest);
             expect(result.success).toBe(false);
             expect(result.error).toContain('Maximum limit');

@@ -158,7 +158,7 @@ describe('Role Tracking Channel Permissions Integration', () => {
             // Initialize role tracking
             roleTrackingService.initializeTracking(mockClient);
             // Get the registered event handler
-            const eventHandler = mockClient.on.mock.calls.find(call => call[0] === discord_js_1.Events.GuildMemberUpdate)[1];
+            const eventHandler = mockClient.on.mock.calls.find((call) => call[0] === discord_js_1.Events.GuildMemberUpdate)[1];
             // Simulate guild member update event (hiring)
             await eventHandler(noRolesMember, newParalegalMember);
             // Verify staff repository interactions
@@ -166,7 +166,7 @@ describe('Role Tracking Channel Permissions Integration', () => {
                 userId: testUserId,
                 guildId: testGuildId,
                 role: staff_role_1.StaffRole.PARALEGAL,
-                status: RetainerStatus.ACTIVE
+                status: 'active'
             }));
             // Verify audit logging
             expect(mockAuditLogRepo.add).toHaveBeenCalled();
@@ -181,7 +181,7 @@ describe('Role Tracking Channel Permissions Integration', () => {
                 userId: testUserId,
                 guildId: testGuildId,
                 role: staff_role_1.StaffRole.PARALEGAL,
-                status: RetainerStatus.ACTIVE,
+                status: 'active',
                 promotionHistory: [],
                 createdAt: new Date(),
                 updatedAt: new Date()
@@ -198,7 +198,7 @@ describe('Role Tracking Channel Permissions Integration', () => {
             // Initialize role tracking
             roleTrackingService.initializeTracking(mockClient);
             // Get the registered event handler
-            const eventHandler = mockClient.on.mock.calls.find(call => call[0] === discord_js_1.Events.GuildMemberUpdate)[1];
+            const eventHandler = mockClient.on.mock.calls.find((call) => call[0] === discord_js_1.Events.GuildMemberUpdate)[1];
             // Simulate guild member update event (promotion)
             await eventHandler(oldParalegalMember, newAssociateMember);
             // Verify staff repository interactions (promotion)
@@ -223,7 +223,7 @@ describe('Role Tracking Channel Permissions Integration', () => {
                 userId: testUserId,
                 guildId: testGuildId,
                 role: staff_role_1.StaffRole.PARALEGAL,
-                status: RetainerStatus.ACTIVE,
+                status: 'active',
                 createdAt: new Date(),
                 updatedAt: new Date()
             });
@@ -239,7 +239,7 @@ describe('Role Tracking Channel Permissions Integration', () => {
             // Initialize role tracking
             roleTrackingService.initializeTracking(mockClient);
             // Get the registered event handler
-            const eventHandler = mockClient.on.mock.calls.find(call => call[0] === discord_js_1.Events.GuildMemberUpdate)[1];
+            const eventHandler = mockClient.on.mock.calls.find((call) => call[0] === discord_js_1.Events.GuildMemberUpdate)[1];
             // Simulate guild member update event (firing)
             await eventHandler(oldParalegalMember, firedMember);
             // Verify staff repository interactions (deletion)
@@ -256,7 +256,7 @@ describe('Role Tracking Channel Permissions Integration', () => {
                 userId: testUserId,
                 guildId: testGuildId,
                 role: staff_role_1.StaffRole.SENIOR_PARTNER,
-                status: RetainerStatus.ACTIVE,
+                status: 'active',
                 promotionHistory: [],
                 createdAt: new Date(),
                 updatedAt: new Date()
@@ -273,7 +273,7 @@ describe('Role Tracking Channel Permissions Integration', () => {
             // Initialize role tracking
             roleTrackingService.initializeTracking(mockClient);
             // Get the registered event handler
-            const eventHandler = mockClient.on.mock.calls.find(call => call[0] === discord_js_1.Events.GuildMemberUpdate)[1];
+            const eventHandler = mockClient.on.mock.calls.find((call) => call[0] === discord_js_1.Events.GuildMemberUpdate)[1];
             // Simulate guild member update event (demotion)
             await eventHandler(oldPartnerMember, demotedMember);
             // Verify staff repository interactions (demotion)
@@ -324,14 +324,14 @@ describe('Role Tracking Channel Permissions Integration', () => {
                 _id: new mongodb_1.ObjectId(),
                 userId: testUserId,
                 role: staff_role_1.StaffRole.JUNIOR_ASSOCIATE,
-                status: RetainerStatus.ACTIVE,
+                status: 'active',
                 promotionHistory: [],
                 createdAt: new Date(),
                 updatedAt: new Date()
             });
             // Initialize role tracking
             roleTrackingService.initializeTracking(mockClient);
-            const eventHandler = mockClient.on.mock.calls.find(call => call[0] === discord_js_1.Events.GuildMemberUpdate)[1];
+            const eventHandler = mockClient.on.mock.calls.find((call) => call[0] === discord_js_1.Events.GuildMemberUpdate)[1];
             // Simulate promotion
             await eventHandler(oldMember, newMember);
             // Verify case channels were specifically updated
@@ -364,7 +364,7 @@ describe('Role Tracking Channel Permissions Integration', () => {
             };
             // Initialize role tracking
             roleTrackingService.initializeTracking(mockClient);
-            const eventHandler = mockClient.on.mock.calls.find(call => call[0] === discord_js_1.Events.GuildMemberUpdate)[1];
+            const eventHandler = mockClient.on.mock.calls.find((call) => call[0] === discord_js_1.Events.GuildMemberUpdate)[1];
             // Simulate hiring
             await eventHandler(oldMember, newMember);
             // Should still process successfully despite validation failure
@@ -385,7 +385,7 @@ describe('Role Tracking Channel Permissions Integration', () => {
             };
             // Initialize role tracking
             roleTrackingService.initializeTracking(mockClient);
-            const eventHandler = mockClient.on.mock.calls.find(call => call[0] === discord_js_1.Events.GuildMemberUpdate)[1];
+            const eventHandler = mockClient.on.mock.calls.find((call) => call[0] === discord_js_1.Events.GuildMemberUpdate)[1];
             // Should not throw error despite channel permission failure
             await expect(eventHandler(oldMember, newMember)).resolves.not.toThrow();
             // Staff should still be created
@@ -401,12 +401,12 @@ describe('Role Tracking Channel Permissions Integration', () => {
                 {
                     userId: 'user_1',
                     role: staff_role_1.StaffRole.MANAGING_PARTNER,
-                    status: RetainerStatus.ACTIVE
+                    status: 'active'
                 },
                 {
                     userId: 'user_2',
                     role: staff_role_1.StaffRole.PARALEGAL,
-                    status: RetainerStatus.ACTIVE
+                    status: 'active'
                 }
             ]);
             // Setup: Mock guild members
@@ -441,7 +441,7 @@ describe('Role Tracking Channel Permissions Integration', () => {
             };
             // Initialize role tracking
             roleTrackingService.initializeTracking(mockClient);
-            const eventHandler = mockClient.on.mock.calls.find(call => call[0] === discord_js_1.Events.GuildMemberUpdate)[1];
+            const eventHandler = mockClient.on.mock.calls.find((call) => call[0] === discord_js_1.Events.GuildMemberUpdate)[1];
             // Should handle error gracefully
             await expect(eventHandler(oldMember, newMember)).resolves.not.toThrow();
         });
@@ -461,7 +461,7 @@ describe('Role Tracking Channel Permissions Integration', () => {
             };
             // Initialize role tracking
             roleTrackingService.initializeTracking(mockClient);
-            const eventHandler = mockClient.on.mock.calls.find(call => call[0] === discord_js_1.Events.GuildMemberUpdate)[1];
+            const eventHandler = mockClient.on.mock.calls.find((call) => call[0] === discord_js_1.Events.GuildMemberUpdate)[1];
             // Should handle missing channels gracefully
             await expect(eventHandler(oldMember, memberWithEmptyGuild)).resolves.not.toThrow();
         });
@@ -477,7 +477,7 @@ describe('Role Tracking Channel Permissions Integration', () => {
             }));
             // Initialize role tracking
             roleTrackingService.initializeTracking(mockClient);
-            const eventHandler = mockClient.on.mock.calls.find(call => call[0] === discord_js_1.Events.GuildMemberUpdate)[1];
+            const eventHandler = mockClient.on.mock.calls.find((call) => call[0] === discord_js_1.Events.GuildMemberUpdate)[1];
             // Simulate rapid consecutive role changes
             const promises = baseMembers.map((oldMember, i) => eventHandler(oldMember, promotedMembers[i]));
             await expect(Promise.all(promises)).resolves.not.toThrow();

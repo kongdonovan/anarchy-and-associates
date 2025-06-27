@@ -21,7 +21,6 @@ import { logger } from '../../infrastructure/logger';
 import { randomUUID } from 'crypto';
 import { Client, CategoryChannel, ChannelType, PermissionFlagsBits, TextChannel } from 'discord.js';
 import { CaseChannelArchiveService } from './case-channel-archive-service';
-import { CaseStatus, CasePriority } from '../../domain/entities/case';
 
 export class CaseService {
   private archiveService?: CaseChannelArchiveService;

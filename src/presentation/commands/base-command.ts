@@ -1,6 +1,6 @@
 import { CommandInteraction, EmbedBuilder, ButtonInteraction, ModalSubmitInteraction, GuildMember } from 'discord.js';
 import { PermissionContext, PermissionService } from '../../application/services/permission-service';
-import { CommandValidationService, CommandValidationContext, CommandValidationOptions, CommandValidationResult } from '../../application/services/command-validation-service';
+import { CommandValidationService, CommandValidationOptions, CommandValidationResult } from '../../application/services/command-validation-service';
 import { BusinessRuleValidationService } from '../../application/services/business-rule-validation-service';
 import { CrossEntityValidationService } from '../../application/services/cross-entity-validation-service';
 import { EmbedUtils } from '../../infrastructure/utils/embed-utils';
@@ -157,7 +157,7 @@ export abstract class BaseCommand {
     }
 
     const context = await this.getPermissionContext(interaction);
-    return await this.permissionService.hasActionPermission(context, requiredPermission);
+    return await this.permissionService.hasActionPermission(context, requiredPermission as any);
   }
 
   /**
@@ -215,7 +215,7 @@ export abstract class BaseCommand {
       userId: interaction.user.id,
       userName: interaction.user.tag,
       commandName: interaction.commandName,
-      subcommand: interaction.options.getSubcommand(false) || undefined,
+      subcommand: interaction.isChatInputCommand() ? interaction.options.getSubcommand(false) || undefined : undefined,
       channelId: interaction.channelId,
       ...details
     });
@@ -235,7 +235,7 @@ export abstract class BaseCommand {
       userId: interaction.user.id,
       userName: interaction.user.tag,
       commandName: interaction.commandName,
-      subcommand: interaction.options.getSubcommand(false) || undefined,
+      subcommand: interaction.isChatInputCommand() ? interaction.options.getSubcommand(false) || undefined : undefined,
       channelId: interaction.channelId,
       error: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
@@ -250,6 +250,7 @@ export abstract class BaseCommand {
     interaction: CommandInteraction,
     optionName: string
   ): Promise<GuildMember | null> {
+    if (!interaction.isChatInputCommand()) return null;
     const user = interaction.options.getUser(optionName);
     if (!user || !interaction.guild) return null;
 
@@ -265,7 +266,6 @@ export abstract class BaseCommand {
    * Defer reply with thinking state
    */
   protected async deferReply(interaction: CommandInteraction, ephemeral: boolean = false): Promise<void> {
-      const context = await this.getPermissionContext(interaction);
     if (!interaction.deferred && !interaction.replied) {
       await interaction.deferReply({ ephemeral });
     }

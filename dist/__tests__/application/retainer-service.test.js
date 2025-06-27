@@ -75,6 +75,7 @@ describe('RetainerService Unit Tests', () => {
             updatedAt: new Date()
         });
         it('should create a retainer successfully with valid data', async () => {
+            mockPermissionService.hasLawyerPermissionWithContext.mockResolvedValue(true);
             mockRetainerRepository.hasPendingRetainer.mockResolvedValue(false);
             mockRetainerRepository.hasActiveRetainer.mockResolvedValue(false);
             mockRetainerRepository.add.mockResolvedValue(mockCreatedRetainer);
@@ -91,6 +92,7 @@ describe('RetainerService Unit Tests', () => {
             expect(result).toEqual(mockCreatedRetainer);
         });
         it('should throw error when client already has pending retainer', async () => {
+            mockPermissionService.hasLawyerPermissionWithContext.mockResolvedValue(true);
             mockRetainerRepository.hasPendingRetainer.mockResolvedValue(true);
             await expect(retainerService.createRetainer(mockPermissionContext, mockRetainerRequest))
                 .rejects.toThrow('Client already has a pending retainer agreement');
@@ -98,6 +100,7 @@ describe('RetainerService Unit Tests', () => {
             expect(mockRetainerRepository.add).not.toHaveBeenCalled();
         });
         it('should throw error when client already has active retainer', async () => {
+            mockPermissionService.hasLawyerPermissionWithContext.mockResolvedValue(true);
             mockRetainerRepository.hasPendingRetainer.mockResolvedValue(false);
             mockRetainerRepository.hasActiveRetainer.mockResolvedValue(true);
             await expect(retainerService.createRetainer(mockPermissionContext, mockRetainerRequest))
@@ -105,6 +108,7 @@ describe('RetainerService Unit Tests', () => {
             expect(mockRetainerRepository.add).not.toHaveBeenCalled();
         });
         it('should handle repository add failure', async () => {
+            mockPermissionService.hasLawyerPermissionWithContext.mockResolvedValue(true);
             mockRetainerRepository.hasPendingRetainer.mockResolvedValue(false);
             mockRetainerRepository.hasActiveRetainer.mockResolvedValue(false);
             mockRetainerRepository.add.mockRejectedValue(new Error('Database error'));
@@ -112,12 +116,14 @@ describe('RetainerService Unit Tests', () => {
                 .rejects.toThrow('Database error');
         });
         it('should handle pending check failure', async () => {
+            mockPermissionService.hasLawyerPermissionWithContext.mockResolvedValue(true);
             mockRetainerRepository.hasPendingRetainer.mockRejectedValue(new Error('Database connection failed'));
             await expect(retainerService.createRetainer(mockPermissionContext, mockRetainerRequest))
                 .rejects.toThrow('Database connection failed');
             expect(mockRetainerRepository.add).not.toHaveBeenCalled();
         });
         it('should handle active check failure', async () => {
+            mockPermissionService.hasLawyerPermissionWithContext.mockResolvedValue(true);
             mockRetainerRepository.hasPendingRetainer.mockResolvedValue(false);
             mockRetainerRepository.hasActiveRetainer.mockRejectedValue(new Error('Database connection failed'));
             await expect(retainerService.createRetainer(mockPermissionContext, mockRetainerRequest))
@@ -247,6 +253,7 @@ describe('RetainerService Unit Tests', () => {
             status: retainer_1.RetainerStatus.CANCELLED
         };
         it('should cancel pending retainer successfully', async () => {
+            mockPermissionService.hasLawyerPermissionWithContext.mockResolvedValue(true);
             mockRetainerRepository.findById.mockResolvedValue(mockPendingRetainer);
             mockRetainerRepository.update.mockResolvedValue(mockCancelledRetainer);
             const result = await retainerService.cancelRetainer(mockPermissionContext, testRetainerId);
@@ -257,12 +264,14 @@ describe('RetainerService Unit Tests', () => {
             expect(result).toEqual(mockCancelledRetainer);
         });
         it('should throw error when retainer not found', async () => {
+            mockPermissionService.hasLawyerPermissionWithContext.mockResolvedValue(true);
             mockRetainerRepository.findById.mockResolvedValue(null);
             await expect(retainerService.cancelRetainer(mockPermissionContext, testRetainerId))
                 .rejects.toThrow('Retainer agreement not found');
             expect(mockRetainerRepository.update).not.toHaveBeenCalled();
         });
         it('should throw error when retainer is not pending', async () => {
+            mockPermissionService.hasLawyerPermissionWithContext.mockResolvedValue(true);
             const signedRetainer = { ...mockPendingRetainer, status: retainer_1.RetainerStatus.SIGNED };
             mockRetainerRepository.findById.mockResolvedValue(signedRetainer);
             await expect(retainerService.cancelRetainer(mockPermissionContext, testRetainerId))
@@ -270,6 +279,7 @@ describe('RetainerService Unit Tests', () => {
             expect(mockRetainerRepository.update).not.toHaveBeenCalled();
         });
         it('should throw error when retainer is already cancelled', async () => {
+            mockPermissionService.hasLawyerPermissionWithContext.mockResolvedValue(true);
             const cancelledRetainer = { ...mockPendingRetainer, status: retainer_1.RetainerStatus.CANCELLED };
             mockRetainerRepository.findById.mockResolvedValue(cancelledRetainer);
             await expect(retainerService.cancelRetainer(mockPermissionContext, testRetainerId))
@@ -277,18 +287,21 @@ describe('RetainerService Unit Tests', () => {
             expect(mockRetainerRepository.update).not.toHaveBeenCalled();
         });
         it('should throw error when update fails', async () => {
+            mockPermissionService.hasLawyerPermissionWithContext.mockResolvedValue(true);
             mockRetainerRepository.findById.mockResolvedValue(mockPendingRetainer);
             mockRetainerRepository.update.mockResolvedValue(null);
             await expect(retainerService.cancelRetainer(mockPermissionContext, testRetainerId))
                 .rejects.toThrow('Failed to cancel retainer agreement');
         });
         it('should handle repository findById failure', async () => {
+            mockPermissionService.hasLawyerPermissionWithContext.mockResolvedValue(true);
             mockRetainerRepository.findById.mockRejectedValue(new Error('Database error'));
             await expect(retainerService.cancelRetainer(mockPermissionContext, testRetainerId))
                 .rejects.toThrow('Database error');
             expect(mockRetainerRepository.update).not.toHaveBeenCalled();
         });
         it('should handle repository update failure', async () => {
+            mockPermissionService.hasLawyerPermissionWithContext.mockResolvedValue(true);
             mockRetainerRepository.findById.mockResolvedValue(mockPendingRetainer);
             mockRetainerRepository.update.mockRejectedValue(new Error('Update failed'));
             await expect(retainerService.cancelRetainer(mockPermissionContext, testRetainerId))
@@ -305,17 +318,20 @@ describe('RetainerService Unit Tests', () => {
             })
         ];
         it('should get active retainers successfully', async () => {
+            mockPermissionService.hasLawyerPermissionWithContext.mockResolvedValue(true);
             mockRetainerRepository.findActiveRetainers.mockResolvedValue(mockActiveRetainers);
             const result = await retainerService.getActiveRetainers(mockPermissionContext);
             expect(mockRetainerRepository.findActiveRetainers).toHaveBeenCalledWith(testGuildId);
             expect(result).toEqual(mockActiveRetainers);
         });
         it('should return empty array when no active retainers', async () => {
+            mockPermissionService.hasLawyerPermissionWithContext.mockResolvedValue(true);
             mockRetainerRepository.findActiveRetainers.mockResolvedValue([]);
             const result = await retainerService.getActiveRetainers(mockPermissionContext);
             expect(result).toEqual([]);
         });
         it('should handle repository error', async () => {
+            mockPermissionService.hasLawyerPermissionWithContext.mockResolvedValue(true);
             mockRetainerRepository.findActiveRetainers.mockRejectedValue(new Error('Database error'));
             await expect(retainerService.getActiveRetainers(mockPermissionContext))
                 .rejects.toThrow('Database error');
@@ -331,17 +347,20 @@ describe('RetainerService Unit Tests', () => {
             })
         ];
         it('should get pending retainers successfully', async () => {
+            mockPermissionService.hasLawyerPermissionWithContext.mockResolvedValue(true);
             mockRetainerRepository.findPendingRetainers.mockResolvedValue(mockPendingRetainers);
             const result = await retainerService.getPendingRetainers(mockPermissionContext);
             expect(mockRetainerRepository.findPendingRetainers).toHaveBeenCalledWith(testGuildId);
             expect(result).toEqual(mockPendingRetainers);
         });
         it('should return empty array when no pending retainers', async () => {
+            mockPermissionService.hasLawyerPermissionWithContext.mockResolvedValue(true);
             mockRetainerRepository.findPendingRetainers.mockResolvedValue([]);
             const result = await retainerService.getPendingRetainers(mockPermissionContext);
             expect(result).toEqual([]);
         });
         it('should handle repository error', async () => {
+            mockPermissionService.hasLawyerPermissionWithContext.mockResolvedValue(true);
             mockRetainerRepository.findPendingRetainers.mockRejectedValue(new Error('Database error'));
             await expect(retainerService.getPendingRetainers(mockPermissionContext))
                 .rejects.toThrow('Database error');
@@ -357,12 +376,14 @@ describe('RetainerService Unit Tests', () => {
             })
         ];
         it('should get client retainers (active only by default)', async () => {
+            mockPermissionService.hasLawyerPermissionWithContext.mockResolvedValue(true);
             mockRetainerRepository.findClientRetainers.mockResolvedValue(mockClientRetainers);
             const result = await retainerService.getClientRetainers(mockPermissionContext, testClientId);
             expect(mockRetainerRepository.findClientRetainers).toHaveBeenCalledWith(testClientId, false);
             expect(result).toEqual(mockClientRetainers);
         });
         it('should get all client retainers when includeAll is true', async () => {
+            mockPermissionService.hasLawyerPermissionWithContext.mockResolvedValue(true);
             const allRetainers = [
                 ...mockClientRetainers,
                 test_utils_1.TestUtils.generateMockRetainer({
@@ -378,11 +399,13 @@ describe('RetainerService Unit Tests', () => {
             expect(result).toEqual(allRetainers);
         });
         it('should return empty array when client has no retainers', async () => {
+            mockPermissionService.hasLawyerPermissionWithContext.mockResolvedValue(true);
             mockRetainerRepository.findClientRetainers.mockResolvedValue([]);
             const result = await retainerService.getClientRetainers(mockPermissionContext, testClientId);
             expect(result).toEqual([]);
         });
         it('should handle repository error', async () => {
+            mockPermissionService.hasLawyerPermissionWithContext.mockResolvedValue(true);
             mockRetainerRepository.findClientRetainers.mockRejectedValue(new Error('Database error'));
             await expect(retainerService.getClientRetainers(mockPermissionContext, testClientId))
                 .rejects.toThrow('Database error');
@@ -396,12 +419,14 @@ describe('RetainerService Unit Tests', () => {
             cancelled: 2
         };
         it('should get retainer statistics successfully', async () => {
+            mockPermissionService.hasLawyerPermissionWithContext.mockResolvedValue(true);
             mockRetainerRepository.getRetainerStats.mockResolvedValue(mockStats);
             const result = await retainerService.getRetainerStats(mockPermissionContext);
             expect(mockRetainerRepository.getRetainerStats).toHaveBeenCalledWith(testGuildId);
             expect(result).toEqual(mockStats);
         });
         it('should handle repository error', async () => {
+            mockPermissionService.hasLawyerPermissionWithContext.mockResolvedValue(true);
             mockRetainerRepository.getRetainerStats.mockRejectedValue(new Error('Database error'));
             await expect(retainerService.getRetainerStats(mockPermissionContext))
                 .rejects.toThrow('Database error');
@@ -565,6 +590,7 @@ describe('RetainerService Unit Tests', () => {
             const request1 = { guildId: testGuildId, clientId: testClientId, lawyerId: testLawyerId };
             const request2 = { guildId: testGuildId, clientId: testClientId, lawyerId: 'other-lawyer' };
             // First request passes validation
+            mockPermissionService.hasLawyerPermissionWithContext.mockResolvedValue(true);
             mockRetainerRepository.hasPendingRetainer.mockResolvedValueOnce(false);
             mockRetainerRepository.hasActiveRetainer.mockResolvedValueOnce(false);
             mockRetainerRepository.add.mockResolvedValueOnce(test_utils_1.TestUtils.generateMockRetainer(request1));
@@ -606,10 +632,18 @@ describe('RetainerService Unit Tests', () => {
             const createRequest = { guildId: testGuildId, clientId: testClientId, lawyerId: testLawyerId };
             const signRequest = { retainerId: testRetainerId, clientRobloxUsername: 'testuser' };
             // All methods should propagate database errors
+            // For createRetainer - mock permission check to pass but repository fails
+            mockPermissionService.hasLawyerPermissionWithContext.mockResolvedValueOnce(true);
             await expect(retainerService.createRetainer(mockPermissionContext, createRequest)).rejects.toThrow(dbError);
             await expect(retainerService.signRetainer(signRequest)).rejects.toThrow(dbError);
+            // For cancelRetainer - mock permission check to pass but repository fails
+            mockPermissionService.hasLawyerPermissionWithContext.mockResolvedValueOnce(true);
             await expect(retainerService.cancelRetainer(mockPermissionContext, testRetainerId)).rejects.toThrow(dbError);
+            // For getActiveRetainers - mock permission check to pass but repository fails
+            mockPermissionService.hasLawyerPermissionWithContext.mockResolvedValueOnce(true);
             await expect(retainerService.getActiveRetainers(mockPermissionContext)).rejects.toThrow(dbError);
+            // For getRetainerStats - mock permission check to pass but repository fails
+            mockPermissionService.hasLawyerPermissionWithContext.mockResolvedValueOnce(true);
             await expect(retainerService.getRetainerStats(mockPermissionContext)).rejects.toThrow(dbError);
             await expect(retainerService.hasClientRole(testGuildId)).rejects.toThrow(dbError);
         });
@@ -627,6 +661,7 @@ describe('RetainerService Unit Tests', () => {
         });
         it('should handle empty and null values gracefully', async () => {
             // Test empty guild ID
+            mockPermissionService.hasLawyerPermissionWithContext.mockResolvedValue(true);
             mockRetainerRepository.findActiveRetainers.mockResolvedValue([]);
             await expect(retainerService.getActiveRetainers({ ...mockPermissionContext, guildId: '' }))
                 .resolves.not.toThrow();
@@ -636,6 +671,7 @@ describe('RetainerService Unit Tests', () => {
                 clientId: null,
                 lawyerId: testLawyerId
             };
+            mockPermissionService.hasLawyerPermissionWithContext.mockResolvedValue(true);
             mockRetainerRepository.hasPendingRetainer.mockResolvedValue(false);
             mockRetainerRepository.hasActiveRetainer.mockResolvedValue(false);
             mockRetainerRepository.add.mockResolvedValue(test_utils_1.TestUtils.generateMockRetainer({

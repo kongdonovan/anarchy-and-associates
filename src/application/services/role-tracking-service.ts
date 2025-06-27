@@ -9,7 +9,7 @@ import { AuditAction } from '../../domain/entities/audit-log';
 import { PermissionService } from './permission-service';
 import { BusinessRuleValidationService } from './business-rule-validation-service';
 import { ChannelPermissionManager } from './channel-permission-manager';
-import { RoleChangeCascadeService, RoleChangeType } from './role-change-cascade-service';
+import { RoleChangeCascadeService } from './role-change-cascade-service';
 import { RoleSynchronizationEnhancementService } from './role-synchronization-enhancement-service';
 import { logger } from '../../infrastructure/logger';
 
@@ -69,8 +69,6 @@ export class RoleTrackingService {
       caseRepository,
       this.staffRepository,
       this.auditLogRepository,
-      guildConfigRepository,
-      permissionService,
       businessRuleValidationService
     );
     
@@ -199,7 +197,7 @@ export class RoleTrackingService {
       if (existingStaff) {
         // Reactivate existing staff member
         await this.staffRepository.update(existingStaff._id!.toString(), {
-          status: RetainerStatus.ACTIVE,
+          status: 'active',
           role: staffRole,
           hiredAt: new Date() // Update hire date for rehiring
         });
@@ -222,7 +220,7 @@ export class RoleTrackingService {
             reason: 'Initial hiring via Discord role assignment',
             actionType: 'hire'
           }],
-          status: RetainerStatus.ACTIVE,
+          status: 'active',
           discordRoleId: this.findDiscordRoleId(member.guild, role)
         };
 

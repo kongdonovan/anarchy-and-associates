@@ -5,7 +5,7 @@ import { CaseRepository } from '../../infrastructure/repositories/case-repositor
 import { PermissionService, PermissionContext } from '../../application/services/permission-service';
 import { StaffRole } from '../../domain/entities/staff-role';
 import { CaseStatus } from '../../domain/entities/case';
-import { RetainerStatus } from '../../domain/entities/retainer';
+
 
 // Mock all dependencies
 jest.mock('../../infrastructure/repositories/guild-config-repository');
@@ -176,7 +176,7 @@ describe('BusinessRuleValidationService', () => {
       mockStaffRepo.findByUserId.mockResolvedValue({
         userId,
         role: StaffRole.JUNIOR_ASSOCIATE,
-        status: RetainerStatus.SIGNED,
+        status: 'active',
       } as any);
     });
 
@@ -217,7 +217,7 @@ describe('BusinessRuleValidationService', () => {
       mockStaffRepo.findByUserId.mockResolvedValue({
         userId,
         role: StaffRole.PARALEGAL, // Low level role
-        status: RetainerStatus.SIGNED,
+        status: 'active',
       } as any);
 
       const result: StaffValidationResult = await service.validateStaffMember(testContext, userId, ['admin']);

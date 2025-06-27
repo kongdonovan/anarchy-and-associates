@@ -54,7 +54,7 @@ describe('GuildOwnerUtils', () => {
     };
     describe('createRoleLimitBypassModal', () => {
         it('should create modal with correct structure', () => {
-            const modal = guild_owner_utils_1.GuildOwnerUtils.createRoleLimitBypassModal(userId, mockValidationResult);
+            guild_owner_utils_1.GuildOwnerUtils.createRoleLimitBypassModal(userId, mockValidationResult);
             expect(discord_js_1.ModalBuilder).toHaveBeenCalled();
             const mockModal = discord_js_1.ModalBuilder.mock.instances[0];
             expect(mockModal.setCustomId).toHaveBeenCalledWith(expect.stringMatching(/^role_limit_bypass_user_123_\d+$/));
@@ -62,10 +62,10 @@ describe('GuildOwnerUtils', () => {
             expect(mockModal.addComponents).toHaveBeenCalledTimes(2); // confirmation and reason inputs
         });
         it('should generate unique custom IDs', () => {
-            const modal1 = guild_owner_utils_1.GuildOwnerUtils.createRoleLimitBypassModal(userId, mockValidationResult);
+            guild_owner_utils_1.GuildOwnerUtils.createRoleLimitBypassModal(userId, mockValidationResult);
             // Wait a millisecond to ensure different timestamp
             setTimeout(() => {
-                const modal2 = guild_owner_utils_1.GuildOwnerUtils.createRoleLimitBypassModal(userId, mockValidationResult);
+                guild_owner_utils_1.GuildOwnerUtils.createRoleLimitBypassModal(userId, mockValidationResult);
                 const mockModal1 = discord_js_1.ModalBuilder.mock.instances[0];
                 const mockModal2 = discord_js_1.ModalBuilder.mock.instances[1];
                 // Should have different timestamps in custom IDs
@@ -75,7 +75,7 @@ describe('GuildOwnerUtils', () => {
     });
     describe('createBypassConfirmationEmbed', () => {
         it('should create informational embed with validation details', () => {
-            const embed = guild_owner_utils_1.GuildOwnerUtils.createBypassConfirmationEmbed(mockValidationResult);
+            guild_owner_utils_1.GuildOwnerUtils.createBypassConfirmationEmbed(mockValidationResult);
             expect(discord_js_1.EmbedBuilder).toHaveBeenCalled();
             const mockEmbed = discord_js_1.EmbedBuilder.mock.instances[0];
             expect(mockEmbed.setColor).toHaveBeenCalledWith('#FFA500'); // Orange warning
@@ -165,8 +165,11 @@ describe('GuildOwnerUtils', () => {
             expect(result).toBe(false);
         });
         it('should return false when guild is null', () => {
-            mockInteraction.guild = null;
-            const result = guild_owner_utils_1.GuildOwnerUtils.isEligibleForBypass(mockInteraction);
+            const mockInteractionNoGuild = {
+                user: { id: userId },
+                guild: null,
+            };
+            const result = guild_owner_utils_1.GuildOwnerUtils.isEligibleForBypass(mockInteractionNoGuild);
             expect(result).toBe(false);
         });
     });
@@ -184,7 +187,7 @@ describe('GuildOwnerUtils', () => {
             const bypassId = guild_owner_utils_1.GuildOwnerUtils.generateBypassId(userId, 'role_limit');
             const afterTime = Date.now();
             const parts = bypassId.split('_');
-            const timestamp = parseInt(parts[3]);
+            const timestamp = parseInt(parts[3] || '0');
             expect(timestamp).toBeGreaterThanOrEqual(beforeTime);
             expect(timestamp).toBeLessThanOrEqual(afterTime);
         });
@@ -251,7 +254,7 @@ describe('GuildOwnerUtils', () => {
     });
     describe('embed creation helpers', () => {
         it('should create success embed with correct format', () => {
-            const embed = guild_owner_utils_1.GuildOwnerUtils.createBypassSuccessEmbed('Managing Partner', 2, 'Emergency hire needed');
+            guild_owner_utils_1.GuildOwnerUtils.createBypassSuccessEmbed('Managing Partner', 2, 'Emergency hire needed');
             expect(discord_js_1.EmbedBuilder).toHaveBeenCalled();
             const mockEmbed = discord_js_1.EmbedBuilder.mock.instances[0];
             expect(mockEmbed.setColor).toHaveBeenCalledWith('#00FF00'); // Green
@@ -262,7 +265,7 @@ describe('GuildOwnerUtils', () => {
         });
         it('should create error embed with correct format', () => {
             const errorMessage = 'Bypass failed due to invalid permissions';
-            const embed = guild_owner_utils_1.GuildOwnerUtils.createBypassErrorEmbed(errorMessage);
+            guild_owner_utils_1.GuildOwnerUtils.createBypassErrorEmbed(errorMessage);
             expect(discord_js_1.EmbedBuilder).toHaveBeenCalled();
             const mockEmbed = discord_js_1.EmbedBuilder.mock.instances[0];
             expect(mockEmbed.setColor).toHaveBeenCalledWith('#FF0000'); // Red
@@ -270,7 +273,7 @@ describe('GuildOwnerUtils', () => {
             expect(mockEmbed.setDescription).toHaveBeenCalledWith(errorMessage);
         });
         it('should handle success embed without reason', () => {
-            const embed = guild_owner_utils_1.GuildOwnerUtils.createBypassSuccessEmbed('Paralegal', 11);
+            guild_owner_utils_1.GuildOwnerUtils.createBypassSuccessEmbed('Paralegal', 11);
             const mockEmbed = discord_js_1.EmbedBuilder.mock.instances[0];
             expect(mockEmbed.setDescription).toHaveBeenCalledWith(expect.stringContaining('No reason provided'));
         });
@@ -303,7 +306,7 @@ describe('GuildOwnerUtils', () => {
                 roleName: 'Very Long Role Name That Might Cause Issues',
                 metadata: {},
             };
-            const modal = guild_owner_utils_1.GuildOwnerUtils.createRoleLimitBypassModal(userId, extremeResult);
+            guild_owner_utils_1.GuildOwnerUtils.createRoleLimitBypassModal(userId, extremeResult);
             expect(discord_js_1.ModalBuilder).toHaveBeenCalled();
         });
     });

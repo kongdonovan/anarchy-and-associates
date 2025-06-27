@@ -303,7 +303,8 @@ export class AnarchyServerSetupService {
               'senior-staff': [],
               case: [],
               config: [],
-              retainer: [],
+              lawyer: [],
+              'lead-attorney': [],
               repair: []
             },
             adminRoles: [],
@@ -507,7 +508,8 @@ export class AnarchyServerSetupService {
           'senior-staff': [],
           case: [],
           config: [],
-          retainer: [],
+          lawyer: [],
+          'lead-attorney': [],
           repair: []
         },
         adminRoles: [],

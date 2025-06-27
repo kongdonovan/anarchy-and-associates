@@ -1,7 +1,6 @@
 import { GuildConfig, Staff, Job, Application, StaffRole } from '../../domain/entities';
-import { RetainerStatus } from '../../domain/entities/retainer';
 import { ObjectId } from 'mongodb';
-import { CaseStatus, CasePriority } from '../../domain/entities/case';
+import { CaseStatus } from '../../domain/entities/case';
 
 describe('Domain Entities', () => {
   describe('GuildConfig', () => {
@@ -17,6 +16,7 @@ describe('Domain Entities', () => {
           case: ['role3'],
           config: ['role4'],
           lawyer: ['role5'],
+          'lead-attorney': ['role5a'],
           repair: ['role6'],
         },
         adminRoles: ['admin_role'],
@@ -41,7 +41,7 @@ describe('Domain Entities', () => {
         hiredAt: new Date(),
         hiredBy: 'hr_user',
         promotionHistory: [],
-        status: RetainerStatus.ACTIVE,
+        status: 'active' as const,
         createdAt: new Date(),
         updatedAt: new Date(),
       };

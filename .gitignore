@@ -23,3 +23,8 @@ node_modules/
 
 # OS specific
 .DS_Store
+
+# TypeDoc generated documentation
+docs/generated/
+docs/api/
+.typedoc-cache/

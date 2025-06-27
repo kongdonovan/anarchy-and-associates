@@ -1,7 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const case_service_1 = require("../../application/services/case-service");
-const case_channel_archive_service_1 = require("../../application/services/case-channel-archive-service");
 const case_repository_1 = require("../../infrastructure/repositories/case-repository");
 const case_counter_repository_1 = require("../../infrastructure/repositories/case-counter-repository");
 const guild_config_repository_1 = require("../../infrastructure/repositories/guild-config-repository");
@@ -12,7 +11,6 @@ const business_rule_validation_service_1 = require("../../application/services/b
 const case_1 = require("../../domain/entities/case");
 const discord_js_1 = require("discord.js");
 const mongodb_1 = require("mongodb");
-const case_2 = require("../../domain/entities/case");
 // Mock all repositories and external services
 jest.mock('../../infrastructure/repositories/case-repository');
 jest.mock('../../infrastructure/repositories/case-counter-repository');
@@ -23,7 +21,6 @@ jest.mock('../../application/services/permission-service');
 jest.mock('../../application/services/business-rule-validation-service');
 describe('Case Channel Archive Integration', () => {
     let caseService;
-    // let archiveService: CaseChannelArchiveService;
     let mockCaseRepo;
     let mockCaseCounterRepo;
     let mockGuildConfigRepo;
@@ -99,7 +96,6 @@ describe('Case Channel Archive Integration', () => {
         };
         // Initialize services
         caseService = new case_service_1.CaseService(mockCaseRepo, mockCaseCounterRepo, mockGuildConfigRepo, mockPermissionService, mockBusinessRuleValidationService, mockClient);
-        archiveService = new case_channel_archive_service_1.CaseChannelArchiveService(mockCaseRepo, mockGuildConfigRepo, mockAuditLogRepo, mockPermissionService, mockBusinessRuleValidationService);
         // Setup default mocks
         mockPermissionService.hasActionPermission.mockResolvedValue(true);
         mockPermissionService.hasLeadAttorneyPermissionWithContext.mockResolvedValue(true);
@@ -114,12 +110,12 @@ describe('Case Channel Archive Integration', () => {
                 config: [],
                 lawyer: [],
                 'lead-attorney': [],
-                repair: [],
-                createdAt: new Date(),
-                updatedAt: new Date()
+                repair: []
             },
             adminRoles: [],
-            adminUsers: []
+            adminUsers: [],
+            createdAt: new Date(),
+            updatedAt: new Date()
         });
         mockBusinessRuleValidationService.validatePermission.mockResolvedValue({
             valid: true,
@@ -144,7 +140,7 @@ describe('Case Channel Archive Integration', () => {
                 title: 'Test Case',
                 description: 'Test case description',
                 status: case_1.CaseStatus.IN_PROGRESS,
-                priority: case_2.CasePriority.MEDIUM,
+                priority: case_1.CasePriority.MEDIUM,
                 assignedLawyerIds: [testUserId],
                 leadAttorneyId: testUserId,
                 documents: [],
@@ -161,7 +157,7 @@ describe('Case Channel Archive Integration', () => {
                 closedBy: testUserId
             };
             mockCaseRepo.conditionalUpdate.mockResolvedValue(closedCase);
-            const result = await this.caseService.closeCase(context, mockContext, {
+            const result = await caseService.closeCase(mockContext, {
                 caseId: testCaseId,
                 result: case_1.CaseResult.WIN,
                 resultNotes: 'Case won successfully',
@@ -184,7 +180,7 @@ describe('Case Channel Archive Integration', () => {
                 title: 'Test Case',
                 description: 'Test case description',
                 status: case_1.CaseStatus.IN_PROGRESS,
-                priority: case_2.CasePriority.MEDIUM,
+                priority: case_1.CasePriority.MEDIUM,
                 assignedLawyerIds: [testUserId],
                 leadAttorneyId: testUserId,
                 documents: [],
@@ -201,7 +197,7 @@ describe('Case Channel Archive Integration', () => {
                 closedBy: testUserId
             };
             mockCaseRepo.conditionalUpdate.mockResolvedValue(closedCase);
-            const result = await this.caseService.closeCase(context, mockContext, {
+            const result = await caseService.closeCase(mockContext, {
                 caseId: testCaseId,
                 result: case_1.CaseResult.WIN,
                 resultNotes: 'Case won successfully',
@@ -222,7 +218,7 @@ describe('Case Channel Archive Integration', () => {
                 title: 'Test Case',
                 description: 'Test case description',
                 status: case_1.CaseStatus.CLOSED,
-                priority: case_2.CasePriority.MEDIUM,
+                priority: case_1.CasePriority.MEDIUM,
                 assignedLawyerIds: [],
                 documents: [],
                 notes: [],
@@ -254,7 +250,7 @@ describe('Case Channel Archive Integration', () => {
                     title: 'Case 1',
                     description: 'Description 1',
                     status: case_1.CaseStatus.CLOSED,
-                    priority: case_2.CasePriority.MEDIUM,
+                    priority: case_1.CasePriority.MEDIUM,
                     assignedLawyerIds: [],
                     documents: [],
                     notes: [],
@@ -272,7 +268,7 @@ describe('Case Channel Archive Integration', () => {
                     title: 'Case 2',
                     description: 'Description 2',
                     status: case_1.CaseStatus.CLOSED,
-                    priority: case_2.CasePriority.MEDIUM,
+                    priority: case_1.CasePriority.MEDIUM,
                     assignedLawyerIds: [],
                     documents: [],
                     notes: [],
@@ -355,7 +351,7 @@ describe('Case Channel Archive Integration', () => {
                 title: 'Test Case',
                 description: 'Test case description',
                 status: case_1.CaseStatus.CLOSED,
-                priority: case_2.CasePriority.MEDIUM,
+                priority: case_1.CasePriority.MEDIUM,
                 assignedLawyerIds: [],
                 documents: [],
                 notes: [],
@@ -384,12 +380,12 @@ describe('Case Channel Archive Integration', () => {
                     config: [],
                     lawyer: [],
                     'lead-attorney': [],
-                    repair: [],
-                    createdAt: new Date(),
-                    updatedAt: new Date()
+                    repair: []
                 },
                 adminRoles: [],
-                adminUsers: []
+                adminUsers: [],
+                createdAt: new Date(),
+                updatedAt: new Date()
             });
             const customArchiveCategory = {
                 id: 'custom_archive_category',
@@ -406,7 +402,7 @@ describe('Case Channel Archive Integration', () => {
                 title: 'Test Case',
                 description: 'Test case description',
                 status: case_1.CaseStatus.CLOSED,
-                priority: case_2.CasePriority.MEDIUM,
+                priority: case_1.CasePriority.MEDIUM,
                 assignedLawyerIds: [],
                 documents: [],
                 notes: [],
@@ -437,12 +433,12 @@ describe('Case Channel Archive Integration', () => {
                     config: [],
                     lawyer: [],
                     'lead-attorney': [],
-                    repair: [],
-                    createdAt: new Date(),
-                    updatedAt: new Date()
+                    repair: []
                 },
                 adminRoles: [],
-                adminUsers: []
+                adminUsers: [],
+                createdAt: new Date(),
+                updatedAt: new Date()
             });
             // Remove existing archive category
             mockGuild.channels.cache.delete('archive_category_123');
@@ -455,7 +451,7 @@ describe('Case Channel Archive Integration', () => {
                 title: 'Test Case',
                 description: 'Test case description',
                 status: case_1.CaseStatus.CLOSED,
-                priority: case_2.CasePriority.MEDIUM,
+                priority: case_1.CasePriority.MEDIUM,
                 assignedLawyerIds: [],
                 documents: [],
                 notes: [],
