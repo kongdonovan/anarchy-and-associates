@@ -1,11 +1,19 @@
 import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
 import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-repository';
-import { Staff } from '../../domain/entities/staff';
-import { StaffRole, RoleUtils } from '../../domain/entities/staff-role';
-import { AuditAction } from '../../domain/entities/audit-log';
+import { RoleUtils, StaffRole as StaffRoleEnum } from '../../domain/entities/staff-role'; // Keep RoleUtils as it contains business logic
 import { logger } from '../../infrastructure/logger';
 import { PermissionService, PermissionContext } from './permission-service';
-import { BusinessRuleValidationService } from './business-rule-validation-service';
+import { UnifiedValidationService } from '../validation/unified-validation-service';
+import { ValidationMigrationAdapter } from '../validation/migration-adapter';
+import { 
+  Staff,
+  StaffRole,
+  StaffHireRequestSchema,
+  StaffPromoteRequestSchema,
+  StaffFireRequestSchema,
+  ValidationHelpers
+} from '../../validation';
+import { AuditAction } from '../../domain/entities/audit-log';
 
 export interface RobloxValidationResult {
   isValid: boolean;
@@ -96,18 +104,18 @@ export class StaffService {
   private staffRepository: StaffRepository;
   private auditLogRepository: AuditLogRepository;
   private permissionService: PermissionService;
-  private businessRuleValidationService: BusinessRuleValidationService;
+  private validationAdapter: ValidationMigrationAdapter;
 
   constructor(
     staffRepository: StaffRepository,
     auditLogRepository: AuditLogRepository,
     permissionService: PermissionService,
-    businessRuleValidationService: BusinessRuleValidationService
+    validationService: UnifiedValidationService
   ) {
     this.staffRepository = staffRepository;
     this.auditLogRepository = auditLogRepository;
     this.permissionService = permissionService;
-    this.businessRuleValidationService = businessRuleValidationService;
+    this.validationAdapter = new ValidationMigrationAdapter(validationService);
   }
 
   /**
@@ -218,8 +226,15 @@ export class StaffService {
    * @see {@link BusinessRuleValidationService.validateRoleLimit} - Role limit validation
    * @see {@link AuditLogRepository.logAction} - Audit logging
    */
-  public async hireStaff(context: PermissionContext, request: StaffHireRequest): Promise<{ success: boolean; staff?: Staff; error?: string }> {
+  public async hireStaff(context: PermissionContext, request: unknown): Promise<{ success: boolean; staff?: Staff; error?: string }> {
     try {
+      // Validate input using Zod schema
+      const validatedRequest = ValidationHelpers.validateOrThrow(
+        StaffHireRequestSchema,
+        request,
+        'Staff hire request'
+      );
+
       // Check senior-staff permission (updated from HR permission)
       const hasPermission = await this.permissionService.hasSeniorStaffPermissionWithContext(context);
       if (!hasPermission) {
@@ -229,38 +244,10 @@ export class StaffService {
         };
       }
 
-      const { guildId, userId, robloxUsername, role, hiredBy, reason } = request;
+      const { guildId, userId, robloxUsername, role, hiredBy, reason } = validatedRequest;
 
-      // Validate Discord IDs (must be valid snowflakes or test IDs)
-      // Real Discord IDs: 18-19 digit numbers, Test IDs: alphanumeric with hyphens/underscores
-      const validIdPattern = /^(\d{18,19}|[a-zA-Z0-9_-]+)$/;
-      if (!validIdPattern.test(guildId) || guildId.includes('\'') || guildId.includes(';') || guildId.includes('DROP')) {
-        return {
-          success: false,
-          error: 'Invalid guild ID format',
-        };
-      }
-      if (!validIdPattern.test(userId) || userId.includes('\'') || userId.includes(';') || userId.includes('DROP')) {
-        return {
-          success: false,
-          error: 'Invalid user ID format',
-        };
-      }
-      if (!validIdPattern.test(hiredBy) || hiredBy.includes('\'') || hiredBy.includes(';') || hiredBy.includes('DROP')) {
-        return {
-          success: false,
-          error: 'Invalid hiredBy user ID format',
-        };
-      }
-
-      // Validate Roblox username
-      const robloxValidation = await this.validateRobloxUsername(robloxUsername);
-      if (!robloxValidation.isValid) {
-        return {
-          success: false,
-          error: robloxValidation.error,
-        };
-      }
+      // Roblox username is already validated by Zod, but we can do additional checks if needed
+      // The Zod schema already validates the format, so we don't need validateRobloxUsername
 
       // Check if user is already staff
       const existingStaff = await this.staffRepository.findByUserId(guildId, userId);
@@ -280,16 +267,17 @@ export class StaffService {
         };
       }
 
-      // Validate role limits using business rule validation service
-      const roleLimitValidation = await this.businessRuleValidationService.validateRoleLimit(context, role);
+      // Validate role limits using unified validation service
+      const roleLimitValidation = await this.validationAdapter.validateRoleLimit(context, role);
       if (!roleLimitValidation.valid) {
-        // Log business rule violation if guild owner is bypassing
-        if (context.isGuildOwner && roleLimitValidation.bypassAvailable) {
+        // Log business rule violation if guild owner or admin is bypassing
+        const isAdmin = await this.permissionService.isAdmin(context);
+        if ((context.isGuildOwner || isAdmin) && roleLimitValidation.bypassAvailable) {
           await this.auditLogRepository.logRoleLimitBypass(
             guildId,
             context.userId,
             userId,
-            role,
+            role as StaffRole,
             roleLimitValidation.currentCount,
             roleLimitValidation.maxCount,
             reason
@@ -314,14 +302,14 @@ export class StaffService {
       const staffData: Omit<Staff, '_id' | 'createdAt' | 'updatedAt'> = {
         userId,
         guildId,
-        robloxUsername: robloxValidation.username,
-        role,
+        robloxUsername: robloxUsername,
+        role: role as StaffRole,
         hiredAt: new Date(),
         hiredBy,
         promotionHistory: [
           {
-            fromRole: role, // First hire, from and to are the same
-            toRole: role,
+            fromRole: role as StaffRole, // First hire, from and to are the same
+            toRole: role as StaffRole,
             promotedBy: hiredBy,
             promotedAt: new Date(),
             reason,
@@ -333,7 +321,7 @@ export class StaffService {
 
       const staff = await this.staffRepository.add(staffData);
 
-      // Log the action
+      // Log successful hire action for audit trail
       await this.auditLogRepository.logAction({
         guildId,
         action: AuditAction.STAFF_HIRED,
@@ -341,25 +329,32 @@ export class StaffService {
         targetId: userId,
         details: {
           after: {
-            role,
-            status: 'active',
+            role: role as StaffRole,
+            status: 'active'
           },
           reason,
           metadata: {
-            robloxUsername: robloxValidation.username,
-          },
+            robloxUsername: robloxUsername
+          }
         },
-        timestamp: new Date(),
+        timestamp: new Date()
       });
 
       logger.info(`Staff hired: ${userId} as ${role} in guild ${guildId}`);
 
+      // Return the result with proper structure
       return {
         success: true,
         staff,
       };
     } catch (error) {
       logger.error('Error hiring staff:', error);
+      
+      // If it's a validation error, let it propagate
+      if (error instanceof Error && error.message.includes('Validation failed')) {
+        throw error;
+      }
+      
       return {
         success: false,
         error: 'Failed to hire staff member',
@@ -410,8 +405,15 @@ export class StaffService {
    * @see {@link RoleUtils.getRoleLevel} - Role hierarchy comparison
    * @see {@link StaffRepository.updateStaffRole} - Database update operation
    */
-  public async promoteStaff(context: PermissionContext, request: StaffPromotionRequest): Promise<{ success: boolean; staff?: Staff; error?: string }> {
+  public async promoteStaff(context: PermissionContext, request: unknown): Promise<{ success: boolean; staff?: Staff; error?: string }> {
     try {
+      // Validate input using Zod schema
+      const validatedRequest = ValidationHelpers.validateOrThrow(
+        StaffPromoteRequestSchema,
+        request,
+        'Staff promote request'
+      );
+
       // Check senior-staff permission (updated from HR permission)
       const hasPermission = await this.permissionService.hasSeniorStaffPermissionWithContext(context);
       if (!hasPermission) {
@@ -421,7 +423,7 @@ export class StaffService {
         };
       }
 
-      const { guildId, userId, newRole, promotedBy, reason } = request;
+      const { guildId, userId, newRole, promotedBy, reason } = validatedRequest;
 
       // Prevent self-promotion
       if (userId === promotedBy) {
@@ -443,23 +445,24 @@ export class StaffService {
       const currentRole = staff.role;
 
       // Check if it's actually a promotion
-      if (RoleUtils.getRoleLevel(newRole) <= RoleUtils.getRoleLevel(currentRole)) {
+      if (RoleUtils.getRoleLevel(newRole as StaffRoleEnum) <= RoleUtils.getRoleLevel(currentRole as StaffRoleEnum)) {
         return {
           success: false,
           error: 'New role must be higher than current role for promotion',
         };
       }
 
-      // Validate role limits using business rule validation service
-      const roleLimitValidation = await this.businessRuleValidationService.validateRoleLimit(context, newRole);
+      // Validate role limits using unified validation service
+      const roleLimitValidation = await this.validationAdapter.validateRoleLimit(context, newRole as StaffRoleEnum);
       if (!roleLimitValidation.valid) {
-        // Log business rule violation if guild owner is bypassing
-        if (context.isGuildOwner && roleLimitValidation.bypassAvailable) {
+        // Log business rule violation if guild owner or admin is bypassing
+        const isAdmin = await this.permissionService.isAdmin(context);
+        if ((context.isGuildOwner || isAdmin) && roleLimitValidation.bypassAvailable) {
           await this.auditLogRepository.logRoleLimitBypass(
             guildId,
             context.userId,
             userId,
-            newRole,
+            newRole as StaffRole,
             roleLimitValidation.currentCount,
             roleLimitValidation.maxCount,
             reason
@@ -484,7 +487,7 @@ export class StaffService {
       const updatedStaff = await this.staffRepository.updateStaffRole(
         guildId,
         userId,
-        newRole,
+        newRole as StaffRole,
         promotedBy,
         reason
       );
@@ -496,28 +499,43 @@ export class StaffService {
         };
       }
 
-      // Log the action
+      // Log successful promotion action for audit trail
       await this.auditLogRepository.logAction({
         guildId,
         action: AuditAction.STAFF_PROMOTED,
         actorId: promotedBy,
         targetId: userId,
         details: {
-          before: { role: currentRole },
-          after: { role: newRole },
+          before: {
+            role: currentRole
+          },
+          after: {
+            role: newRole as StaffRole
+          },
           reason,
+          metadata: {
+            fromRoleLevel: RoleUtils.getRoleLevel(currentRole as StaffRoleEnum),
+            toRoleLevel: RoleUtils.getRoleLevel(newRole as StaffRoleEnum)
+          }
         },
-        timestamp: new Date(),
+        timestamp: new Date()
       });
 
       logger.info(`Staff promoted: ${userId} from ${currentRole} to ${newRole} in guild ${guildId}`);
 
+      // Return the result with proper structure
       return {
         success: true,
         staff: updatedStaff,
       };
     } catch (error) {
       logger.error('Error promoting staff:', error);
+      
+      // If it's a validation error, let it propagate
+      if (error instanceof Error && error.message.includes('Validation failed')) {
+        throw error;
+      }
+      
       return {
         success: false,
         error: 'Failed to promote staff member',
@@ -561,8 +579,15 @@ export class StaffService {
    * });
    * ```
    */
-  public async demoteStaff(context: PermissionContext, request: StaffPromotionRequest): Promise<{ success: boolean; staff?: Staff; error?: string }> {
+  public async demoteStaff(context: PermissionContext, request: unknown): Promise<{ success: boolean; staff?: Staff; error?: string }> {
     try {
+      // Validate input using Zod schema
+      const validatedRequest = ValidationHelpers.validateOrThrow(
+        StaffPromoteRequestSchema,
+        request,
+        'Staff demote request'
+      );
+
       // Check senior-staff permission (updated from HR permission)
       const hasPermission = await this.permissionService.hasSeniorStaffPermissionWithContext(context);
       if (!hasPermission) {
@@ -572,7 +597,7 @@ export class StaffService {
         };
       }
 
-      const { guildId, userId, newRole, promotedBy, reason } = request;
+      const { guildId, userId, newRole, promotedBy, reason } = validatedRequest;
 
       // Find the staff member
       const staff = await this.staffRepository.findByUserId(guildId, userId);
@@ -586,7 +611,7 @@ export class StaffService {
       const currentRole = staff.role;
 
       // Check if it's actually a demotion
-      if (RoleUtils.getRoleLevel(newRole) >= RoleUtils.getRoleLevel(currentRole)) {
+      if (RoleUtils.getRoleLevel(newRole as StaffRoleEnum) >= RoleUtils.getRoleLevel(currentRole as StaffRoleEnum)) {
         return {
           success: false,
           error: 'New role must be lower than current role for demotion',
@@ -597,7 +622,7 @@ export class StaffService {
       const updatedStaff = await this.staffRepository.updateStaffRole(
         guildId,
         userId,
-        newRole,
+        newRole as StaffRole,
         promotedBy,
         reason
       );
@@ -609,28 +634,43 @@ export class StaffService {
         };
       }
 
-      // Log the action
+      // Log successful demotion action for audit trail
       await this.auditLogRepository.logAction({
         guildId,
         action: AuditAction.STAFF_DEMOTED,
         actorId: promotedBy,
         targetId: userId,
         details: {
-          before: { role: currentRole },
-          after: { role: newRole },
+          before: {
+            role: currentRole
+          },
+          after: {
+            role: newRole as StaffRole
+          },
           reason,
+          metadata: {
+            fromRoleLevel: RoleUtils.getRoleLevel(currentRole as StaffRoleEnum),
+            toRoleLevel: RoleUtils.getRoleLevel(newRole as StaffRoleEnum)
+          }
         },
-        timestamp: new Date(),
+        timestamp: new Date()
       });
 
       logger.info(`Staff demoted: ${userId} from ${currentRole} to ${newRole} in guild ${guildId}`);
 
+      // Return the result with proper structure
       return {
         success: true,
         staff: updatedStaff,
       };
     } catch (error) {
       logger.error('Error demoting staff:', error);
+      
+      // If it's a validation error, let it propagate
+      if (error instanceof Error && error.message.includes('Validation failed')) {
+        throw error;
+      }
+      
       return {
         success: false,
         error: 'Failed to demote staff member',
@@ -680,8 +720,15 @@ export class StaffService {
    * 
    * @see {@link RoleTrackingService} - Handles automatic database updates
    */
-  public async fireStaff(context: PermissionContext, request: StaffTerminationRequest): Promise<{ success: boolean; staff?: Staff; error?: string }> {
+  public async fireStaff(context: PermissionContext, request: unknown): Promise<{ success: boolean; staff?: Staff; error?: string }> {
     try {
+      // Validate input using Zod schema
+      const validatedRequest = ValidationHelpers.validateOrThrow(
+        StaffFireRequestSchema,
+        request,
+        'Staff fire request'
+      );
+
       // Check senior-staff permission (updated from HR permission)
       const hasPermission = await this.permissionService.hasSeniorStaffPermissionWithContext(context);
       if (!hasPermission) {
@@ -691,7 +738,7 @@ export class StaffService {
         };
       }
 
-      const { guildId, userId, terminatedBy, reason } = request;
+      const { guildId, userId, terminatedBy, reason } = validatedRequest;
 
       // Find the staff member
       const staff = await this.staffRepository.findByUserId(guildId, userId);
@@ -705,34 +752,45 @@ export class StaffService {
       // Note: We don't modify the database here - the role tracking service
       // will handle database changes when Discord roles are removed
 
-      // Log the action
+      // Log firing action for audit trail (even though DB update happens later)
       await this.auditLogRepository.logAction({
         guildId,
         action: AuditAction.STAFF_FIRED,
         actorId: terminatedBy,
         targetId: userId,
         details: {
-          before: { 
+          before: {
             role: staff.role,
-            status: 'active',
+            status: 'active'
+          },
+          after: {
+            status: 'terminated'
           },
           reason,
           metadata: {
             robloxUsername: staff.robloxUsername,
-            firedBy: terminatedBy,
-          },
+            hiredAt: staff.hiredAt,
+            roleLevel: RoleUtils.getRoleLevel(staff.role as StaffRoleEnum)
+          }
         },
-        timestamp: new Date(),
+        timestamp: new Date()
       });
 
       logger.info(`Staff firing initiated: ${userId} (${staff.role}) by ${terminatedBy} in guild ${guildId}`);
 
+      // Return the result with proper structure
       return {
         success: true,
         staff,
       };
     } catch (error) {
       logger.error('Error firing staff:', error);
+      
+      // If it's a validation error, let it propagate
+      if (error instanceof Error && error.message.includes('Validation failed')) {
+        throw error;
+      }
+      
       return {
         success: false,
         error: 'Failed to fire staff member',
@@ -783,19 +841,7 @@ export class StaffService {
 
       const staff = await this.staffRepository.findByUserId(context.guildId, userId);
       
-      // Log the info access
-      await this.auditLogRepository.logAction({
-        guildId: context.guildId,
-        action: AuditAction.STAFF_INFO_VIEWED,
-        actorId: context.userId,
-        targetId: userId,
-        details: {
-          metadata: {
-            found: !!staff,
-          },
-        },
-        timestamp: new Date(),
-      });
+
 
       return staff;
     } catch (error) {
@@ -858,21 +904,7 @@ export class StaffService {
 
       const result = await this.staffRepository.findStaffWithPagination(context.guildId, page, limit, roleFilter);
 
-      // Log the list access
-      await this.auditLogRepository.logAction({
-        guildId: context.guildId,
-        action: AuditAction.STAFF_LIST_VIEWED,
-        actorId: context.userId,
-        details: {
-          metadata: {
-            roleFilter,
-            page,
-            limit,
-            resultCount: result.staff.length,
-          },
-        },
-        timestamp: new Date(),
-      });
+
 
       return result;
     } catch (error) {

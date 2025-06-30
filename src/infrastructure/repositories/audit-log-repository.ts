@@ -1,5 +1,6 @@
 import { BaseMongoRepository } from './base-mongo-repository';
-import { AuditLog, AuditAction } from '../../domain/entities/audit-log';
+import { AuditLog } from '../../validation';
+import { AuditAction } from '../../domain/entities/audit-log';
 import { logger } from '../logger';
 
 export class AuditLogRepository extends BaseMongoRepository<AuditLog> {
@@ -19,13 +20,14 @@ export class AuditLogRepository extends BaseMongoRepository<AuditLog> {
   public async findByGuildId(guildId: string, limit: number = 50): Promise<AuditLog[]> {
     try {
       const collection = this.collection;
-      const logs = await collection
+      const logDocs = await collection
         .find({ guildId })
         .sort({ timestamp: -1 })
         .limit(limit)
         .toArray();
       
-      return logs as AuditLog[];
+      const logs = logDocs.map(doc => this.fromMongoDoc(doc)).filter(log => log !== null) as AuditLog[];
+      return logs;
     } catch (error) {
       logger.error(`Error finding audit logs for guild ${guildId}:`, error);
       throw error;
@@ -79,7 +81,7 @@ export class AuditLogRepository extends BaseMongoRepository<AuditLog> {
   ): Promise<AuditLog[]> {
     try {
       const collection = this.collection;
-      const logs = await collection
+      const logDocs = await collection
         .find({
           guildId,
           timestamp: {
@@ -91,7 +93,8 @@ export class AuditLogRepository extends BaseMongoRepository<AuditLog> {
         .limit(limit)
         .toArray();
       
-      return logs as AuditLog[];
+      const logs = logDocs.map(doc => this.fromMongoDoc(doc)).filter(log => log !== null) as AuditLog[];
+      return logs;
     } catch (error) {
       logger.error(`Error finding audit logs by date range for guild ${guildId}:`, error);
       throw error;
@@ -297,7 +300,7 @@ export class AuditLogRepository extends BaseMongoRepository<AuditLog> {
   ): Promise<AuditLog[]> {
     try {
       const collection = this.collection;
-      const logs = await collection
+      const logDocs = await collection
         .find({ 
           guildId, 
           isGuildOwnerBypass: true 
@@ -306,7 +309,8 @@ export class AuditLogRepository extends BaseMongoRepository<AuditLog> {
         .limit(limit)
         .toArray();
       
-      return logs as AuditLog[];
+      const logs = logDocs.map(doc => this.fromMongoDoc(doc)).filter(log => log !== null) as AuditLog[];
+      return logs;
     } catch (error) {
       logger.error(`Error finding guild owner bypasses for guild ${guildId}:`, error);
       throw error;
@@ -322,7 +326,7 @@ export class AuditLogRepository extends BaseMongoRepository<AuditLog> {
   ): Promise<AuditLog[]> {
     try {
       const collection = this.collection;
-      const logs = await collection
+      const logDocs = await collection
         .find({ 
           guildId, 
           action: AuditAction.BUSINESS_RULE_VIOLATION 
@@ -331,7 +335,8 @@ export class AuditLogRepository extends BaseMongoRepository<AuditLog> {
         .limit(limit)
         .toArray();
       
-      return logs as AuditLog[];
+      const logs = logDocs.map(doc => this.fromMongoDoc(doc)).filter(log => log !== null) as AuditLog[];
+      return logs;
     } catch (error) {
       logger.error(`Error finding business rule violations for guild ${guildId}:`, error);
       throw error;

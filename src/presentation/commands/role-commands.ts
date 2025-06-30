@@ -20,6 +20,8 @@ import { RoleSynchronizationEnhancementService, ConflictSeverity } from '../../a
 import { GuildConfigRepository } from '../../infrastructure/repositories/guild-config-repository';
 import { EmbedUtils } from '../../infrastructure/utils/embed-utils';
 import { logger } from '../../infrastructure/logger';
+import { AuditDecorators } from '../decorators/audit-decorators';
+import { AuditAction } from '../../domain/entities/audit-log';
 
 @Discord()
 @SlashGroup({ name: 'role', description: 'Role management and synchronization commands' })
@@ -56,6 +58,7 @@ export class RoleCommands {
 
 
   @Slash({ name: 'sync', description: 'Synchronize Discord roles with staff database' })
+  @AuditDecorators.AdminAction(AuditAction.ROLE_SYNC_PERFORMED, 'medium')
   async syncRoles(interaction: CommandInteraction): Promise<void> {
     try {
       if (!interaction.guildId || !interaction.guild) {
@@ -117,6 +120,7 @@ export class RoleCommands {
   }
 
   @Slash({ name: 'status', description: 'View role tracking system status' })
+  @AuditDecorators.AdminAction(AuditAction.JOB_LIST_VIEWED, 'low')
   async roleStatus(interaction: CommandInteraction): Promise<void> {
     try {
       if (!interaction.guildId || !interaction.guild) {
@@ -223,6 +227,7 @@ export class RoleCommands {
   }
 
   @Slash({ name: 'sync-check', description: 'Check for and optionally resolve staff role conflicts' })
+  @AuditDecorators.AdminAction(AuditAction.SYSTEM_REPAIR, 'medium')
   async syncCheck(
     @SlashOption({
       name: 'auto-resolve',

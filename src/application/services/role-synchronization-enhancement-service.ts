@@ -1,9 +1,10 @@
 import { GuildMember, Guild } from 'discord.js';
 import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-repository';
-import { StaffRole, RoleUtils } from '../../domain/entities/staff-role';
-import { AuditAction } from '../../domain/entities/audit-log';
+import { RoleUtils, StaffRole as StaffRoleEnum } from '../../domain/entities/staff-role'; // Keep utility functions
 import { logger } from '../../infrastructure/logger';
 import { EmbedUtils } from '../../infrastructure/utils/embed-utils';
+import { StaffRole } from '../../validation';
+import { AuditAction } from '../../domain/entities/audit-log';
 
 export enum ConflictSeverity {
   LOW = 'low',
@@ -77,12 +78,12 @@ export class RoleSynchronizationEnhancementService {
   
   // Map Discord role names to staff roles (same as RoleTrackingService)
   private readonly STAFF_ROLE_MAPPING: Record<string, StaffRole> = {
-    'Managing Partner': StaffRole.MANAGING_PARTNER,
-    'Senior Partner': StaffRole.SENIOR_PARTNER,
-    'Partner': StaffRole.SENIOR_PARTNER,
-    'Senior Associate': StaffRole.SENIOR_ASSOCIATE,
-    'Associate': StaffRole.JUNIOR_ASSOCIATE,
-    'Paralegal': StaffRole.PARALEGAL,
+    'Managing Partner': 'Managing Partner',
+    'Senior Partner': 'Senior Partner',
+    'Partner': 'Senior Partner',
+    'Senior Associate': 'Senior Associate',
+    'Associate': 'Junior Associate',
+    'Paralegal': 'Paralegal',
   };
 
   // Staff roles in hierarchy order (highest first)
@@ -415,7 +416,7 @@ export class RoleSynchronizationEnhancementService {
             roleName: role.name,
             roleId,
             staffRole,
-            level: RoleUtils.getRoleLevel(staffRole)
+            level: RoleUtils.getRoleLevel(staffRole as StaffRoleEnum)
           });
         }
       }

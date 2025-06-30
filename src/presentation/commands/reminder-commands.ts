@@ -1,7 +1,6 @@
 import {
   CommandInteraction,
-  ApplicationCommandOptionType,
-  EmbedBuilder
+  ApplicationCommandOptionType
 } from 'discord.js';
 import { Discord, Slash, SlashOption, SlashGroup } from 'discordx';
 import { ReminderService } from '../../application/services/reminder-service';
@@ -13,8 +12,11 @@ import {
   validateReminderTime,
   formatReminderTime,
   formatTimeUntilReminder
-} from '../../domain/entities/reminder';
+} from '../../domain/entities/reminder'; // Keep utility functions
 import { logger } from '../../infrastructure/logger';
+import { AuditDecorators } from '../decorators/audit-decorators';
+import { ValidationHelpers, DiscordSnowflakeSchema, z } from '../../validation';
+import { AuditAction } from '../../domain/entities/audit-log';
 
 @Discord()
 @SlashGroup({ description: 'Reminder management commands', name: 'remind' })
@@ -38,6 +40,7 @@ export class ReminderCommands {
     description: 'Set a reminder',
     name: 'set'
   })
+  @AuditDecorators.AdminAction(AuditAction.JOB_CREATED, 'medium')
   async setReminder(
     @SlashOption({
       description: 'Time until reminder (e.g., 30m, 2h, 1d - max 7 days)',
@@ -56,13 +59,39 @@ export class ReminderCommands {
     interaction: CommandInteraction
   ): Promise<void> {
     try {
-      const guildId = interaction.guildId!;
+      if (!interaction.guildId) {
+        const embed = EmbedUtils.createErrorEmbed(
+          'Server Required',
+          'This command can only be used in a server.'
+        );
+        await interaction.reply({ embeds: [embed], ephemeral: true });
+        return;
+      }
+
+      // Validate inputs
+      const validatedGuildId = ValidationHelpers.validateOrThrow(
+        DiscordSnowflakeSchema,
+        interaction.guildId,
+        'Guild ID'
+      );
+      const validatedTimeString = ValidationHelpers.validateOrThrow(
+        z.string().regex(/^\d+[mhd]$/),
+        timeString,
+        'Time string'
+      );
+      const validatedMessage = ValidationHelpers.validateOrThrow(
+        z.string().min(1).max(500),
+        message,
+        'Reminder message'
+      );
+
+      const guildId = validatedGuildId;
       const userId = interaction.user.id;
       const username = interaction.user.username;
       const channelId = interaction.channelId;
 
       // Validate time format
-      const timeValidation = validateReminderTime(timeString);
+      const timeValidation = validateReminderTime(validatedTimeString);
       if (!timeValidation.isValid) {
         const embed = EmbedUtils.createErrorEmbed(
           'Invalid Time Format',
@@ -72,22 +101,14 @@ export class ReminderCommands {
         return;
       }
 
-      if (message.length > 500) {
-        const embed = EmbedUtils.createErrorEmbed(
-          'Message Too Long',
-          'Reminder messages cannot exceed 500 characters.'
-        );
-        await interaction.reply({ embeds: [embed], ephemeral: true });
-        return;
-      }
 
       // Create the reminder
       const reminder = await this.reminderService.createReminder({
         guildId,
         userId,
         username,
-        message,
-        timeString,
+        message: validatedMessage,
+        timeString: validatedTimeString,
         channelId: channelId || undefined
       });
 
@@ -121,6 +142,7 @@ export class ReminderCommands {
     description: 'List your active reminders',
     name: 'list'
   })
+  @AuditDecorators.AdminAction(AuditAction.JOB_LIST_VIEWED, 'low')
   async listReminders(
     interaction: CommandInteraction
   ): Promise<void> {
@@ -139,15 +161,12 @@ export class ReminderCommands {
         return;
       }
 
-      const embed = new EmbedBuilder()
-        .setTitle('📋 Your Active Reminders')
-        .setColor(0x3498db)
-        .setThumbnail(interaction.user.displayAvatarURL())
-        .setTimestamp()
-        .setFooter({
-          text: `${reminders.length} active reminder${reminders.length !== 1 ? 's' : ''}`,
-          iconURL: interaction.guild?.iconURL() || undefined
-        });
+      const embed = EmbedUtils.createAALegalEmbed({
+        title: '§ Scheduled Notifications',
+        description: 'Your personal reminder schedule is displayed below.',
+        color: 'info',
+        footer: `${reminders.length} Active Notification${reminders.length !== 1 ? 's' : ''} | Anarchy & Associates Case Management System`
+      }).setThumbnail(interaction.user.displayAvatarURL());
 
       // Sort by scheduled time
       const sortedReminders = reminders
@@ -186,6 +205,7 @@ export class ReminderCommands {
     description: 'Cancel a reminder',
     name: 'cancel'
   })
+  @AuditDecorators.AdminAction(AuditAction.JOB_UPDATED, 'medium')
   async cancelReminder(
     @SlashOption({
       description: 'Reminder ID to cancel',
@@ -232,6 +252,7 @@ export class ReminderCommands {
     description: 'View reminders for current case channel',
     name: 'case'
   })
+  @AuditDecorators.AdminAction(AuditAction.JOB_LIST_VIEWED, 'low')
   async viewCaseReminders(
     interaction: CommandInteraction
   ): Promise<void> {
@@ -258,15 +279,13 @@ export class ReminderCommands {
         return;
       }
 
-      const embed = new EmbedBuilder()
-        .setTitle('📋 Case Reminders')
-        .setColor(0x3498db)
-        .setDescription(`Active reminders for this case channel`)
-        .setTimestamp()
-        .setFooter({
-          text: `${reminders.length} active reminder${reminders.length !== 1 ? 's' : ''}`,
-          iconURL: interaction.guild?.iconURL() || undefined
-        });
+      const embed = EmbedUtils.createCaseEmbed({
+        title: 'Case Notification Schedule',
+        description: 'Active notifications and reminders for this matter are listed below.',
+        status: 'open'
+      }).setFooter({
+        text: `${reminders.length} Active Notification${reminders.length !== 1 ? 's' : ''} | Case Management System`
+      });
 
       // Sort by scheduled time
       const sortedReminders = reminders

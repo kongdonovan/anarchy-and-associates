@@ -65,7 +65,7 @@ describe('RetainerService Unit Tests', () => {
             lawyerId: testLawyerId
         };
         const mockCreatedRetainer = test_utils_1.TestUtils.generateMockRetainer({
-            _id: test_utils_1.TestUtils.generateObjectId(),
+            _id: test_utils_1.TestUtils.generateObjectId().toString(),
             guildId: testGuildId,
             clientId: testClientId,
             lawyerId: testLawyerId,
@@ -134,10 +134,11 @@ describe('RetainerService Unit Tests', () => {
     describe('signRetainer', () => {
         const mockSignatureRequest = {
             retainerId: testRetainerId,
-            clientRobloxUsername: 'testuser123'
+            clientRobloxUsername: 'testuser123',
+            clientAgreement: true
         };
         const mockPendingRetainer = test_utils_1.TestUtils.generateMockRetainer({
-            _id: test_utils_1.TestUtils.generateObjectId(),
+            _id: test_utils_1.TestUtils.generateObjectId().toString(),
             guildId: testGuildId,
             clientId: testClientId,
             lawyerId: testLawyerId,
@@ -240,7 +241,7 @@ describe('RetainerService Unit Tests', () => {
     });
     describe('cancelRetainer', () => {
         const mockPendingRetainer = test_utils_1.TestUtils.generateMockRetainer({
-            _id: test_utils_1.TestUtils.generateObjectId(),
+            _id: test_utils_1.TestUtils.generateObjectId().toString(),
             guildId: testGuildId,
             clientId: testClientId,
             lawyerId: testLawyerId,
@@ -434,7 +435,7 @@ describe('RetainerService Unit Tests', () => {
     });
     describe('formatRetainerAgreement', () => {
         const mockSignedRetainer = test_utils_1.TestUtils.generateMockRetainer({
-            _id: test_utils_1.TestUtils.generateObjectId(),
+            _id: test_utils_1.TestUtils.generateObjectId().toString(),
             guildId: testGuildId,
             clientId: testClientId,
             lawyerId: testLawyerId,
@@ -650,7 +651,7 @@ describe('RetainerService Unit Tests', () => {
         it('should handle malformed retainer data', async () => {
             // Test with malformed retainer missing required fields
             const malformedRetainer = {
-                _id: test_utils_1.TestUtils.generateObjectId(),
+                _id: test_utils_1.TestUtils.generateObjectId().toString(),
                 guildId: testGuildId,
                 status: retainer_1.RetainerStatus.SIGNED,
                 // Missing clientRobloxUsername, signedAt, etc.,

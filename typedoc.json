@@ -20,8 +20,7 @@
   "theme": "default",
   "plugin": [
     "typedoc-plugin-markdown",
-    "typedoc-plugin-merge-modules",
-    "@mxssfd/typedoc-theme"
+    "typedoc-plugin-merge-modules"
   ],
   "githubPages": false,
   "hideGenerator": false,
@@ -121,23 +120,9 @@
     "Interface",
     "Function"
   ],
-  "media": "./docs/media",
   "lightHighlightTheme": "github-light",
   "darkHighlightTheme": "github-dark",
-  "markedOptions": {
-    "mangle": false,
-    "headerIds": true
-  },
-  "htmlLang": "en",
-  "cacheBust": true,
-  "gaID": "",
-  "gaSite": "",
-  "hostedBaseUrl": "",
-  "hideParameterTypesInTitle": false,
-  "notUseCodeBlocks": false,
   "outputFileStrategy": "members",
-  "memberPageTitle": "{name} | {kind}",
-  "indexPageTitle": "API Documentation",
   "parametersFormat": "table",
   "typeDeclarationFormat": "table",
   "tableColumnSettings": {
@@ -148,34 +133,6 @@
     "hideSources": false,
     "hideValues": false
   },
-  "textContentMappings": {
-    "title.indexPage": "Anarchy & Associates Discord Bot - API Documentation",
-    "title.memberPage": "{name}",
-    "footer.text": "Copyright © 2024 Anarchy & Associates"
-  },
-  "remarkPlugins": [],
-  "includeReadme": true,
-  "treatWarningsAsErrors": false,
-  "logLevel": "Info",
-  "pretty": true,
-  "emit": "docs",
-  "jsDocCompatibility": true,
-  "excludePrivate": false,
-  "excludeProtected": false,
-  "excludeInternal": true,
-  "disableSources": false,
-  "disableGit": false,
-  "gitRevision": "main",
-  "gitRemote": "origin",
-  "publicPath": "/",
-  "htmlNamingConvention": "kebab-case",
-  "fileExtension": ".html",
-  "hideInPageTOC": false,
-  "hideBreadcrumbs": false,
-  "hidePageHeader": false,
-  "includeHierarchySummary": true,
-  "themeColor": "#7289da",
   "customCss": "./docs/custom.css",
-  "customJs": "./docs/custom.js",
   "favicon": "./docs/favicon.ico"
 }

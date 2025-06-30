@@ -1,11 +1,5 @@
 import { ObjectId } from 'mongodb';
-import { Staff } from '../../domain/entities/staff';
-import { Case } from '../../domain/entities/case';
-import { Job } from '../../domain/entities/job';
-import { Application } from '../../domain/entities/application';
-import { Retainer } from '../../domain/entities/retainer';
-import { Reminder } from '../../domain/entities/reminder';
-import { Feedback } from '../../domain/entities/feedback';
+import { Staff, Case, Job, Application, Retainer, Reminder, Feedback } from '../../validation';
 export declare class TestUtils {
     static generateObjectId(): ObjectId;
     static generateMockStaff(overrides?: Partial<Staff>): Staff;
@@ -22,5 +16,8 @@ export declare class TestUtils {
     static wait(ms: number): Promise<void>;
     static runConcurrentOperations<T>(operations: (() => Promise<T>)[], concurrency?: number): Promise<T[]>;
     static generateLargeDataset<T>(generator: (index: number) => T, count: number): T[];
+    static generateSnowflake(): string;
+    static ensureValidSnowflake(id: string | undefined): string;
+    static toZodId(id: ObjectId | string | undefined): string | undefined;
 }
 //# sourceMappingURL=test-utils.d.ts.map

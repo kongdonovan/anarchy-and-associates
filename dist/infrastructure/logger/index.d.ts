@@ -1,4 +1,4 @@
-import winston from 'winston';
-declare const logger: winston.Logger;
-export { logger };
+import { EnhancedLogger } from './enhanced-logger';
+declare const logger: import("winston").Logger;
+export { logger, EnhancedLogger };
 //# sourceMappingURL=index.d.ts.map

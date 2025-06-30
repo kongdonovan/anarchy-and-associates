@@ -1,18 +1,22 @@
 import { 
   Feedback, 
-  FeedbackSubmissionRequest, 
   FeedbackSearchFilters,
   FeedbackSortOptions,
+  FeedbackRating
+} from '../../validation';
+import { 
   FeedbackPaginationOptions,
   StaffPerformanceMetrics,
-  FirmPerformanceMetrics,
-  validateFeedbackSubmission,
-  FeedbackRating
-} from '../../domain/entities/feedback';
+  FirmPerformanceMetrics
+} from '../../domain/entities/feedback'; // Keep interfaces not yet in validation
 import { FeedbackRepository } from '../../infrastructure/repositories/feedback-repository';
 import { GuildConfigRepository } from '../../infrastructure/repositories/guild-config-repository';
 import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
 import { logger } from '../../infrastructure/logger';
+import {
+  FeedbackSubmissionSchema,
+  ValidationHelpers
+} from '../../validation';
 
 export class FeedbackService {
   constructor(
@@ -21,53 +25,54 @@ export class FeedbackService {
     private staffRepository: StaffRepository
   ) {}
 
-  public async submitFeedback(request: FeedbackSubmissionRequest): Promise<Feedback> {
+  public async submitFeedback(request: unknown): Promise<Feedback> {
+    // Validate input using Zod schema
+    const validatedRequest = ValidationHelpers.validateOrThrow(
+      FeedbackSubmissionSchema,
+      request,
+      'Feedback submission request'
+    );
+
     logger.info('Submitting feedback', {
-      guildId: request.guildId,
-      submitterId: request.submitterId,
-      targetStaffId: request.targetStaffId,
-      rating: request.rating
+      guildId: validatedRequest.guildId,
+      submitterId: validatedRequest.submitterId,
+      targetStaffId: validatedRequest.targetStaffId,
+      rating: validatedRequest.rating
     });
 
-    // Validate the request
-    const validationErrors = validateFeedbackSubmission(request);
-    if (validationErrors.length > 0) {
-      throw new Error(`Validation failed: ${validationErrors.join(', ')}`);
-    }
-
     // Check if submitter is a staff member (they shouldn't be able to submit feedback)
-    const submitterStaffList = await this.staffRepository.findByFilters({ userId: request.submitterId });
-    if (submitterStaffList.length > 0) {
+    const submitterStaff = await this.staffRepository.findByUserId(validatedRequest.guildId, validatedRequest.submitterId);
+    if (submitterStaff && submitterStaff.status === 'active') {
       throw new Error('Staff members cannot submit feedback. Only clients can provide feedback.');
     }
 
     // If targeting a specific staff member, verify they exist
-    if (request.targetStaffId) {
-      const targetStaffList = await this.staffRepository.findByFilters({ userId: request.targetStaffId });
-      if (targetStaffList.length === 0) {
+    if (validatedRequest.targetStaffId) {
+      const targetStaff = await this.staffRepository.findByUserId(validatedRequest.guildId, validatedRequest.targetStaffId);
+      if (!targetStaff || targetStaff.status !== 'active') {
         throw new Error('Target staff member not found');
       }
     }
 
     // Create feedback data
     const feedbackData: Omit<Feedback, '_id' | 'createdAt' | 'updatedAt'> = {
-      guildId: request.guildId,
-      submitterId: request.submitterId,
-      submitterUsername: request.submitterUsername,
-      targetStaffId: request.targetStaffId,
-      targetStaffUsername: request.targetStaffUsername,
-      rating: request.rating,
-      comment: request.comment.trim(),
-      isForFirm: !request.targetStaffId // If no specific staff, it's for the firm
+      guildId: validatedRequest.guildId,
+      submitterId: validatedRequest.submitterId,
+      submitterUsername: validatedRequest.submitterUsername,
+      targetStaffId: validatedRequest.targetStaffId,
+      targetStaffUsername: validatedRequest.targetStaffUsername,
+      rating: validatedRequest.rating as FeedbackRating,
+      comment: validatedRequest.comment,
+      isForFirm: !validatedRequest.targetStaffId // If no specific staff, it's for the firm
     };
 
     const createdFeedback = await this.feedbackRepository.add(feedbackData);
 
     logger.info('Feedback submitted successfully', {
       feedbackId: createdFeedback._id,
-      submitterId: request.submitterId,
-      targetStaffId: request.targetStaffId,
-      rating: request.rating
+      submitterId: validatedRequest.submitterId,
+      targetStaffId: validatedRequest.targetStaffId,
+      rating: validatedRequest.rating
     });
 
     return createdFeedback;

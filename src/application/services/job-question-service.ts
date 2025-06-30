@@ -1,4 +1,4 @@
-import { JobQuestion } from '../../domain/entities/job';
+import { JobQuestion } from '../../validation';
 import { logger } from '../../infrastructure/logger';
 
 export interface QuestionValidationResult {

@@ -6,7 +6,7 @@ import { CaseRepository } from '../../infrastructure/repositories/case-repositor
 import { FeedbackRepository } from '../../infrastructure/repositories/feedback-repository';
 import { RetainerRepository } from '../../infrastructure/repositories/retainer-repository';
 import { logger } from '../../infrastructure/logger';
-import { StaffRole } from '../../domain/entities/staff-role';
+import { StaffRole } from '../../validation';
 import { CaseStatus } from '../../domain/entities/case';
 
 export interface BotMetrics {
@@ -115,7 +115,7 @@ export class MetricsService {
         this.caseRepository.findByFilters({ guildId: guild.id }),
         this.caseRepository.findByFilters({ guildId: guild.id, status: CaseStatus.IN_PROGRESS }),
         this.applicationRepository.findByFilters({ guildId: guild.id }),
-        this.applicationRepository.findByFilters({ guildId: guild.id, status: CaseStatus.PENDING }),
+        this.applicationRepository.findByFilters({ guildId: guild.id, status: 'pending' }),
         this.jobRepository.findByFilters({ guildId: guild.id }),
         this.jobRepository.findByFilters({ guildId: guild.id, isOpen: true }),
         this.retainerRepository.findByFilters({ guildId: guild.id }),

@@ -23,7 +23,8 @@ const case_channel_archive_service_1 = require("../../application/services/case-
 const case_repository_1 = require("../../infrastructure/repositories/case-repository");
 const audit_log_repository_1 = require("../../infrastructure/repositories/audit-log-repository");
 const staff_repository_1 = require("../../infrastructure/repositories/staff-repository");
-const business_rule_validation_service_1 = require("../../application/services/business-rule-validation-service");
+// import { UnifiedValidationService } from '../../application/validation/unified-validation-service';
+const validation_service_factory_1 = require("../../application/validation/validation-service-factory");
 const cross_entity_validation_service_1 = require("../../application/services/cross-entity-validation-service");
 const job_repository_1 = require("../../infrastructure/repositories/job-repository");
 const application_repository_1 = require("../../infrastructure/repositories/application-repository");
@@ -32,6 +33,8 @@ const feedback_repository_1 = require("../../infrastructure/repositories/feedbac
 const reminder_repository_1 = require("../../infrastructure/repositories/reminder-repository");
 const embed_utils_1 = require("../../infrastructure/utils/embed-utils");
 const logger_1 = require("../../infrastructure/logger");
+const audit_decorators_1 = require("../decorators/audit-decorators");
+const audit_log_1 = require("../../domain/entities/audit-log");
 let RepairCommands = class RepairCommands {
     constructor() {
         this.repairService = new repair_service_1.RepairService();
@@ -41,15 +44,23 @@ let RepairCommands = class RepairCommands {
         const caseRepository = new case_repository_1.CaseRepository();
         const auditLogRepository = new audit_log_repository_1.AuditLogRepository();
         const staffRepository = new staff_repository_1.StaffRepository();
-        const businessRuleValidationService = new business_rule_validation_service_1.BusinessRuleValidationService(this.guildConfigRepository, staffRepository, caseRepository, this.permissionService);
-        const caseChannelArchiveService = new case_channel_archive_service_1.CaseChannelArchiveService(caseRepository, this.guildConfigRepository, auditLogRepository, this.permissionService, businessRuleValidationService);
-        this.orphanedChannelCleanupService = new orphaned_channel_cleanup_service_1.OrphanedChannelCleanupService(caseRepository, this.guildConfigRepository, auditLogRepository, staffRepository, this.permissionService, businessRuleValidationService, caseChannelArchiveService);
-        // Initialize repositories for cross-entity validation
         const jobRepository = new job_repository_1.JobRepository();
         const applicationRepository = new application_repository_1.ApplicationRepository();
         const retainerRepository = new retainer_repository_1.RetainerRepository();
         const feedbackRepository = new feedback_repository_1.FeedbackRepository();
         const reminderRepository = new reminder_repository_1.ReminderRepository();
+        // Create unified validation service
+        const validationService = validation_service_factory_1.ValidationServiceFactory.createValidationService({
+            staffRepository,
+            caseRepository,
+            guildConfigRepository: this.guildConfigRepository,
+            jobRepository,
+            applicationRepository
+        }, {
+            permissionService: this.permissionService
+        });
+        const caseChannelArchiveService = new case_channel_archive_service_1.CaseChannelArchiveService(caseRepository, this.guildConfigRepository, auditLogRepository, this.permissionService, validationService);
+        this.orphanedChannelCleanupService = new orphaned_channel_cleanup_service_1.OrphanedChannelCleanupService(caseRepository, this.guildConfigRepository, auditLogRepository, staffRepository, this.permissionService, validationService, caseChannelArchiveService);
         this.crossEntityValidationService = new cross_entity_validation_service_1.CrossEntityValidationService(staffRepository, caseRepository, applicationRepository, jobRepository, retainerRepository, feedbackRepository, reminderRepository, auditLogRepository);
     }
     async getPermissionContext(interaction) {
@@ -602,7 +613,7 @@ let RepairCommands = class RepairCommands {
             });
         }
     }
-    async integrityCheck(interaction, autoRepair = false) {
+    async integrityCheck(autoRepair = false, interaction) {
         try {
             // Check admin permission
             if (!await this.checkAdminPermission(interaction)) {
@@ -626,11 +637,7 @@ let RepairCommands = class RepairCommands {
             }
             // If auto-repair is requested and there are repairable issues
             if (autoRepair && report.repairableIssues > 0) {
-                const repairEmbed = new discord_js_1.EmbedBuilder()
-                    .setTitle('Auto-Repair Confirmation')
-                    .setDescription(`Found **${report.repairableIssues}** issues that can be automatically repaired.\n\nDo you want to proceed with auto-repair?`)
-                    .setColor(0xFFA500)
-                    .addFields({ name: 'Critical Issues', value: `${report.issuesBySeverity.critical} (${report.issues.filter(i => i.severity === 'critical' && i.canAutoRepair).length} repairable)`, inline: true }, { name: 'Warnings', value: `${report.issuesBySeverity.warning} (${report.issues.filter(i => i.severity === 'warning' && i.canAutoRepair).length} repairable)`, inline: true }, { name: 'Info', value: `${report.issuesBySeverity.info} (${report.issues.filter(i => i.severity === 'info' && i.canAutoRepair).length} repairable)`, inline: true });
+                const repairEmbed = embed_utils_1.EmbedUtils.createWarningEmbed('System Repair Authorization Required', `The diagnostic scan has identified **${report.repairableIssues}** issues that can be automatically remediated.\n\n**Proceed with automated repair procedures?**`).addFields({ name: '§ Critical Issues', value: `${report.issuesBySeverity.critical} total (${report.issues.filter((i) => i.severity === 'critical' && i.canAutoRepair).length} repairable)`, inline: true }, { name: '§ Warning Level', value: `${report.issuesBySeverity.warning} total (${report.issues.filter((i) => i.severity === 'warning' && i.canAutoRepair).length} repairable)`, inline: true }, { name: '§ Informational', value: `${report.issuesBySeverity.info} total (${report.issues.filter((i) => i.severity === 'info' && i.canAutoRepair).length} repairable)`, inline: true });
                 await interaction.editReply({
                     embeds: [reportEmbed, repairEmbed],
                     content: 'Reply with **REPAIR** within 30 seconds to confirm auto-repair.'
@@ -641,28 +648,41 @@ let RepairCommands = class RepairCommands {
                 collector?.on('collect', async (message) => {
                     try {
                         await message.delete();
-                        // Run repairs
-                        const repairResult = await this.crossEntityValidationService.repairIntegrityIssues(report.issues);
+                        // Perform auto-repair
+                        const repairResult = await this.crossEntityValidationService.repairIntegrityIssues(report.issues.filter((i) => i.canAutoRepair), { dryRun: false });
                         // Create repair result embed
-                        const repairResultEmbed = this.createValidationRepairResultEmbed(repairResult);
-                        await interaction.editReply({
-                            embeds: [reportEmbed, repairResultEmbed],
-                            content: null
+                        const resultEmbed = embed_utils_1.EmbedUtils.createAALegalEmbed({
+                            title: '🔧 Automated Repair Complete',
+                            description: `Successfully repaired **${repairResult.issuesRepaired}** of **${repairResult.totalIssuesFound}** issues.`
+                        });
+                        if (repairResult.failedRepairs.length > 0) {
+                            resultEmbed.addFields({
+                                name: '⚠️ Failed Repairs',
+                                value: repairResult.failedRepairs
+                                    .slice(0, 5)
+                                    .map((f) => `• ${f.issue.message}: ${f.error}`)
+                                    .join('\n') + (repairResult.failedRepairs.length > 5 ? `\n...and ${repairResult.failedRepairs.length - 5} more` : ''),
+                                inline: false
+                            });
+                        }
+                        await interaction.followUp({
+                            embeds: [resultEmbed],
+                            ephemeral: true
                         });
                     }
                     catch (error) {
-                        logger_1.logger.error('Error during auto-repair:', error);
-                        await interaction.editReply({
-                            embeds: [embed_utils_1.EmbedUtils.createErrorEmbed('Repair Failed', 'An error occurred during auto-repair.')],
-                            content: null
+                        logger_1.logger.error('Error in auto-repair process:', error);
+                        await interaction.followUp({
+                            embeds: [embed_utils_1.EmbedUtils.createErrorEmbed('Repair Failed', 'An error occurred during the auto-repair process.')],
+                            ephemeral: true
                         });
                     }
                 });
                 collector?.on('end', (collected) => {
                     if (collected.size === 0) {
-                        interaction.editReply({
-                            embeds: [reportEmbed],
-                            content: 'Auto-repair cancelled (timed out).'
+                        interaction.followUp({
+                            embeds: [embed_utils_1.EmbedUtils.createInfoEmbed('Repair Cancelled', 'Auto-repair was not confirmed within the time limit.')],
+                            ephemeral: true
                         });
                     }
                 });
@@ -676,18 +696,24 @@ let RepairCommands = class RepairCommands {
         }
         catch (error) {
             logger_1.logger.error('Error in integrity check command:', error);
-            await interaction.editReply({
-                embeds: [embed_utils_1.EmbedUtils.createErrorEmbed('Check Failed', 'An unexpected error occurred during the integrity check.')]
-            });
+            const errorEmbed = embed_utils_1.EmbedUtils.createErrorEmbed('Integrity Check Failed', 'An unexpected error occurred during the integrity check.');
+            if (interaction.deferred) {
+                await interaction.editReply({ embeds: [errorEmbed] });
+            }
+            else {
+                await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+            }
         }
     }
     createIntegrityReportEmbed(report) {
         const scanDuration = (report.scanCompletedAt.getTime() - report.scanStartedAt.getTime()) / 1000;
-        const embed = new discord_js_1.EmbedBuilder()
-            .setTitle('Data Integrity Report')
-            .setColor(report.issues.length === 0 ? 0x00FF00 : report.issuesBySeverity.critical > 0 ? 0xFF0000 : 0xFFA500)
-            .setDescription(`Scanned **${report.totalEntitiesScanned}** entities in ${scanDuration.toFixed(2)}s`)
-            .setTimestamp();
+        const embedColor = report.issues.length === 0 ? 'success' :
+            report.issuesBySeverity.critical > 0 ? 'error' : 'warning';
+        const embed = embed_utils_1.EmbedUtils.createAALegalEmbed({
+            title: '⚖️ System Integrity Diagnostic Report',
+            description: `Comprehensive system scan completed. Analyzed **${report.totalEntitiesScanned}** database entities in ${scanDuration.toFixed(2)} seconds.`,
+            color: embedColor
+        });
         if (report.issues.length > 0) {
             embed.addFields({ name: 'Total Issues', value: report.issues.length.toString(), inline: true }, { name: 'Repairable', value: report.repairableIssues.toString(), inline: true }, { name: 'Manual Fix Required', value: (report.issues.length - report.repairableIssues).toString(), inline: true });
             // Add severity breakdown
@@ -712,34 +738,11 @@ let RepairCommands = class RepairCommands {
         }
         return embed;
     }
-    createValidationRepairResultEmbed(result) {
-        const embed = new discord_js_1.EmbedBuilder()
-            .setTitle('Auto-Repair Results')
-            .setColor(result.issuesFailed === 0 ? 0x00FF00 : 0xFFA500)
-            .addFields({ name: 'Issues Found', value: result.totalIssuesFound.toString(), inline: true }, { name: 'Successfully Repaired', value: result.issuesRepaired.toString(), inline: true }, { name: 'Failed Repairs', value: result.issuesFailed.toString(), inline: true })
-            .setTimestamp();
-        if (result.issuesRepaired > 0) {
-            const repairedSample = result.repairedIssues.slice(0, 5);
-            const repairedDescriptions = repairedSample.map(issue => `✅ ${issue.entityType} - ${issue.message}`).join('\n');
-            embed.addFields({
-                name: `Repaired Issues ${result.repairedIssues.length > 5 ? `(showing 5 of ${result.repairedIssues.length})` : ''}`,
-                value: repairedDescriptions
-            });
-        }
-        if (result.failedRepairs.length > 0) {
-            const failedSample = result.failedRepairs.slice(0, 3);
-            const failedDescriptions = failedSample.map(({ issue, error }) => `❌ ${issue.entityType} - ${issue.message}\n   Error: ${error}`).join('\n');
-            embed.addFields({
-                name: `Failed Repairs ${result.failedRepairs.length > 3 ? `(showing 3 of ${result.failedRepairs.length})` : ''}`,
-                value: failedDescriptions
-            });
-        }
-        return embed;
-    }
 };
 exports.RepairCommands = RepairCommands;
 __decorate([
     (0, discordx_1.Slash)({ name: 'staff-roles', description: 'Synchronize staff roles between Discord and database' }),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.SYSTEM_REPAIR, 'high'),
     __param(0, (0, discordx_1.SlashOption)({
         name: 'dry-run',
         description: 'Preview changes without applying them',
@@ -752,6 +755,7 @@ __decorate([
 ], RepairCommands.prototype, "repairStaffRoles", null);
 __decorate([
     (0, discordx_1.Slash)({ name: 'job-roles', description: 'Synchronize job roles between Discord and database' }),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.SYSTEM_REPAIR, 'medium'),
     __param(0, (0, discordx_1.SlashOption)({
         name: 'dry-run',
         description: 'Preview changes without applying them',
@@ -812,6 +816,7 @@ __decorate([
 ], RepairCommands.prototype, "repairDbIndexes", null);
 __decorate([
     (0, discordx_1.Slash)({ name: 'all', description: 'Execute all repair routines' }),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.SYSTEM_REPAIR, 'critical'),
     __param(0, (0, discordx_1.SlashOption)({
         name: 'dry-run',
         description: 'Preview changes without applying them',
@@ -824,6 +829,7 @@ __decorate([
 ], RepairCommands.prototype, "repairAll", null);
 __decorate([
     (0, discordx_1.Slash)({ name: 'health', description: 'Comprehensive system health check' }),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.SYSTEM_REPAIR, 'low'),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [discord_js_1.CommandInteraction]),
     __metadata("design:returntype", Promise)
@@ -869,14 +875,14 @@ __decorate([
         name: 'integrity-check',
         description: 'Scan for data integrity issues across all entities'
     }),
-    __param(1, (0, discordx_1.SlashOption)({
+    __param(0, (0, discordx_1.SlashOption)({
         name: 'auto-repair',
         description: 'Automatically repair issues that can be fixed',
         type: discord_js_1.ApplicationCommandOptionType.Boolean,
         required: false
     })),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [discord_js_1.CommandInteraction, Boolean]),
+    __metadata("design:paramtypes", [Boolean, discord_js_1.CommandInteraction]),
     __metadata("design:returntype", Promise)
 ], RepairCommands.prototype, "integrityCheck", null);
 exports.RepairCommands = RepairCommands = __decorate([

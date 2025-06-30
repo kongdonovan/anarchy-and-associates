@@ -19,8 +19,16 @@ import { GuildConfigRepository } from '../../infrastructure/repositories/guild-c
 import { RobloxService } from '../../infrastructure/external/roblox-service';
 import { EmbedUtils } from '../../infrastructure/utils/embed-utils';
 import { PermissionUtils } from '../../infrastructure/utils/permission-utils';
-import { Retainer, RetainerCreationRequest, RetainerSignatureRequest } from '../../domain/entities/retainer';
 import { logger } from '../../infrastructure/logger';
+import { AuditDecorators } from '../decorators/audit-decorators';
+import { 
+  Retainer, 
+  RetainerCreationRequest, 
+  RetainerSignatureRequest, 
+  ValidationHelpers, 
+  DiscordSnowflakeSchema 
+} from '../../validation';
+import { AuditAction } from '../../domain/entities/audit-log';
 
 @Discord()
 @SlashGroup({ description: 'Retainer agreement management commands', name: 'retainer' })
@@ -64,6 +72,7 @@ export class RetainerCommands {
     description: 'Send a retainer agreement to a client for signature',
     name: 'sign'
   })
+  @AuditDecorators.AdminAction(AuditAction.JOB_CREATED, 'medium')
   async signRetainer(
     @SlashOption({
       description: 'The client to send the retainer agreement to',
@@ -75,7 +84,23 @@ export class RetainerCommands {
     interaction: CommandInteraction
   ): Promise<void> {
     try {
-      const guildId = interaction.guildId!;
+      if (!interaction.guildId) {
+        const embed = EmbedUtils.createErrorEmbed(
+          'Server Required',
+          'This command can only be used in a server.'
+        );
+        await interaction.reply({ embeds: [embed], ephemeral: true });
+        return;
+      }
+
+      // Validate inputs
+      const validatedGuildId = ValidationHelpers.validateOrThrow(
+        DiscordSnowflakeSchema,
+        interaction.guildId,
+        'Guild ID'
+      );
+
+      const guildId = validatedGuildId;
       const lawyerId = interaction.user.id;
       const clientId = client.id;
 
@@ -137,6 +162,7 @@ export class RetainerCommands {
     description: 'List all active retainer agreements',
     name: 'list'
   })
+  @AuditDecorators.AdminAction(AuditAction.JOB_LIST_VIEWED, 'low')
   async listRetainers(interaction: CommandInteraction): Promise<void> {
     try {
       const member = interaction.guild?.members.cache.get(interaction.user.id);
@@ -334,7 +360,8 @@ export class RetainerCommands {
       // Sign the retainer
       const signatureRequest: RetainerSignatureRequest = {
         retainerId,
-        clientRobloxUsername: robloxUsername
+        clientRobloxUsername: robloxUsername,
+        clientAgreement: true // User agreed via modal confirmation
       };
 
       const signedRetainer = await this.retainerService.signRetainer(signatureRequest);

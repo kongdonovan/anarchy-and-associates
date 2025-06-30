@@ -20,8 +20,11 @@ const feedback_repository_1 = require("../../infrastructure/repositories/feedbac
 const guild_config_repository_1 = require("../../infrastructure/repositories/guild-config-repository");
 const staff_repository_1 = require("../../infrastructure/repositories/staff-repository");
 const embed_utils_1 = require("../../infrastructure/utils/embed-utils");
-const feedback_1 = require("../../domain/entities/feedback");
+const feedback_1 = require("../../domain/entities/feedback"); // Keep utility functions
 const logger_1 = require("../../infrastructure/logger");
+const audit_decorators_1 = require("../decorators/audit-decorators");
+const validation_1 = require("../../validation");
+const audit_log_1 = require("../../domain/entities/audit-log");
 let FeedbackCommands = class FeedbackCommands {
     constructor() {
         const feedbackRepository = new feedback_repository_1.FeedbackRepository();
@@ -31,19 +34,18 @@ let FeedbackCommands = class FeedbackCommands {
     }
     async submitFeedback(rating, comment, staff, interaction) {
         try {
-            const guildId = interaction.guildId;
+            if (!interaction.guildId) {
+                const embed = embed_utils_1.EmbedUtils.createErrorEmbed('Server Required', 'This command can only be used in a server.');
+                await interaction.reply({ embeds: [embed], ephemeral: true });
+                return;
+            }
+            // Validate inputs
+            const validatedGuildId = validation_1.ValidationHelpers.validateOrThrow(validation_1.DiscordSnowflakeSchema, interaction.guildId, 'Guild ID');
+            const validatedRating = validation_1.ValidationHelpers.validateOrThrow(validation_1.z.number().int().min(1).max(5), rating, 'Rating');
+            const validatedComment = validation_1.ValidationHelpers.validateOrThrow(validation_1.z.string().min(1).max(1000), comment, 'Feedback comment');
+            const guildId = validatedGuildId;
             const submitterId = interaction.user.id;
             const submitterUsername = interaction.user.username;
-            if (!(0, feedback_1.isValidRating)(rating)) {
-                const embed = embed_utils_1.EmbedUtils.createErrorEmbed('Invalid Rating', 'Rating must be between 1 and 5 stars.');
-                await interaction.reply({ embeds: [embed], ephemeral: true });
-                return;
-            }
-            if (comment.length > 1000) {
-                const embed = embed_utils_1.EmbedUtils.createErrorEmbed('Comment Too Long', 'Feedback comments cannot exceed 1000 characters.');
-                await interaction.reply({ embeds: [embed], ephemeral: true });
-                return;
-            }
             // Submit the feedback
             await this.feedbackService.submitFeedback({
                 guildId,
@@ -51,42 +53,39 @@ let FeedbackCommands = class FeedbackCommands {
                 submitterUsername,
                 targetStaffId: staff?.id,
                 targetStaffUsername: staff?.username,
-                rating: rating,
-                comment
+                rating: validatedRating,
+                comment: validatedComment
             });
             // Get feedback channel ID
             const feedbackChannelId = await this.feedbackService.getFeedbackChannelId(guildId);
-            // Create feedback embed
-            const feedbackEmbed = new discord_js_1.EmbedBuilder()
-                .setTitle('⭐ New Feedback Received')
-                .setColor(this.getRatingColor(rating))
-                .addFields([
-                {
-                    name: 'From',
-                    value: `${submitterUsername}`,
-                    inline: true
-                },
-                {
-                    name: 'For',
-                    value: staff ? `${staff.username}` : 'Anarchy & Associates (Firm-wide)',
-                    inline: true
-                },
-                {
-                    name: 'Rating',
-                    value: `${(0, feedback_1.getStarDisplay)(rating)} (${rating}/5 - ${(0, feedback_1.getRatingText)(rating)})`,
-                    inline: false
-                },
-                {
-                    name: 'Comment',
-                    value: comment,
-                    inline: false
-                }
-            ])
-                .setTimestamp()
-                .setFooter({
-                text: 'Anarchy & Associates',
-                iconURL: interaction.guild?.iconURL() || undefined
-            });
+            // Create professional feedback embed
+            const feedbackEmbed = embed_utils_1.EmbedUtils.createDocumentEmbed({
+                title: 'Client Feedback Submission',
+                documentType: 'feedback',
+                description: `A new performance evaluation has been submitted for ${staff ? 'an individual staff member' : 'the firm as a whole'}.`,
+                fields: [
+                    {
+                        name: '§ Evaluator',
+                        value: submitterUsername,
+                        inline: true
+                    },
+                    {
+                        name: '§ Subject',
+                        value: staff ? staff.username : '*Anarchy & Associates (Firm-wide Evaluation)*',
+                        inline: true
+                    },
+                    {
+                        name: '§ Performance Rating',
+                        value: `${(0, feedback_1.getStarDisplay)(rating)} (${rating}/5 - ${(0, feedback_1.getRatingText)(rating)})`,
+                        inline: false
+                    },
+                    {
+                        name: '§ Detailed Feedback',
+                        value: comment,
+                        inline: false
+                    }
+                ]
+            }).setColor(this.getProfessionalRatingColor(rating));
             // Send to feedback channel if configured
             if (feedbackChannelId) {
                 try {
@@ -253,19 +252,22 @@ let FeedbackCommands = class FeedbackCommands {
         }
     }
     getRatingColor(rating) {
+        return this.getProfessionalRatingColor(rating);
+    }
+    getProfessionalRatingColor(rating) {
         switch (rating) {
             case feedback_1.FeedbackRating.FIVE_STAR:
-                return 0x00ff00; // Green
+                return 0x2D7D46; // Deep Forest Green - Excellence
             case feedback_1.FeedbackRating.FOUR_STAR:
-                return 0x9acd32; // Yellow-green
+                return 0xD4AF37; // Deep Gold - Above Average
             case feedback_1.FeedbackRating.THREE_STAR:
-                return 0xffd700; // Gold
+                return 0x36393F; // Charcoal - Satisfactory
             case feedback_1.FeedbackRating.TWO_STAR:
-                return 0xff8c00; // Orange
+                return 0xF0B232; // Amber - Needs Improvement
             case feedback_1.FeedbackRating.ONE_STAR:
-                return 0xff0000; // Red
+                return 0xA62019; // Deep Crimson - Unsatisfactory
             default:
-                return 0x3498db; // Blue
+                return 0x1E3A5F; // Navy Blue - Default
         }
     }
 };
@@ -275,6 +277,7 @@ __decorate([
         description: 'Submit feedback for staff or the firm',
         name: 'submit'
     }),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.JOB_CREATED, 'medium'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Rating from 1-5 stars',
         name: 'rating',
@@ -304,6 +307,7 @@ __decorate([
         description: 'View feedback and performance metrics',
         name: 'view'
     }),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.JOB_LIST_VIEWED, 'low'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Staff member to view feedback for (leave blank for firm overview)',
         name: 'staff',

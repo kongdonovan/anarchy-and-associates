@@ -3,37 +3,42 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ReminderRepository = void 0;
 const base_mongo_repository_1 = require("./base-mongo-repository");
 const logger_1 = require("../logger");
+const validation_1 = require("../../validation");
 class ReminderRepository extends base_mongo_repository_1.BaseMongoRepository {
     constructor() {
         super('reminders');
     }
     async getActiveReminders(guildId) {
         try {
+            const validatedGuildId = validation_1.ValidationHelpers.validateOrThrow(validation_1.DiscordSnowflakeSchema, guildId, 'Guild ID');
             return this.findWithComplexFilter({
-                guildId,
+                guildId: validatedGuildId,
                 isActive: true,
                 deliveredAt: { $exists: false }
             });
         }
         catch (error) {
-            logger_1.logger.error('Error getting active reminders', { error, guildId });
+            logger_1.logger.error('Error getting active reminders', { error, guildId: String(guildId) });
             throw error;
         }
     }
     async getUserReminders(userId, guildId, activeOnly = true) {
         try {
+            const validatedUserId = validation_1.ValidationHelpers.validateOrThrow(validation_1.DiscordSnowflakeSchema, userId, 'User ID');
+            const validatedGuildId = validation_1.ValidationHelpers.validateOrThrow(validation_1.DiscordSnowflakeSchema, guildId, 'Guild ID');
+            const validatedActiveOnly = validation_1.ValidationHelpers.validateOrThrow(validation_1.z.boolean(), activeOnly, 'Active only flag');
             const query = {
-                guildId,
-                userId
+                guildId: validatedGuildId,
+                userId: validatedUserId
             };
-            if (activeOnly) {
+            if (validatedActiveOnly) {
                 query.isActive = true;
                 query.deliveredAt = { $exists: false };
             }
             return this.findWithComplexFilter(query, { scheduledFor: 1 }); // Sort by scheduled time
         }
         catch (error) {
-            logger_1.logger.error('Error getting user reminders', { error, userId, guildId });
+            logger_1.logger.error('Error getting user reminders', { error, userId: String(userId), guildId: String(guildId) });
             throw error;
         }
     }
@@ -53,38 +58,51 @@ class ReminderRepository extends base_mongo_repository_1.BaseMongoRepository {
     }
     async markAsDelivered(reminderId) {
         try {
-            const updated = await this.update(reminderId, {
+            const validatedReminderId = validation_1.ValidationHelpers.validateOrThrow(validation_1.z.string(), reminderId, 'Reminder ID');
+            const updated = await this.update(validatedReminderId, {
                 deliveredAt: new Date(),
                 isActive: false
             });
             if (updated) {
-                logger_1.logger.info('Reminder marked as delivered', { reminderId });
+                logger_1.logger.info('Reminder marked as delivered', { reminderId: validatedReminderId });
             }
             return updated;
         }
         catch (error) {
-            logger_1.logger.error('Error marking reminder as delivered', { error, reminderId });
+            logger_1.logger.error('Error marking reminder as delivered', { error, reminderId: String(reminderId) });
             throw error;
         }
     }
     async cancelReminder(reminderId) {
         try {
-            const updated = await this.update(reminderId, {
+            const validatedReminderId = validation_1.ValidationHelpers.validateOrThrow(validation_1.z.string(), reminderId, 'Reminder ID');
+            const updated = await this.update(validatedReminderId, {
                 isActive: false
             });
             if (updated) {
-                logger_1.logger.info('Reminder cancelled', { reminderId });
+                logger_1.logger.info('Reminder cancelled', { reminderId: validatedReminderId });
             }
             return updated;
         }
         catch (error) {
-            logger_1.logger.error('Error cancelling reminder', { error, reminderId });
+            logger_1.logger.error('Error cancelling reminder', { error, reminderId: String(reminderId) });
             throw error;
         }
     }
     async searchReminders(filters) {
         try {
-            const query = this.buildSearchQuery(filters);
+            // Create a schema for ReminderSearchFilters
+            const ReminderSearchFiltersSchema = validation_1.z.object({
+                guildId: validation_1.DiscordSnowflakeSchema.optional(),
+                userId: validation_1.DiscordSnowflakeSchema.optional(),
+                isActive: validation_1.z.boolean().optional(),
+                deliveredAt: validation_1.z.date().optional(),
+                scheduledBefore: validation_1.z.date().optional(),
+                scheduledAfter: validation_1.z.date().optional(),
+                caseId: validation_1.z.string().optional(),
+            }).passthrough();
+            const validatedFilters = validation_1.ValidationHelpers.validateOrThrow(ReminderSearchFiltersSchema, filters, 'Reminder search filters');
+            const query = this.buildSearchQuery(validatedFilters);
             return this.findWithComplexFilter(query, { scheduledFor: 1 });
         }
         catch (error) {

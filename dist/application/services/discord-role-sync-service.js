@@ -1,9 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DiscordRoleSyncService = void 0;
-const staff_role_1 = require("../../domain/entities/staff-role");
-const audit_log_1 = require("../../domain/entities/audit-log");
+const staff_role_1 = require("../../domain/entities/staff-role"); // Keep constants
 const logger_1 = require("../../infrastructure/logger");
+const audit_log_1 = require("../../domain/entities/audit-log");
 class DiscordRoleSyncService {
     constructor(staffRepository, auditLogRepository) {
         this.roleMappings = new Map(); // guildId -> mappings
@@ -14,18 +14,27 @@ class DiscordRoleSyncService {
         try {
             const guildId = guild.id;
             const mappings = [];
+            // Define the staff roles as string literals
+            const staffRoles = [
+                'Managing Partner',
+                'Senior Partner',
+                'Junior Partner',
+                'Senior Associate',
+                'Junior Associate',
+                'Paralegal'
+            ];
             // Find Discord roles that match our staff roles
-            for (const staffRole of Object.values(staff_role_1.StaffRole)) {
+            for (const staffRole of staffRoles) {
                 const discordRole = guild.roles.cache.find(role => role.name.toLowerCase() === staffRole.toLowerCase() ||
                     role.name.toLowerCase().replace(/\s+/g, '_') === staffRole.toLowerCase().replace(/\s+/g, '_'));
                 if (discordRole) {
                     mappings.push({
-                        staffRole,
+                        staffRole: staffRole,
                         discordRoleId: discordRole.id,
                         discordRoleName: discordRole.name,
                     });
-                    // Update the role hierarchy with Discord role ID
-                    staff_role_1.ROLE_HIERARCHY[staffRole].discordRoleId = discordRole.id;
+                    // Note: We can't update ROLE_HIERARCHY as it's a const from domain
+                    // This mapping is stored in our local roleMappings instead
                 }
                 else {
                     logger_1.logger.warn(`Discord role not found for staff role: ${staffRole} in guild ${guildId}`);
@@ -74,7 +83,7 @@ class DiscordRoleSyncService {
                 await member.roles.add(targetRole, `Staff role sync by ${actorId}`);
             }
             // Update staff record with Discord role ID
-            await this.staffRepository.update(staff._id.toHexString(), {
+            await this.staffRepository.update(staff._id, {
                 discordRoleId: targetRole.id,
             });
             // Log the sync action

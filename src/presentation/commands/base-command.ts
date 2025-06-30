@@ -178,28 +178,14 @@ export abstract class BaseCommand {
    * Create warning embed with consistent styling
    */
   protected createWarningEmbed(title: string, description: string): EmbedBuilder {
-    return new EmbedBuilder()
-      .setTitle(`⚠️ ${title}`)
-      .setDescription(description)
-      .setColor(0xFFCC00)
-      .setTimestamp();
+    return EmbedUtils.createWarningEmbed(title, description);
   }
 
   /**
    * Create info embed with consistent styling
    */
   protected createInfoEmbed(title: string, description: string, fields?: { name: string; value: string; inline?: boolean }[]): EmbedBuilder {
-    const embed = new EmbedBuilder()
-      .setTitle(`ℹ️ ${title}`)
-      .setDescription(description)
-      .setColor(0x3498db)
-      .setTimestamp();
-
-    if (fields) {
-      embed.addFields(fields);
-    }
-
-    return embed;
+    return EmbedUtils.createInfoEmbed(title, description, fields);
   }
 
   /**

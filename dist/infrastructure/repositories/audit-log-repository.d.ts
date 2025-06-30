@@ -1,5 +1,6 @@
 import { BaseMongoRepository } from './base-mongo-repository';
-import { AuditLog, AuditAction } from '../../domain/entities/audit-log';
+import { AuditLog } from '../../validation';
+import { AuditAction } from '../../domain/entities/audit-log';
 export declare class AuditLogRepository extends BaseMongoRepository<AuditLog> {
     constructor();
     logAction(auditLog: Omit<AuditLog, '_id' | 'createdAt' | 'updatedAt'>): Promise<AuditLog>;

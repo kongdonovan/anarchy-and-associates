@@ -1,5 +1,5 @@
-import { Case, CaseStatus, CasePriority, CaseResult } from '../../domain/entities/case';
 import { BaseMongoRepository } from './base-mongo-repository';
+import { Case, CaseStatus, CasePriority, CaseResult } from '../../validation';
 export interface CaseSearchFilters {
     guildId?: string;
     status?: CaseStatus;
@@ -26,18 +26,18 @@ export interface CasePaginationOptions {
 }
 export declare class CaseRepository extends BaseMongoRepository<Case> {
     constructor();
-    findByCaseNumber(caseNumber: string): Promise<Case | null>;
-    findByClient(clientId: string): Promise<Case[]>;
-    findByStatus(status: CaseStatus): Promise<Case[]>;
-    findByGuildAndStatus(guildId: string, status: CaseStatus): Promise<Case[]>;
-    findByLawyer(lawyerId: string): Promise<Case[]>;
-    findByLeadAttorney(leadAttorneyId: string): Promise<Case[]>;
-    findAssignedToLawyer(lawyerId: string): Promise<Case[]>;
-    searchCases(filters: CaseSearchFilters, sort?: CaseSortOptions, pagination?: CasePaginationOptions): Promise<Case[]>;
-    getActiveCases(guildId: string): Promise<Case[]>;
-    getPendingCases(guildId: string): Promise<Case[]>;
-    getClosedCases(guildId: string): Promise<Case[]>;
-    getCaseStats(guildId: string): Promise<{
+    findByCaseNumber(caseNumber: unknown): Promise<Case | null>;
+    findByClient(clientId: unknown): Promise<Case[]>;
+    findByStatus(status: unknown): Promise<Case[]>;
+    findByGuildAndStatus(guildId: unknown, status: unknown): Promise<Case[]>;
+    findByLawyer(lawyerId: unknown): Promise<Case[]>;
+    findByLeadAttorney(leadAttorneyId: unknown): Promise<Case[]>;
+    findAssignedToLawyer(lawyerId: unknown): Promise<Case[]>;
+    searchCases(filters: unknown, sort?: unknown, pagination?: unknown): Promise<Case[]>;
+    getActiveCases(guildId: unknown): Promise<Case[]>;
+    getPendingCases(guildId: unknown): Promise<Case[]>;
+    getClosedCases(guildId: unknown): Promise<Case[]>;
+    getCaseStats(guildId: unknown): Promise<{
         total: number;
         pending: number;
         open: number;
@@ -47,22 +47,22 @@ export declare class CaseRepository extends BaseMongoRepository<Case> {
         losses: number;
         settlements: number;
     }>;
-    assignLawyer(caseId: string, lawyerId: string): Promise<Case | null>;
-    unassignLawyer(caseId: string, lawyerId: string): Promise<Case | null>;
-    reassignLawyer(fromCaseId: string, toCaseId: string, lawyerId: string): Promise<{
+    assignLawyer(caseId: unknown, lawyerId: unknown): Promise<Case | null>;
+    unassignLawyer(caseId: unknown, lawyerId: unknown): Promise<Case | null>;
+    reassignLawyer(fromCaseId: unknown, toCaseId: unknown, lawyerId: unknown): Promise<{
         fromCase: Case | null;
         toCase: Case | null;
     }>;
-    addDocument(caseId: string, document: Case['documents'][0]): Promise<Case | null>;
-    addNote(caseId: string, note: Case['notes'][0]): Promise<Case | null>;
+    addDocument(caseId: unknown, document: unknown): Promise<Case | null>;
+    addNote(caseId: unknown, note: unknown): Promise<Case | null>;
     /**
      * Find all cases where a user is involved (as client, lead attorney, or assigned lawyer)
      */
-    findCasesByUserId(guildId: string, userId: string): Promise<Case[]>;
+    findCasesByUserId(guildId: unknown, userId: unknown): Promise<Case[]>;
     /**
      * Conditionally update a case only if it matches certain criteria
      * This prevents race conditions by checking and updating in a single atomic operation
      */
-    conditionalUpdate(caseId: string, conditions: Partial<Case>, updates: Partial<Case>): Promise<Case | null>;
+    conditionalUpdate(caseId: unknown, conditions: unknown, updates: unknown): Promise<Case | null>;
 }
 //# sourceMappingURL=case-repository.d.ts.map

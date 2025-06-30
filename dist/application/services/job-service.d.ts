@@ -1,8 +1,6 @@
 import { JobRepository, JobSearchFilters, JobListResult } from '../../infrastructure/repositories/job-repository';
-import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-repository';
 import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
-import { Job, JobQuestion } from '../../domain/entities/job';
-import { StaffRole } from '../../domain/entities/staff-role';
+import { Job, JobQuestion, StaffRole } from '../../validation';
 import { PermissionService, PermissionContext } from './permission-service';
 export interface JobCreateRequest {
     guildId: string;
@@ -25,11 +23,11 @@ export interface JobUpdateRequest {
 }
 export declare class JobService {
     private jobRepository;
-    private auditLogRepository;
     private permissionService;
-    constructor(jobRepository: JobRepository, auditLogRepository: AuditLogRepository, _staffRepository: StaffRepository, // Future use for staff validation
+    constructor(jobRepository: JobRepository, _auditLogRepository: any, // Keep for compatibility but unused
+    _staffRepository: StaffRepository, // Future use for staff validation
     permissionService: PermissionService);
-    createJob(context: PermissionContext, request: JobCreateRequest): Promise<{
+    createJob(context: PermissionContext, request: unknown): Promise<{
         success: boolean;
         job?: Job;
         error?: string;
@@ -39,7 +37,7 @@ export declare class JobService {
         job?: Job;
         error?: string;
     }>;
-    closeJob(context: PermissionContext, jobId: string): Promise<{
+    closeJob(context: PermissionContext, request: unknown): Promise<{
         success: boolean;
         job?: Job;
         error?: string;

@@ -67,6 +67,13 @@ export class MongoDbClient {
     return this.database;
   }
 
+  public getClient(): MongoClient {
+    if (!this.client) {
+      throw new Error('Client not connected. Call connect() first.');
+    }
+    return this.client;
+  }
+
   public isConnected(): boolean {
     return this.client !== null && this.database !== null;
   }

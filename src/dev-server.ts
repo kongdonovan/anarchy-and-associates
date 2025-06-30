@@ -1,13 +1,34 @@
 import 'reflect-metadata';
-import { DIService, MetadataStorage } from "discordx";
+import { Client, DIService, MetadataStorage } from "discordx";
+import { GatewayIntentBits, ActivityType } from "discord.js";
 import { config as envConfig } from "dotenv";
+import { importx } from "@discordx/importer";
 import path from "node:path";
 import watch from "node-watch";
-// import { fileURLToPath } from "url"; // Not needed for CommonJS
 import { logger } from './infrastructure/logger';
 import { MongoDbClient } from './infrastructure/database/mongo-client';
+import { ReminderService } from './application/services/reminder-service';
+import { RoleTrackingService } from './application/services/role-tracking-service';
+import { ReminderRepository } from './infrastructure/repositories/reminder-repository';
+import { CaseRepository } from './infrastructure/repositories/case-repository';
+import { StaffRepository } from './infrastructure/repositories/staff-repository';
 
-// Get __dirname equivalent for CommonJS (since we're compiling to CommonJS)
+// Load environment variables
+envConfig();
+
+// Configuration options
+interface DevServerConfig {
+  hotReload: boolean;
+  guildCommands: boolean;
+}
+
+// Parse configuration from environment or command line
+const config: DevServerConfig = {
+  hotReload: process.env.DEV_HOT_RELOAD !== 'false' && process.argv.includes('--hot'),
+  guildCommands: process.env.DEV_GUILD_COMMANDS !== 'false'
+};
+
+// Get __dirname equivalent for CommonJS
 const currentDirname = __dirname;
 
 // Import pattern for command files
@@ -19,17 +40,11 @@ const importPattern = path.posix.join(
   "*.js"  // We import the compiled JS files
 );
 
-// Bot client instance
-let client: any = null;
+// Bot instances
+let client: Client | null = null;
 let mongoClient: MongoDbClient | null = null;
-
-/**
- * Load all files matching the pattern
- */
-async function loadFiles(src: string): Promise<void> {
-  const { importx } = await import("@discordx/importer");
-  await importx(src);
-}
+let reminderService: ReminderService | null = null;
+let roleTrackingService: RoleTrackingService | null = null;
 
 /**
  * Initialize MongoDB connection
@@ -39,15 +54,49 @@ async function initializeDatabase(): Promise<void> {
     mongoClient = MongoDbClient.getInstance();
     await mongoClient.connect();
     logger.info('MongoDB connected successfully');
+    
+    // Ensure the connection is globally available for command files
+    (global as any).__mongoClient = mongoClient;
   }
+}
+
+/**
+ * Initialize all bot services after database connection
+ */
+function initializeServices(): void {
+  const reminderRepository = new ReminderRepository();
+  const caseRepository = new CaseRepository();
+  const staffRepository = new StaffRepository();
+  reminderService = new ReminderService(reminderRepository, caseRepository, staffRepository);
+  roleTrackingService = new RoleTrackingService();
+  
+  logger.info('Services initialized successfully');
+}
+
+/**
+ * Load all command files matching the pattern
+ */
+async function loadFiles(src: string): Promise<void> {
+  await importx(src);
+  logger.info('Command modules imported successfully');
 }
 
 /**
  * Initialize commands safely, checking for duplicates
  */
-async function initializeCommandsSafely(client: any): Promise<void> {
+async function initializeCommandsSafely(client: Client): Promise<void> {
   try {
     logger.info('Initializing application commands...');
+    
+    if (config.guildCommands) {
+      // Use guild-specific commands for faster development
+      const guildIds = Array.from(client.guilds.cache.keys());
+      logger.info(`Registering guild commands for ${guildIds.length} guilds`);
+      (client as any).botGuilds = guildIds;
+    } else {
+      logger.info('Registering global commands');
+      (client as any).botGuilds = undefined;
+    }
     
     // Check for existing commands first
     let existingCommands;
@@ -63,8 +112,8 @@ async function initializeCommandsSafely(client: any): Promise<void> {
     const localCommands = client.applicationCommands;
     logger.info(`Found ${localCommands.length} local commands to register`);
     
-    if (existingCommands && existingCommands.size > 0) {
-      // Check if commands are already registered and up to date
+    if (existingCommands && existingCommands.size > 0 && config.hotReload) {
+      // In hot reload mode, check if commands need updating
       const needsUpdate = localCommands.some((localCmd: any) => {
         const existingCmd = existingCommands.find((cmd: any) => cmd.name === localCmd.name);
         if (!existingCmd) {
@@ -72,7 +121,6 @@ async function initializeCommandsSafely(client: any): Promise<void> {
           return true;
         }
         
-        // Check if command description changed
         if (existingCmd.description !== localCmd.description) {
           logger.info(`Command ${localCmd.name} description changed`);
           return true;
@@ -81,7 +129,6 @@ async function initializeCommandsSafely(client: any): Promise<void> {
         return false;
       });
       
-      // Check for orphaned commands
       const orphanedCommands = existingCommands.filter((discordCmd: any) => 
         !localCommands.some((localCmd: any) => localCmd.name === discordCmd.name)
       );
@@ -92,17 +139,14 @@ async function initializeCommandsSafely(client: any): Promise<void> {
       
       if (!needsUpdate && orphanedCommands.size === 0) {
         logger.info('All commands are already up to date, skipping registration');
-      } else {
-        logger.info('Command differences detected, updating commands...');
-        await client.initApplicationCommands();
-        logger.info('Slash commands updated successfully');
+        return;
       }
-    } else {
-      // No existing commands or couldn't fetch them, proceed with normal registration
-      logger.info('No existing commands found, registering all commands...');
-      await client.initApplicationCommands();
-      logger.info('Slash commands initialized successfully');
     }
+    
+    // Initialize commands
+    await client.initApplicationCommands();
+    logger.info('Slash commands initialized successfully');
+    
   } catch (error) {
     logger.error('Error initializing commands:', error);
   }
@@ -116,9 +160,6 @@ async function initializeClient(): Promise<void> {
     return; // Already initialized
   }
 
-  const { Client } = await import("discordx");
-  const { GatewayIntentBits } = await import("discord.js");
-
   client = new Client({
     intents: [
       GatewayIntentBits.Guilds,
@@ -130,9 +171,26 @@ async function initializeClient(): Promise<void> {
   });
 
   client.once('ready', async () => {
-    if (!client.user) return;
+    if (!client || !client.user) return;
     
     logger.info(`Bot logged in as ${client.user.tag}`);
+    
+    // Set bot activity
+    client.user.setActivity('Managing Legal Operations', {
+      type: ActivityType.Watching,
+    });
+
+    // Initialize reminder service with Discord client
+    if (reminderService) {
+      reminderService.setDiscordClient(client);
+      logger.info('Reminder service integrated with Discord client');
+    }
+
+    // Initialize role tracking service
+    if (roleTrackingService) {
+      roleTrackingService.initializeTracking(client);
+      logger.info('Role tracking service initialized');
+    }
     
     // Initialize slash commands with smart duplicate prevention
     await initializeCommandsSafely(client);
@@ -140,7 +198,9 @@ async function initializeClient(): Promise<void> {
 
   client.on('interactionCreate', async (interaction: any) => {
     try {
-      client.executeInteraction(interaction);
+      if (client) {
+        client.executeInteraction(interaction);
+      }
     } catch (error) {
       logger.error('Error executing interaction:', error);
     }
@@ -156,7 +216,7 @@ async function initializeClient(): Promise<void> {
 }
 
 /**
- * Reload discordx metadata and events
+ * Reload discordx metadata and events (for hot reload)
  */
 async function reload(): Promise<void> {
   try {
@@ -175,7 +235,7 @@ async function reload(): Promise<void> {
       // Rebuild metadata
       await MetadataStorage.instance.build();
       
-      // Re-initialize commands safely (checking for duplicates)
+      // Re-initialize commands safely
       await initializeCommandsSafely(client);
       
       logger.info("> Reload success");
@@ -190,11 +250,13 @@ async function reload(): Promise<void> {
  */
 async function runDevServer(): Promise<void> {
   try {
-    // Load environment variables
-    envConfig();
+    logger.info('Starting development server with config:', config);
     
-    // Initialize database first
+    // Initialize database first (critical for command file imports)
     await initializeDatabase();
+    
+    // Initialize services that depend on database connection
+    initializeServices();
     
     // Load initial command files
     await loadFiles(importPattern);
@@ -202,8 +264,8 @@ async function runDevServer(): Promise<void> {
     // Initialize Discord client
     await initializeClient();
 
-    // Setup hot reload in development
-    if (process.env.NODE_ENV !== "production") {
+    // Setup hot reload if enabled
+    if (config.hotReload) {
       logger.info("> Hot-Module-Reload enabled. Project will rebuild and reload on changes.");
       logger.info("Watching src/ for changes...");
       
@@ -239,6 +301,8 @@ async function runDevServer(): Promise<void> {
           }
         }
       );
+    } else {
+      logger.info('Hot reload disabled. Restart server to see changes.');
     }
 
     logger.info('Development server started successfully');

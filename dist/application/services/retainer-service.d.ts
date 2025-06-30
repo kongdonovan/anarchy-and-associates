@@ -1,4 +1,5 @@
-import { Retainer, RetainerCreationRequest, RetainerSignatureRequest, FormattedRetainerAgreement } from '../../domain/entities/retainer';
+import { FormattedRetainerAgreement } from '../../domain/entities/retainer';
+import { Retainer } from '../../validation';
 import { RetainerRepository } from '../../infrastructure/repositories/retainer-repository';
 import { GuildConfigRepository } from '../../infrastructure/repositories/guild-config-repository';
 import { RobloxService } from '../../infrastructure/external/roblox-service';
@@ -9,8 +10,8 @@ export declare class RetainerService {
     private robloxService;
     private permissionService;
     constructor(retainerRepository: RetainerRepository, guildConfigRepository: GuildConfigRepository, robloxService: RobloxService, permissionService: PermissionService);
-    createRetainer(context: PermissionContext, request: RetainerCreationRequest): Promise<Retainer>;
-    signRetainer(request: RetainerSignatureRequest): Promise<Retainer>;
+    createRetainer(context: PermissionContext, request: unknown): Promise<Retainer>;
+    signRetainer(request: unknown): Promise<Retainer>;
     cancelRetainer(context: PermissionContext, retainerId: string): Promise<Retainer>;
     getActiveRetainers(context: PermissionContext): Promise<Retainer[]>;
     getPendingRetainers(context: PermissionContext): Promise<Retainer[]>;

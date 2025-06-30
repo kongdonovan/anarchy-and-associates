@@ -2,12 +2,12 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ChannelPermissionManager = void 0;
 const discord_js_1 = require("discord.js");
-const staff_role_1 = require("../../domain/entities/staff-role");
-const audit_log_1 = require("../../domain/entities/audit-log");
+const staff_role_1 = require("../../domain/entities/staff-role"); // Keep utility functions and enum
 const logger_1 = require("../../infrastructure/logger");
 const case_1 = require("../../domain/entities/case");
+const audit_log_1 = require("../../domain/entities/audit-log");
 class ChannelPermissionManager {
-    constructor(caseRepository, staffRepository, auditLogRepository, businessRuleValidationService) {
+    constructor(caseRepository, staffRepository, auditLogRepository, validationService) {
         // Channel type patterns for automatic detection
         this.CHANNEL_PATTERNS = {
             case: /^case-|^aa-\d{4}-\d+-/i,
@@ -118,7 +118,7 @@ class ChannelPermissionManager {
         this.caseRepository = caseRepository;
         this.staffRepository = staffRepository;
         this.auditLogRepository = auditLogRepository;
-        this.businessRuleValidationService = businessRuleValidationService;
+        this.validationService = validationService;
     }
     /**
      * Handle role change and update all relevant channel permissions
@@ -334,8 +334,20 @@ class ChannelPermissionManager {
                 return false;
             // If channel requires a specific permission, validate it
             if (rolePermissions.requiredPermission) {
-                const permissionValidation = await this.businessRuleValidationService.validatePermission(context, rolePermissions.requiredPermission);
-                return permissionValidation.valid;
+                // Use validation service to check permission with correct format
+                const validationResult = await this.validationService.validate({
+                    permissionContext: context,
+                    entityType: 'permission',
+                    operation: 'validate',
+                    data: {
+                        userId: context.userId,
+                        guildId: context.guildId
+                    },
+                    metadata: {
+                        requiredPermission: rolePermissions.requiredPermission
+                    }
+                });
+                return validationResult.valid;
             }
             // If channel requires a specific role, check role hierarchy
             if (rolePermissions.requiredRole) {

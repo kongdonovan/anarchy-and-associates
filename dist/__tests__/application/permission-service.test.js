@@ -8,15 +8,15 @@ describe('PermissionService', () => {
     let permissionService;
     let mockRepository;
     const testContext = {
-        guildId: 'test_guild_123',
-        userId: 'user_123',
-        userRoles: ['role_1', 'role_2'],
+        guildId: '123456789012345678',
+        userId: '234567890123456789',
+        userRoles: ['345678901234567890', '456789012345678901'],
         isGuildOwner: false,
     };
     const mockConfig = {
-        guildId: 'test_guild_123',
-        adminUsers: ['admin_user_1'],
-        adminRoles: ['admin_role_1'],
+        guildId: '123456789012345678',
+        adminUsers: ['567890123456789012'],
+        adminRoles: ['678901234567890123'],
         permissions: {
             admin: ['admin_role_1'],
             'senior-staff': ['senior_staff_role_1'], // Updated from hr

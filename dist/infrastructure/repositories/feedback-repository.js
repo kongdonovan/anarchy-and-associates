@@ -2,7 +2,6 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.FeedbackRepository = void 0;
 const base_mongo_repository_1 = require("./base-mongo-repository");
-const feedback_1 = require("../../domain/entities/feedback");
 const logger_1 = require("../logger");
 class FeedbackRepository extends base_mongo_repository_1.BaseMongoRepository {
     constructor() {
@@ -85,14 +84,20 @@ class FeedbackRepository extends base_mongo_repository_1.BaseMongoRepository {
             const averageRating = parseFloat((totalRating / totalFeedback).toFixed(2));
             // Rating distribution
             const ratingDistribution = {
-                [feedback_1.FeedbackRating.ONE_STAR]: 0,
-                [feedback_1.FeedbackRating.TWO_STAR]: 0,
-                [feedback_1.FeedbackRating.THREE_STAR]: 0,
-                [feedback_1.FeedbackRating.FOUR_STAR]: 0,
-                [feedback_1.FeedbackRating.FIVE_STAR]: 0
+                1: 0,
+                2: 0,
+                3: 0,
+                4: 0,
+                5: 0
             };
             feedback.forEach(f => {
-                ratingDistribution[f.rating]++;
+                if (f.rating && f.rating >= 1 && f.rating <= 5) {
+                    const rating = f.rating;
+                    const current = ratingDistribution[rating];
+                    if (current !== undefined) {
+                        ratingDistribution[rating] = current + 1;
+                    }
+                }
             });
             // Recent feedback (last 5)
             const recentFeedback = feedback
@@ -103,8 +108,8 @@ class FeedbackRepository extends base_mongo_repository_1.BaseMongoRepository {
                 staffUsername: feedback[0]?.targetStaffUsername || '',
                 totalFeedback,
                 averageRating,
-                ratingDistribution,
-                recentFeedback
+                ratingDistribution: ratingDistribution,
+                recentFeedback: recentFeedback
             };
         }
         catch (error) {
@@ -126,14 +131,20 @@ class FeedbackRepository extends base_mongo_repository_1.BaseMongoRepository {
                 : 0;
             // Overall rating distribution
             const ratingDistribution = {
-                [feedback_1.FeedbackRating.ONE_STAR]: 0,
-                [feedback_1.FeedbackRating.TWO_STAR]: 0,
-                [feedback_1.FeedbackRating.THREE_STAR]: 0,
-                [feedback_1.FeedbackRating.FOUR_STAR]: 0,
-                [feedback_1.FeedbackRating.FIVE_STAR]: 0
+                1: 0,
+                2: 0,
+                3: 0,
+                4: 0,
+                5: 0
             };
             allFeedback.forEach(f => {
-                ratingDistribution[f.rating]++;
+                if (f.rating && f.rating >= 1 && f.rating <= 5) {
+                    const rating = f.rating;
+                    const current = ratingDistribution[rating];
+                    if (current !== undefined) {
+                        ratingDistribution[rating] = current + 1;
+                    }
+                }
             });
             // Get unique staff members who have received feedback
             const uniqueStaffIds = [...new Set(staffFeedback
@@ -151,9 +162,9 @@ class FeedbackRepository extends base_mongo_repository_1.BaseMongoRepository {
                 guildId,
                 totalFeedback,
                 averageRating,
-                staffMetrics,
-                firmWideFeedback,
-                ratingDistribution
+                staffMetrics: staffMetrics,
+                firmWideFeedback: firmWideFeedback,
+                ratingDistribution: ratingDistribution
             };
         }
         catch (error) {

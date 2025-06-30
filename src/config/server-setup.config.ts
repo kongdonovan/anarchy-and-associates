@@ -18,13 +18,13 @@ const INFORMATION_CATEGORY = {
   ],
 };
 
-const CLIENT_SERVICES_CATEGORY = {
-  name: 'Client Services',
+const LOBBY_CATEGORY = {
+  name: 'Lobby',
   channels: [
-    { name: 'client-lobby', type: ChannelType.GuildText },
+    { name: 'general-chat', type: ChannelType.GuildText },
     { name: 'bot-commands', type: ChannelType.GuildText },
     { name: 'feedback', type: ChannelType.GuildText },
-    { name: 'client-voice', type: ChannelType.GuildVoice },
+    { name: 'voice-lobby', type: ChannelType.GuildVoice },
   ],
 };
 
@@ -322,7 +322,7 @@ export interface AnarchyServerConfig {
 export const ANARCHY_SERVER_CONFIG: AnarchyServerConfig = {
   categories: [
     INFORMATION_CATEGORY,
-    CLIENT_SERVICES_CATEGORY,
+    LOBBY_CATEGORY,
     CASE_REVIEWS_CATEGORY,
     CASE_ARCHIVES_CATEGORY,
     LEGAL_TEAM_CATEGORY,
@@ -362,4 +362,75 @@ export const DEFAULT_CHANNEL_MAPPINGS: Record<
   applicationChannelId: { name: 'applications', type: 'GUILD_TEXT' },
   retainerChannelId: { name: 'signed-retainers', type: 'GUILD_TEXT' },
   caseArchiveCategoryId: { name: 'Case Archives', type: 'GUILD_CATEGORY' },
+  defaultInformationChannelId: { name: 'welcome', type: 'GUILD_TEXT' },
+  defaultRulesChannelId: { name: 'rules', type: 'GUILD_TEXT' },
+};
+
+/**
+ * Category permission configurations for server setup
+ * Defines how each category should be configured for different user groups
+ */
+export const CATEGORY_PERMISSIONS = {
+  'Information': {
+    // Information channels are read-only for everyone
+    everyone: {
+      allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory],
+      deny: [PermissionFlagsBits.SendMessages, PermissionFlagsBits.CreatePublicThreads, PermissionFlagsBits.CreatePrivateThreads]
+    },
+    // Staff can manage messages in information channels
+    staff: {
+      allow: [PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AttachFiles]
+    }
+  },
+  'Lobby': {
+    // Lobby is fully accessible to everyone
+    everyone: {
+      allow: [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.SendMessages,
+        PermissionFlagsBits.ReadMessageHistory,
+        PermissionFlagsBits.AddReactions,
+        PermissionFlagsBits.UseExternalEmojis,
+        PermissionFlagsBits.AttachFiles,
+        PermissionFlagsBits.EmbedLinks,
+        PermissionFlagsBits.Connect, // For voice channels
+        PermissionFlagsBits.Speak    // For voice channels
+      ],
+      deny: []
+    }
+  },
+  'Legal Team': {
+    // Legal team channels are restricted to legal staff only
+    everyone: {
+      deny: [PermissionFlagsBits.ViewChannel]
+    },
+    legalRoles: ['Managing Partner', 'Senior Partner', 'Partner', 'Senior Associate', 'Associate', 'Paralegal']
+  },
+  'Staff': {
+    // Staff channels are restricted to all staff members
+    everyone: {
+      deny: [PermissionFlagsBits.ViewChannel]
+    },
+    staffRoles: ['Managing Partner', 'Senior Partner', 'Partner', 'Senior Associate', 'Associate', 'Paralegal', 'Hiring Staff']
+  },
+  'Administration': {
+    // Admin channels are restricted to senior staff only
+    everyone: {
+      deny: [PermissionFlagsBits.ViewChannel]
+    },
+    adminRoles: ['Managing Partner', 'Senior Partner', 'Partner']
+  },
+  'Case Reviews': {
+    // Case channels have special permissions set per channel
+    everyone: {
+      deny: [PermissionFlagsBits.ViewChannel]
+    }
+  },
+  'Case Archives': {
+    // Archived cases are view-only for authorized staff
+    everyone: {
+      deny: [PermissionFlagsBits.ViewChannel]
+    },
+    archiveViewRoles: ['Managing Partner', 'Senior Partner', 'Partner']
+  }
 };

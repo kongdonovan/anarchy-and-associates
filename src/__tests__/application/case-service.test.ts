@@ -3,16 +3,14 @@ import { CaseRepository, CaseSortOptions } from '../../infrastructure/repositori
 import { CaseCounterRepository } from '../../infrastructure/repositories/case-counter-repository';
 import { GuildConfigRepository } from '../../infrastructure/repositories/guild-config-repository';
 import { PermissionService, PermissionContext } from '../../application/services/permission-service';
-import { BusinessRuleValidationService } from '../../application/services/business-rule-validation-service';
+import { UnifiedValidationService } from '../../application/validation/unified-validation-service';
 import { 
   Case, 
-  CaseStatus, 
-  CasePriority, 
-  CaseResult, 
   CaseCreationRequest,
   CaseAssignmentRequest,
   CaseClosureRequest
-} from '../../domain/entities/case';
+} from '../../validation';
+
 import { TestUtils } from '../helpers/test-utils';
 
 
@@ -26,13 +24,13 @@ describe('CaseService Unit Tests', () => {
   let mockCaseCounterRepository: jest.Mocked<CaseCounterRepository>;
   let mockGuildConfigRepository: jest.Mocked<GuildConfigRepository>;
   let mockPermissionService: jest.Mocked<PermissionService>;
-  let mockBusinessRuleValidationService: jest.Mocked<BusinessRuleValidationService>;
+  let mockUnifiedValidationService: jest.Mocked<UnifiedValidationService>;
   let mockPermissionContext: PermissionContext;
 
   // Test data constants
-  const testGuildId = '123456789012345678';
-  const testClientId = '234567890123456789';
-  const testLawyerId = '345678901234567890';
+  const testGuildId = '12345678901234567890';
+  const testClientId = '23456789012345678901';
+  const testLawyerId = '34567890123456789012';
   const testCaseId = TestUtils.generateObjectId().toString();
   const currentYear = new Date().getFullYear();
 
@@ -74,18 +72,16 @@ describe('CaseService Unit Tests', () => {
       hasLeadAttorneyPermissionWithContext: jest.fn()
     } as jest.Mocked<Partial<PermissionService>> as jest.Mocked<PermissionService>;
 
-    mockBusinessRuleValidationService = {
-      validateClientCaseLimit: jest.fn(),
-      validateStaffMember: jest.fn(),
-      validatePermission: jest.fn()
-    } as jest.Mocked<Partial<BusinessRuleValidationService>> as jest.Mocked<BusinessRuleValidationService>;
+    mockUnifiedValidationService = {
+      validate: jest.fn()
+    } as jest.Mocked<Partial<UnifiedValidationService>> as jest.Mocked<UnifiedValidationService>;
 
     caseService = new CaseService(
       mockCaseRepository,
       mockCaseCounterRepository,
       mockGuildConfigRepository,
       mockPermissionService,
-      mockBusinessRuleValidationService
+      mockUnifiedValidationService
     );
 
     jest.clearAllMocks();
@@ -98,21 +94,21 @@ describe('CaseService Unit Tests', () => {
       clientUsername: 'testclient',
       title: 'Test Case',
       description: 'Test case description',
-      priority: CasePriority.HIGH
+      priority: 'high' as const
     };
 
     const mockCreatedCase: Case = TestUtils.generateMockCase({
-      _id: TestUtils.generateObjectId(),
+      _id: TestUtils.generateObjectId().toString(),
       guildId: testGuildId,
-      caseNumber: '2025-0001-testclient',
+      caseNumber: 'AA-2025-0001-testclient',
       createdAt: new Date(),
       updatedAt: new Date(),
       clientId: testClientId,
       clientUsername: 'testclient',
       title: 'Test Case',
       description: 'Test case description',
-      status: CaseStatus.PENDING,
-      priority: CasePriority.HIGH
+      status: 'pending' as const,
+      priority: 'high' as const
     });
 
     it('should create a case successfully with all required fields', async () => {
@@ -120,27 +116,28 @@ describe('CaseService Unit Tests', () => {
       mockCaseRepository.add.mockResolvedValue(mockCreatedCase);
 
       mockPermissionService.hasActionPermission.mockResolvedValue(true);
-      mockBusinessRuleValidationService.validateClientCaseLimit.mockResolvedValue({
+      mockUnifiedValidationService.validate.mockResolvedValue({
         valid: true,
-        errors: [],
-        warnings: [],
-        bypassAvailable: false,
-        currentCases: 0,
-        maxCases: 3,
-        clientId: testClientId
+        issues: [],
+        metadata: {
+          currentCases: 0,
+          maxCases: 3,
+          clientId: testClientId
+        },
+        strategyResults: new Map()
       });
       const result = await caseService.createCase(mockPermissionContext, mockCaseRequest);
 
       expect(mockCaseCounterRepository.getNextCaseNumber).toHaveBeenCalledWith(testGuildId);
       expect(mockCaseRepository.add).toHaveBeenCalledWith({
         guildId: testGuildId,
-        caseNumber: `${currentYear}-0001-testclient`,
+        caseNumber: `AA-${currentYear}-0001-testclient`,
         clientId: testClientId,
         clientUsername: 'testclient',
         title: 'Test Case',
         description: 'Test case description',
-        status: CaseStatus.PENDING,
-        priority: CasePriority.HIGH,
+        status: 'pending' as const,
+        priority: 'high' as const,
         assignedLawyerIds: [],
         documents: [],
         notes: []
@@ -149,30 +146,36 @@ describe('CaseService Unit Tests', () => {
     });
 
     it('should create case with default medium priority when not specified', async () => {
-      const requestWithoutPriority = { ...mockCaseRequest };
-      delete requestWithoutPriority.priority;
+      const requestWithoutPriority = {
+        guildId: mockCaseRequest.guildId,
+        clientId: mockCaseRequest.clientId,
+        clientUsername: mockCaseRequest.clientUsername,
+        title: mockCaseRequest.title,
+        description: mockCaseRequest.description
+      };
 
       mockCaseCounterRepository.getNextCaseNumber.mockResolvedValue(1);
       mockCaseRepository.add.mockResolvedValue({
         ...mockCreatedCase,
-        priority: CasePriority.MEDIUM
+        priority: 'medium' as const
       });
 
       mockPermissionService.hasActionPermission.mockResolvedValue(true);
-      mockBusinessRuleValidationService.validateClientCaseLimit.mockResolvedValue({
+      mockUnifiedValidationService.validate.mockResolvedValue({
         valid: true,
-        errors: [],
-        warnings: [],
-        bypassAvailable: false,
-        currentCases: 0,
-        maxCases: 3,
-        clientId: testClientId
+        issues: [],
+        metadata: {
+          currentCases: 0,
+          maxCases: 3,
+          clientId: testClientId
+        },
+        strategyResults: new Map()
       });
       await caseService.createCase(mockPermissionContext, requestWithoutPriority);
 
       expect(mockCaseRepository.add).toHaveBeenCalledWith(
         expect.objectContaining({
-          priority: CasePriority.MEDIUM
+          priority: 'medium' as const
         })
       );
     });
@@ -181,24 +184,25 @@ describe('CaseService Unit Tests', () => {
       mockCaseCounterRepository.getNextCaseNumber.mockResolvedValue(42);
       mockCaseRepository.add.mockResolvedValue({
         ...mockCreatedCase,
-        caseNumber: `${currentYear}-0042-testclient`
+        caseNumber: `AA-${currentYear}-0042-testclient`
       });
 
       mockPermissionService.hasActionPermission.mockResolvedValue(true);
-      mockBusinessRuleValidationService.validateClientCaseLimit.mockResolvedValue({
+      mockUnifiedValidationService.validate.mockResolvedValue({
         valid: true,
-        errors: [],
-        warnings: [],
-        bypassAvailable: false,
-        currentCases: 0,
-        maxCases: 3,
-        clientId: testClientId
+        issues: [],
+        metadata: {
+          currentCases: 0,
+          maxCases: 3,
+          clientId: testClientId
+        },
+        strategyResults: new Map()
       });
       await caseService.createCase(mockPermissionContext, mockCaseRequest);
 
       expect(mockCaseRepository.add).toHaveBeenCalledWith(
         expect.objectContaining({
-          caseNumber: `${currentYear}-0042-testclient`
+          caseNumber: `AA-${currentYear}-0042-testclient`
         })
       );
     });
@@ -213,38 +217,40 @@ describe('CaseService Unit Tests', () => {
       mockCaseRepository.add.mockResolvedValue({
         ...mockCreatedCase,
         clientUsername: 'test-client_123',
-        caseNumber: `${currentYear}-0001-test-client_123`
+        caseNumber: `AA-${currentYear}-0001-test-client_123`
       });
 
       mockPermissionService.hasActionPermission.mockResolvedValue(true);
-      mockBusinessRuleValidationService.validateClientCaseLimit.mockResolvedValue({
+      mockUnifiedValidationService.validate.mockResolvedValue({
         valid: true,
-        errors: [],
-        warnings: [],
-        bypassAvailable: false,
-        currentCases: 0,
-        maxCases: 3,
-        clientId: testClientId
+        issues: [],
+        metadata: {
+          currentCases: 0,
+          maxCases: 3,
+          clientId: testClientId
+        },
+        strategyResults: new Map()
       });
       await caseService.createCase(mockPermissionContext, requestWithSpecialChars);
 
       expect(mockCaseRepository.add).toHaveBeenCalledWith(
         expect.objectContaining({
-          caseNumber: `${currentYear}-0001-test-client_123`
+          caseNumber: `AA-${currentYear}-0001-test-client_123`
         })
       );
     });
 
     it('should throw error when case counter fails', async () => {
       mockPermissionService.hasActionPermission.mockResolvedValue(true);
-      mockBusinessRuleValidationService.validateClientCaseLimit.mockResolvedValue({
+      mockUnifiedValidationService.validate.mockResolvedValue({
         valid: true,
-        errors: [],
-        warnings: [],
-        bypassAvailable: false,
-        currentCases: 0,
-        maxCases: 3,
-        clientId: testClientId
+        issues: [],
+        metadata: {
+          currentCases: 0,
+          maxCases: 3,
+          clientId: testClientId
+        },
+        strategyResults: new Map()
       });
       mockCaseCounterRepository.getNextCaseNumber.mockRejectedValue(
         new Error('Counter service unavailable')
@@ -258,14 +264,15 @@ describe('CaseService Unit Tests', () => {
 
     it('should throw error when repository add fails', async () => {
       mockPermissionService.hasActionPermission.mockResolvedValue(true);
-      mockBusinessRuleValidationService.validateClientCaseLimit.mockResolvedValue({
+      mockUnifiedValidationService.validate.mockResolvedValue({
         valid: true,
-        errors: [],
-        warnings: [],
-        bypassAvailable: false,
-        currentCases: 0,
-        maxCases: 3,
-        clientId: testClientId
+        issues: [],
+        metadata: {
+          currentCases: 0,
+          maxCases: 3,
+          clientId: testClientId
+        },
+        strategyResults: new Map()
       });
       mockCaseCounterRepository.getNextCaseNumber.mockResolvedValue(1);
       mockCaseRepository.add.mockRejectedValue(new Error('Database error'));
@@ -288,14 +295,15 @@ describe('CaseService Unit Tests', () => {
       });
 
       mockPermissionService.hasActionPermission.mockResolvedValue(true);
-      mockBusinessRuleValidationService.validateClientCaseLimit.mockResolvedValue({
+      mockUnifiedValidationService.validate.mockResolvedValue({
         valid: true,
-        errors: [],
-        warnings: [],
-        bypassAvailable: false,
-        currentCases: 0,
-        maxCases: 3,
-        clientId: testClientId
+        issues: [],
+        metadata: {
+          currentCases: 0,
+          maxCases: 3,
+          clientId: testClientId
+        },
+        strategyResults: new Map()
       });
       await caseService.createCase(mockPermissionContext, requestWithLongDescription);
 
@@ -310,36 +318,32 @@ describe('CaseService Unit Tests', () => {
   describe('assignLawyer', () => {
     const mockAssignmentRequest: CaseAssignmentRequest = {
       caseId: testCaseId,
-      lawyerId: testLawyerId,
-      assignedBy: 'admin-123'
+      lawyerIds: [testLawyerId],
+      assignedBy: '12345678901234567890'
     };
 
     const mockAssignedCase: Case = TestUtils.generateMockCase({
-      _id: TestUtils.generateObjectId(),
+      _id: TestUtils.generateObjectId().toString(),
       guildId: testGuildId,
-      caseNumber: '2025-0001-testclient',
+      caseNumber: 'AA-2025-0001-testclient',
       createdAt: new Date(),
       updatedAt: new Date(),
       clientId: testClientId,
       clientUsername: 'testclient',
       title: 'Test Case',
       description: 'Test case description',
-      status: CaseStatus.IN_PROGRESS,
-      priority: CasePriority.HIGH,
+      status: 'in-progress' as const,
+      priority: 'high' as const,
       leadAttorneyId: testLawyerId,
       assignedLawyerIds: [testLawyerId]
     });
 
     it('should assign lawyer successfully', async () => {
       mockPermissionService.hasActionPermission.mockResolvedValue(true);
-      mockBusinessRuleValidationService.validatePermission.mockResolvedValue({
+      mockUnifiedValidationService.validate.mockResolvedValue({
         valid: true,
-        errors: [],
-        warnings: [],
-        bypassAvailable: false,
-        hasPermission: true,
-        requiredPermission: 'lawyer',
-        grantedPermissions: ['lawyer']
+        issues: [],
+        strategyResults: new Map()
       });
       mockCaseRepository.assignLawyer.mockResolvedValue(mockAssignedCase);
 
@@ -354,14 +358,10 @@ describe('CaseService Unit Tests', () => {
 
     it('should throw error when case not found for assignment', async () => {
       mockPermissionService.hasActionPermission.mockResolvedValue(true);
-      mockBusinessRuleValidationService.validatePermission.mockResolvedValue({
+      mockUnifiedValidationService.validate.mockResolvedValue({
         valid: true,
-        errors: [],
-        warnings: [],
-        bypassAvailable: false,
-        hasPermission: true,
-        requiredPermission: 'lawyer',
-        grantedPermissions: ['lawyer']
+        issues: [],
+        strategyResults: new Map()
       });
       mockCaseRepository.assignLawyer.mockResolvedValue(null);
 
@@ -371,14 +371,10 @@ describe('CaseService Unit Tests', () => {
 
     it('should throw error when assignment fails in repository', async () => {
       mockPermissionService.hasActionPermission.mockResolvedValue(true);
-      mockBusinessRuleValidationService.validatePermission.mockResolvedValue({
+      mockUnifiedValidationService.validate.mockResolvedValue({
         valid: true,
-        errors: [],
-        warnings: [],
-        bypassAvailable: false,
-        hasPermission: true,
-        requiredPermission: 'lawyer',
-        grantedPermissions: ['lawyer']
+        issues: [],
+        strategyResults: new Map()
       });
       mockCaseRepository.assignLawyer.mockRejectedValue(
         new Error('Assignment constraint violation')
@@ -391,17 +387,17 @@ describe('CaseService Unit Tests', () => {
 
   describe('unassignLawyer', () => {
     const mockUnassignedCase: Case = TestUtils.generateMockCase({
-      _id: TestUtils.generateObjectId(),
+      _id: TestUtils.generateObjectId().toString(),
       guildId: testGuildId,
-      caseNumber: '2025-0001-testclient',
+      caseNumber: 'AA-2025-0001-testclient',
       createdAt: new Date(),
       updatedAt: new Date(),
       clientId: testClientId,
       clientUsername: 'testclient',
       title: 'Test Case',
       description: 'Test case description',
-      status: CaseStatus.IN_PROGRESS,
-      priority: CasePriority.HIGH,
+      status: 'in-progress' as const,
+      priority: 'high' as const,
       leadAttorneyId: undefined,
       assignedLawyerIds: []
     });
@@ -431,7 +427,7 @@ describe('CaseService Unit Tests', () => {
       mockCaseRepository.unassignLawyer.mockResolvedValue(mockUnassignedCase);
 
       mockPermissionService.hasActionPermission.mockResolvedValue(true);
-      const result = await caseService.unassignLawyer(mockPermissionContext, testCaseId, 'non-existent-lawyer');
+      const result = await caseService.unassignLawyer(mockPermissionContext, testCaseId, '89012345678901234567');
 
       expect(result).toEqual(mockUnassignedCase);
     });
@@ -442,35 +438,35 @@ describe('CaseService Unit Tests', () => {
     const toCaseId = TestUtils.generateObjectId().toString();
     
     const mockFromCase: Case = TestUtils.generateMockCase({
-      _id: TestUtils.generateObjectId(),
+      _id: TestUtils.generateObjectId().toString(),
       guildId: testGuildId,
-      caseNumber: '2025-0001-testclient',
+      caseNumber: 'AA-2025-0001-testclient',
       createdAt: new Date(),
       updatedAt: new Date(),
       clientId: testClientId,
       clientUsername: 'testclient',
       title: 'From Case',
       description: 'Source case description',
-      status: CaseStatus.IN_PROGRESS,
-      priority: CasePriority.HIGH,
-      leadAttorneyId: 'other-lawyer',
-      assignedLawyerIds: ['other-lawyer']
+      status: 'in-progress' as const,
+      priority: 'high' as const,
+      leadAttorneyId: '56789012345678901234',
+      assignedLawyerIds: ['56789012345678901234']
     });
 
     const mockToCase: Case = TestUtils.generateMockCase({
-      _id: TestUtils.generateObjectId(),
+      _id: TestUtils.generateObjectId().toString(),
       guildId: testGuildId,
-      caseNumber: '2025-0002-otherclient',
+      caseNumber: 'AA-2025-0002-otherclient',
       createdAt: new Date(),
       updatedAt: new Date(),
-      clientId: 'other-client',
+      clientId: '45678901234567890123',
       clientUsername: 'otherclient',
       title: 'To Case',
       description: 'Target case description',
-      status: CaseStatus.IN_PROGRESS,
-      priority: CasePriority.MEDIUM,
-      leadAttorneyId: 'lead-lawyer',
-      assignedLawyerIds: ['lead-lawyer', testLawyerId]
+      status: 'in-progress' as const,
+      priority: 'medium' as const,
+      leadAttorneyId: '67890123456789012345',
+      assignedLawyerIds: ['67890123456789012345', testLawyerId]
     });
 
     it('should reassign lawyer between cases successfully', async () => {
@@ -517,17 +513,17 @@ describe('CaseService Unit Tests', () => {
 
   describe('updateCaseStatus', () => {
     const mockUpdatedCase: Case = TestUtils.generateMockCase({
-      _id: TestUtils.generateObjectId(),
+      _id: TestUtils.generateObjectId().toString(),
       guildId: testGuildId,
-      caseNumber: '2025-0001-testclient',
+      caseNumber: 'AA-2025-0001-testclient',
       createdAt: new Date(),
       updatedAt: new Date(),
       clientId: testClientId,
       clientUsername: 'testclient',
       title: 'Test Case',
       description: 'Test case description',
-      status: CaseStatus.IN_PROGRESS,
-      priority: CasePriority.HIGH,
+      status: 'in-progress' as const,
+      priority: 'high' as const,
       leadAttorneyId: testLawyerId,
       assignedLawyerIds: [testLawyerId]
     });
@@ -539,11 +535,11 @@ describe('CaseService Unit Tests', () => {
       const result = await caseService.updateCaseStatus(
         mockPermissionContext,
         testCaseId,
-        CaseStatus.IN_PROGRESS
+        'in-progress' as const
       );
 
       expect(mockCaseRepository.update).toHaveBeenCalledWith(testCaseId, {
-        status: CaseStatus.IN_PROGRESS
+        status: 'in-progress' as const
       });
       expect(result).toEqual(mockUpdatedCase);
     });
@@ -555,7 +551,7 @@ describe('CaseService Unit Tests', () => {
       await expect(caseService.updateCaseStatus(
         mockPermissionContext,
         testCaseId,
-        CaseStatus.IN_PROGRESS
+        'in-progress' as const
       )).rejects.toThrow('Case not found');
     });
 
@@ -570,7 +566,7 @@ describe('CaseService Unit Tests', () => {
       await expect(caseService.updateCaseStatus(
         mockPermissionContext,
         testCaseId,
-        CaseStatus.CLOSED
+        'closed' as const
       )).rejects.toThrow('Invalid status transition');
     });
   });
@@ -578,26 +574,26 @@ describe('CaseService Unit Tests', () => {
   describe('closeCase', () => {
     const mockClosureRequest: CaseClosureRequest = {
       caseId: testCaseId,
-      result: CaseResult.WIN,
+      result: 'win' as const,
       resultNotes: 'Successfully resolved for client',
       closedBy: testLawyerId
     };
 
     const mockClosedCase: Case = TestUtils.generateMockCase({
-      _id: TestUtils.generateObjectId(),
+      _id: TestUtils.generateObjectId().toString(),
       guildId: testGuildId,
-      caseNumber: '2025-0001-testclient',
+      caseNumber: 'AA-2025-0001-testclient',
       createdAt: new Date(),
       updatedAt: new Date(),
       clientId: testClientId,
       clientUsername: 'testclient',
       title: 'Test Case',
       description: 'Test case description',
-      status: CaseStatus.CLOSED,
-      priority: CasePriority.HIGH,
+      status: 'closed' as const,
+      priority: 'high' as const,
       leadAttorneyId: testLawyerId,
       assignedLawyerIds: [],
-      result: CaseResult.WIN,
+      result: 'win' as const,
       resultNotes: 'Successfully resolved for client',
       closedBy: testLawyerId,
       closedAt: new Date()
@@ -607,8 +603,8 @@ describe('CaseService Unit Tests', () => {
       // Mock current case in IN_PROGRESS status
       mockCaseRepository.findById.mockResolvedValue({
         ...mockClosedCase,
-        status: CaseStatus.IN_PROGRESS,
-        assignedLawyerIds: [testLawyerId, 'other-lawyer'],
+        status: 'in-progress' as const,
+        assignedLawyerIds: [testLawyerId, '78901234567890123456'],
         result: undefined,
         resultNotes: undefined,
         closedBy: undefined,
@@ -624,10 +620,10 @@ describe('CaseService Unit Tests', () => {
 
       expect(mockCaseRepository.conditionalUpdate).toHaveBeenCalledWith(
         testCaseId,
-        { status: CaseStatus.IN_PROGRESS },
+        { status: 'in-progress' as const },
         {
-          status: CaseStatus.CLOSED,
-          result: CaseResult.WIN,
+          status: 'closed' as const,
+          result: 'win' as const,
           resultNotes: 'Successfully resolved for client',
           closedBy: testLawyerId,
           closedAt: expect.any(Date)
@@ -652,10 +648,10 @@ describe('CaseService Unit Tests', () => {
 
       expect(mockCaseRepository.conditionalUpdate).toHaveBeenCalledWith(
         testCaseId,
-        { status: CaseStatus.IN_PROGRESS },
+        { status: 'in-progress' as const },
         {
-          status: CaseStatus.CLOSED,
-          result: CaseResult.WIN,
+          status: 'closed' as const,
+          result: 'win' as const,
           resultNotes: undefined,
           closedBy: testLawyerId,
           closedAt: expect.any(Date)
@@ -665,11 +661,11 @@ describe('CaseService Unit Tests', () => {
 
     it('should handle all valid case results', async () => {
       const validResults = [
-        CaseResult.WIN,
-        CaseResult.LOSS,
-        CaseResult.SETTLEMENT,
-        CaseResult.DISMISSED,
-        CaseResult.WITHDRAWN
+        'win' as const,
+        'loss' as const,
+        'settlement' as const,
+        'dismissed' as const,
+        'withdrawn' as const
       ];
 
       mockPermissionService.hasActionPermission.mockResolvedValue(true);
@@ -685,7 +681,7 @@ describe('CaseService Unit Tests', () => {
 
         expect(mockCaseRepository.conditionalUpdate).toHaveBeenLastCalledWith(
           testCaseId,
-          { status: CaseStatus.IN_PROGRESS },
+          { status: 'in-progress' as const },
           expect.objectContaining({ result })
         );
       }
@@ -706,7 +702,7 @@ describe('CaseService Unit Tests', () => {
       mockPermissionService.hasActionPermission.mockResolvedValue(true);
       mockCaseRepository.findById.mockResolvedValue({
         ...mockClosedCase,
-        status: CaseStatus.CLOSED
+        status: 'closed' as const
       });
 
       await expect(caseService.closeCase(mockPermissionContext, mockClosureRequest))
@@ -719,7 +715,7 @@ describe('CaseService Unit Tests', () => {
       mockPermissionService.hasActionPermission.mockResolvedValue(true);
       mockCaseRepository.findById.mockResolvedValue({
         ...mockClosedCase,
-        status: CaseStatus.PENDING
+        status: 'pending' as const
       });
 
       await expect(caseService.closeCase(mockPermissionContext, mockClosureRequest))
@@ -738,27 +734,27 @@ describe('CaseService Unit Tests', () => {
 
   describe('acceptCase', () => {
     const mockAcceptedCase: Case = TestUtils.generateMockCase({
-      _id: TestUtils.generateObjectId(),
+      _id: TestUtils.generateObjectId().toString(),
       guildId: testGuildId,
-      caseNumber: '2025-0001-testclient',
+      caseNumber: 'AA-2025-0001-testclient',
       createdAt: new Date(),
       updatedAt: new Date(),
       clientId: testClientId,
       clientUsername: 'testclient',
       title: 'Test Case',
       description: 'Test case description',
-      status: CaseStatus.IN_PROGRESS, // Should be IN_PROGRESS after requirements update
-      priority: CasePriority.HIGH,
+      status: 'in-progress' as const, // Should be IN_PROGRESS after requirements update
+      priority: 'high' as const,
       leadAttorneyId: testLawyerId,
       assignedLawyerIds: [testLawyerId]
     });
 
     it('should accept pending case successfully', async () => {
       const pendingCase = TestUtils.generateMockCase({
-        _id: TestUtils.generateObjectId(),
-        status: CaseStatus.PENDING,
+        _id: TestUtils.generateObjectId().toString(),
+        status: 'pending' as const,
         guildId: testGuildId,
-        caseNumber: '2025-0001-testclient',
+        caseNumber: 'AA-2025-0001-testclient',
       createdAt: new Date(),
       updatedAt: new Date(),
         clientId: testClientId,
@@ -773,9 +769,9 @@ describe('CaseService Unit Tests', () => {
 
       expect(mockCaseRepository.conditionalUpdate).toHaveBeenCalledWith(
         testCaseId,
-        { status: CaseStatus.PENDING },
+        { status: 'pending' as const },
         expect.objectContaining({
-          status: CaseStatus.IN_PROGRESS,
+          status: 'in-progress' as const,
           leadAttorneyId: testLawyerId,
           assignedLawyerIds: [testLawyerId]
         })
@@ -797,7 +793,7 @@ describe('CaseService Unit Tests', () => {
       mockCaseRepository.conditionalUpdate.mockResolvedValue(null);
       mockCaseRepository.findById.mockResolvedValue({
         ...mockAcceptedCase,
-        status: CaseStatus.IN_PROGRESS
+        status: 'in-progress' as const
       });
 
       await expect(caseService.acceptCase(mockPermissionContext, testCaseId))
@@ -806,10 +802,10 @@ describe('CaseService Unit Tests', () => {
 
     it('should handle concurrent acceptance attempts', async () => {
       const pendingCase = TestUtils.generateMockCase({
-        _id: TestUtils.generateObjectId(),
-        status: CaseStatus.PENDING,
+        _id: TestUtils.generateObjectId().toString(),
+        status: 'pending' as const,
         guildId: testGuildId,
-        caseNumber: '2025-0001-testclient',
+        caseNumber: 'AA-2025-0001-testclient',
       createdAt: new Date(),
       updatedAt: new Date(),
         clientId: testClientId,
@@ -825,7 +821,7 @@ describe('CaseService Unit Tests', () => {
       // Second attempt: case is now in progress (already accepted)
       mockCaseRepository.findById.mockResolvedValueOnce({
         ...mockAcceptedCase,
-        status: CaseStatus.IN_PROGRESS
+        status: 'in-progress' as const
       });
 
       const firstResult = await caseService.acceptCase(mockPermissionContext, testCaseId);
@@ -838,18 +834,18 @@ describe('CaseService Unit Tests', () => {
 
   describe('declineCase', () => {
     const mockDeclinedCase: Case = TestUtils.generateMockCase({
-      _id: TestUtils.generateObjectId(),
+      _id: TestUtils.generateObjectId().toString(),
       guildId: testGuildId,
-      caseNumber: '2025-0001-testclient',
+      caseNumber: 'AA-2025-0001-testclient',
       createdAt: new Date(),
       updatedAt: new Date(),
       clientId: testClientId,
       clientUsername: 'testclient',
       title: 'Test Case',
       description: 'Test case description',
-      status: CaseStatus.CLOSED,
-      priority: CasePriority.HIGH,
-      result: CaseResult.DISMISSED,
+      status: 'closed' as const,
+      priority: 'high' as const,
+      result: 'dismissed' as const,
       resultNotes: 'Conflict of interest',
       closedBy: testLawyerId,
       closedAt: new Date(),
@@ -867,8 +863,8 @@ describe('CaseService Unit Tests', () => {
       );
 
       expect(mockCaseRepository.update).toHaveBeenCalledWith(testCaseId, {
-        status: CaseStatus.CLOSED,
-        result: CaseResult.DISMISSED,
+        status: 'closed' as const,
+        result: 'dismissed' as const,
         resultNotes: 'Conflict of interest',
         closedBy: testLawyerId,
         closedAt: expect.any(Date)
@@ -886,8 +882,8 @@ describe('CaseService Unit Tests', () => {
       await caseService.declineCase(mockPermissionContext, testCaseId);
 
       expect(mockCaseRepository.update).toHaveBeenCalledWith(testCaseId, {
-        status: CaseStatus.CLOSED,
-        result: CaseResult.DISMISSED,
+        status: 'closed' as const,
+        result: 'dismissed' as const,
         resultNotes: 'Case declined by staff',
         closedBy: testLawyerId,
         closedAt: expect.any(Date)
@@ -905,17 +901,17 @@ describe('CaseService Unit Tests', () => {
 
   describe('getCaseById', () => {
     const mockCase: Case = TestUtils.generateMockCase({
-      _id: TestUtils.generateObjectId(),
+      _id: TestUtils.generateObjectId().toString(),
       guildId: testGuildId,
-      caseNumber: '2025-0001-testclient',
+      caseNumber: 'AA-2025-0001-testclient',
       createdAt: new Date(),
       updatedAt: new Date(),
       clientId: testClientId,
       clientUsername: 'testclient',
       title: 'Test Case',
       description: 'Test case description',
-      status: CaseStatus.IN_PROGRESS,
-      priority: CasePriority.HIGH,
+      status: 'in-progress' as const,
+      priority: 'high' as const,
       leadAttorneyId: testLawyerId,
       assignedLawyerIds: [testLawyerId]
     });
@@ -952,17 +948,17 @@ describe('CaseService Unit Tests', () => {
 
   describe('addDocument', () => {
     const mockCaseWithDocument: Case = TestUtils.generateMockCase({
-      _id: TestUtils.generateObjectId(),
+      _id: TestUtils.generateObjectId().toString(),
       guildId: testGuildId,
-      caseNumber: '2025-0001-testclient',
+      caseNumber: 'AA-2025-0001-testclient',
       createdAt: new Date(),
       updatedAt: new Date(),
       clientId: testClientId,
       clientUsername: 'testclient',
       title: 'Test Case',
       description: 'Test case description',
-      status: CaseStatus.IN_PROGRESS,
-      priority: CasePriority.HIGH,
+      status: 'in-progress' as const,
+      priority: 'high' as const,
       leadAttorneyId: testLawyerId,
       assignedLawyerIds: [testLawyerId],
       documents: [{
@@ -1024,17 +1020,17 @@ describe('CaseService Unit Tests', () => {
 
   describe('addNote', () => {
     const mockCaseWithNote: Case = TestUtils.generateMockCase({
-      _id: TestUtils.generateObjectId(),
+      _id: TestUtils.generateObjectId().toString(),
       guildId: testGuildId,
-      caseNumber: '2025-0001-testclient',
+      caseNumber: 'AA-2025-0001-testclient',
       createdAt: new Date(),
       updatedAt: new Date(),
       clientId: testClientId,
       clientUsername: 'testclient',
       title: 'Test Case',
       description: 'Test case description',
-      status: CaseStatus.IN_PROGRESS,
-      priority: CasePriority.HIGH,
+      status: 'in-progress' as const,
+      priority: 'high' as const,
       leadAttorneyId: testLawyerId,
       assignedLawyerIds: [testLawyerId],
       notes: [{
@@ -1121,24 +1117,24 @@ describe('CaseService Unit Tests', () => {
   describe('searchCases', () => {
     const mockSearchResults = [
       TestUtils.generateMockCase({
-        _id: TestUtils.generateObjectId(),
+        _id: TestUtils.generateObjectId().toString(),
         guildId: testGuildId,
-        caseNumber: '2025-0001-testclient',
+        caseNumber: 'AA-2025-0001-testclient',
       createdAt: new Date(),
       updatedAt: new Date(),
         clientId: testClientId,
         clientUsername: 'testclient',
         title: 'Test Case',
         description: 'Test case description',
-        status: CaseStatus.IN_PROGRESS,
-        priority: CasePriority.HIGH,
+        status: 'in-progress' as const,
+        priority: 'high' as const,
         leadAttorneyId: testLawyerId,
         assignedLawyerIds: [testLawyerId]
       })
     ];
 
     it('should search cases with filters', async () => {
-      const filters = { guildId: testGuildId, status: CaseStatus.IN_PROGRESS };
+      const filters = { guildId: testGuildId, status: 'in-progress' as const };
       mockPermissionService.hasActionPermission.mockResolvedValue(true);
       mockCaseRepository.searchCases.mockResolvedValue(mockSearchResults);
 
@@ -1173,7 +1169,7 @@ describe('CaseService Unit Tests', () => {
       mockPermissionService.hasActionPermission.mockResolvedValue(true);
       mockCaseRepository.searchCases.mockResolvedValue([]);
 
-      const result = await caseService.searchCases(mockPermissionContext, { guildId: 'non-existent' });
+      const result = await caseService.searchCases(mockPermissionContext, { guildId: '90123456789012345678' });
 
       expect(result).toEqual([]);
     });
@@ -1236,19 +1232,19 @@ describe('CaseService Unit Tests', () => {
 
   describe('generateChannelName', () => {
     it('should generate correct channel name format', async () => {
-      const caseNumber = `${currentYear}-0001-testclient`;
+      const caseNumber = `AA-${currentYear}-0001-testclient`;
       
       const result = caseService.generateChannelName(caseNumber);
 
-      expect(result).toBe(`case-${currentYear}-0001-testclient`);
+      expect(result).toBe(`case-AA-${currentYear}-0001-testclient`);
     });
 
     it('should handle special characters in case number', async () => {
-      const caseNumber = `${currentYear}-0042-test_client-123`;
+      const caseNumber = `AA-${currentYear}-0042-test_client-123`;
       
       const result = caseService.generateChannelName(caseNumber);
 
-      expect(result).toBe(`case-${currentYear}-0042-test-client-123`);
+      expect(result).toBe(`case-AA-${currentYear}-0042-test-client-123`);
     });
   });
 
@@ -1265,14 +1261,10 @@ describe('CaseService Unit Tests', () => {
 
     it('should handle malformed case data', async () => {
       mockPermissionService.hasActionPermission.mockResolvedValue(true);
-      mockBusinessRuleValidationService.validateClientCaseLimit.mockResolvedValue({
+      mockUnifiedValidationService.validate.mockResolvedValue({
         valid: true,
-        errors: [],
-        warnings: [],
-        bypassAvailable: false,
-        currentCases: 0,
-        maxCases: 3,
-        clientId: ''
+        issues: [],
+        strategyResults: new Map()
       });
       mockCaseCounterRepository.getNextCaseNumber.mockResolvedValue(1);
       mockCaseRepository.add.mockRejectedValue(
@@ -1300,7 +1292,7 @@ describe('CaseService Unit Tests', () => {
       await expect(caseService.updateCaseStatus(
         mockPermissionContext,
         testCaseId,
-        CaseStatus.CLOSED
+        'closed' as const
       )).rejects.toThrow('Document was modified by another operation');
     });
   });

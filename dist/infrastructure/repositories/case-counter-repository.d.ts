@@ -1,4 +1,4 @@
-import { CaseCounter } from '../../domain/entities/case';
+import { CaseCounter } from '../../validation';
 import { BaseMongoRepository } from './base-mongo-repository';
 export declare class CaseCounterRepository extends BaseMongoRepository<CaseCounter> {
     constructor();

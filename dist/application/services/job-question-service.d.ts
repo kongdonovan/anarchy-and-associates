@@ -1,4 +1,4 @@
-import { JobQuestion } from '../../domain/entities/job';
+import { JobQuestion } from '../../validation';
 export interface QuestionValidationResult {
     valid: boolean;
     error?: string;

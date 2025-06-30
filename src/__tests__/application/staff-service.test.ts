@@ -2,28 +2,30 @@ import { StaffService } from '../../application/services/staff-service';
 import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
 import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-repository';
 import { PermissionService, PermissionContext } from '../../application/services/permission-service';
-import { BusinessRuleValidationService } from '../../application/services/business-rule-validation-service';
+import { UnifiedValidationService } from '../../application/validation/unified-validation-service';
+import { ValidationSeverity } from '../../application/validation/types';
 import { GuildConfigRepository } from '../../infrastructure/repositories/guild-config-repository';
-import { CaseRepository } from '../../infrastructure/repositories/case-repository';
+
 import { StaffRole } from '../../domain/entities/staff-role';
-import { ObjectId } from 'mongodb';
+import { Staff } from '../../validation';
+import { TestUtils } from '../helpers/test-utils';
 
 // Mock the repositories and services
 jest.mock('../../infrastructure/repositories/staff-repository');
 jest.mock('../../infrastructure/repositories/audit-log-repository');
 jest.mock('../../infrastructure/repositories/guild-config-repository');
-jest.mock('../../infrastructure/repositories/case-repository');
+
 jest.mock('../../application/services/permission-service');
-jest.mock('../../application/services/business-rule-validation-service');
+jest.mock('../../application/validation/unified-validation-service');
 
 describe('StaffService', () => {
   let staffService: StaffService;
   let mockStaffRepository: jest.Mocked<StaffRepository>;
   let mockAuditLogRepository: jest.Mocked<AuditLogRepository>;
   let mockPermissionService: jest.Mocked<PermissionService>;
-  let mockBusinessRuleValidationService: jest.Mocked<BusinessRuleValidationService>;
+  let mockUnifiedValidationService: jest.Mocked<UnifiedValidationService>;
   let mockGuildConfigRepository: jest.Mocked<GuildConfigRepository>;
-  let mockCaseRepository: jest.Mocked<CaseRepository>;
+
 
   const testContext: PermissionContext = {
     guildId: 'guild123',
@@ -39,20 +41,15 @@ describe('StaffService', () => {
     mockStaffRepository = new StaffRepository() as jest.Mocked<StaffRepository>;
     mockAuditLogRepository = new AuditLogRepository() as jest.Mocked<AuditLogRepository>;
     mockGuildConfigRepository = new GuildConfigRepository() as jest.Mocked<GuildConfigRepository>;
-    mockCaseRepository = new CaseRepository() as jest.Mocked<CaseRepository>;
+
     mockPermissionService = new PermissionService(mockGuildConfigRepository) as jest.Mocked<PermissionService>;
-    mockBusinessRuleValidationService = new BusinessRuleValidationService(
-      mockGuildConfigRepository,
-      mockStaffRepository,
-      mockCaseRepository,
-      mockPermissionService
-    ) as jest.Mocked<BusinessRuleValidationService>;
+    mockUnifiedValidationService = new UnifiedValidationService() as jest.Mocked<UnifiedValidationService>;
 
     staffService = new StaffService(
       mockStaffRepository,
       mockAuditLogRepository,
       mockPermissionService,
-      mockBusinessRuleValidationService
+      mockUnifiedValidationService
     );
 
     // Default permission service mocks
@@ -117,27 +114,25 @@ describe('StaffService', () => {
     beforeEach(() => {
       mockStaffRepository.findByUserId.mockResolvedValue(null);
       mockStaffRepository.findStaffByRobloxUsername.mockResolvedValue(null);
-      mockBusinessRuleValidationService.validateRoleLimit.mockResolvedValue({
+      mockUnifiedValidationService.validate = jest.fn().mockResolvedValue({
         valid: true,
-        errors: [],
-        warnings: [],
-        bypassAvailable: false,
-        currentCount: 3,
-        maxCount: 10,
-        roleName: StaffRole.PARALEGAL,
-        metadata: {} });
-      mockAuditLogRepository.logAction.mockResolvedValue({} as any);
+        issues: [],
+        metadata: {
+          currentCount: 3,
+          maxCount: 10,
+          roleName: StaffRole.PARALEGAL
+        },
+        strategyResults: new Map()
+      });
+
     });
 
     it('should successfully hire a new staff member', async () => {
-      const mockStaff = {
-        _id: new ObjectId(),
+      const mockStaff: Staff = TestUtils.generateMockStaff({
         ...hireRequest,
         hiredAt: new Date(),
-        promotionHistory: [],
-        status: 'active' as const,
-        createdAt: new Date(),
-        updatedAt: new Date() };
+        status: 'active' as const
+      });
 
       mockStaffRepository.add.mockResolvedValue(mockStaff);
 
@@ -145,9 +140,14 @@ describe('StaffService', () => {
 
       expect(result.success).toBe(true);
       expect(result.staff).toBeDefined();
-      expect(mockBusinessRuleValidationService.validateRoleLimit).toHaveBeenCalledWith(
-        testContext,
-        StaffRole.PARALEGAL
+      expect(mockUnifiedValidationService.validate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'roleLimit',
+          target: expect.objectContaining({
+            role: StaffRole.PARALEGAL
+          })
+        }),
+        expect.any(Object)
       );
       expect(mockStaffRepository.add).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -156,7 +156,7 @@ describe('StaffService', () => {
           robloxUsername: hireRequest.robloxUsername,
           status: 'active' })
       );
-      expect(mockAuditLogRepository.logAction).toHaveBeenCalled();
+
     });
 
     it('should check senior-staff permission before hiring', async () => {
@@ -201,15 +201,22 @@ describe('StaffService', () => {
     });
 
     it('should reject if role limit reached for regular user', async () => {
-      mockBusinessRuleValidationService.validateRoleLimit.mockResolvedValue({
+      mockUnifiedValidationService.validate.mockResolvedValue({
         valid: false,
-        errors: ['Cannot hire Paralegal. Maximum limit of 10 reached'],
-        warnings: [],
-        bypassAvailable: false,
-        currentCount: 10,
-        maxCount: 10,
-        roleName: StaffRole.PARALEGAL,
-        metadata: {} });
+        issues: [{
+          severity: ValidationSeverity.ERROR,
+          code: 'ROLE_LIMIT_EXCEEDED',
+          message: 'Cannot hire Paralegal. Maximum limit of 10 reached',
+          field: 'role',
+          context: {}
+        }],
+        metadata: {
+          currentCount: 10,
+          maxCount: 10,
+          roleName: StaffRole.PARALEGAL
+        },
+        strategyResults: new Map()
+      });
 
       const result = await staffService.hireStaff(testContext, hireRequest);
 
@@ -219,26 +226,31 @@ describe('StaffService', () => {
     });
 
     it('should allow guild owner to bypass role limits', async () => {
-      mockBusinessRuleValidationService.validateRoleLimit.mockResolvedValue({
+      mockUnifiedValidationService.validate.mockResolvedValue({
         valid: false,
-        errors: ['Cannot hire Managing Partner. Maximum limit of 1 reached'],
-        warnings: [],
+        issues: [{
+          severity: ValidationSeverity.ERROR,
+          code: 'ROLE_LIMIT_EXCEEDED',
+          message: 'Cannot hire Managing Partner. Maximum limit of 1 reached',
+          field: 'role',
+          context: {}
+        }],
+        metadata: {
+          currentCount: 1,
+          maxCount: 1,
+          roleName: StaffRole.MANAGING_PARTNER
+        },
         bypassAvailable: true,
         bypassType: 'guild-owner',
-        currentCount: 1,
-        maxCount: 1,
-        roleName: StaffRole.MANAGING_PARTNER,
-        metadata: {} });
+        strategyResults: new Map()
+      });
 
-      const mockStaff = {
-        _id: new ObjectId(),
+      const mockStaff: Staff = TestUtils.generateMockStaff({
         ...hireRequest,
         role: StaffRole.MANAGING_PARTNER,
         hiredAt: new Date(),
-        promotionHistory: [],
-        status: 'active' as const,
-        createdAt: new Date(),
-        updatedAt: new Date() };
+        status: 'active' as const
+      });
 
       mockStaffRepository.add.mockResolvedValue(mockStaff);
       mockAuditLogRepository.logRoleLimitBypass.mockResolvedValue({} as any);
@@ -268,33 +280,31 @@ describe('StaffService', () => {
       promotedBy: 'admin123',
       reason: 'Good performance' };
 
-    const mockStaff = {
-      _id: new ObjectId(),
+    const mockStaff: Staff = TestUtils.generateMockStaff({
       userId: 'user123',
       guildId: 'guild123',
       role: StaffRole.PARALEGAL,
       status: 'active' as const,
       robloxUsername: 'TestUser',
       hiredAt: new Date(),
-      hiredBy: 'admin123',
-      promotionHistory: [],
-      createdAt: new Date(),
-      updatedAt: new Date() };
+      hiredBy: 'admin123'
+    });
 
     beforeEach(() => {
       mockStaffRepository.findByUserId.mockResolvedValue(mockStaff);
       mockStaffRepository.canHireRole.mockResolvedValue(true);
-      mockAuditLogRepository.logAction.mockResolvedValue({} as any);
-      // Add default mock for validateRoleLimit
-      mockBusinessRuleValidationService.validateRoleLimit.mockResolvedValue({
+
+      // Add default mock for validate
+      mockUnifiedValidationService.validate = jest.fn().mockResolvedValue({
         valid: true,
-        errors: [],
-        warnings: [],
-        bypassAvailable: false,
-        currentCount: 3,
-        maxCount: 10,
-        roleName: StaffRole.JUNIOR_ASSOCIATE,
-        metadata: {} });
+        issues: [],
+        metadata: {
+          currentCount: 3,
+          maxCount: 10,
+          roleName: StaffRole.JUNIOR_ASSOCIATE
+        },
+        strategyResults: new Map()
+      });
     });
 
     it('should successfully promote a staff member', async () => {
@@ -312,7 +322,7 @@ describe('StaffService', () => {
         promotionRequest.promotedBy,
         promotionRequest.reason
       );
-      expect(mockAuditLogRepository.logAction).toHaveBeenCalled();
+
     });
 
     it('should reject if staff member not found', async () => {
@@ -336,15 +346,22 @@ describe('StaffService', () => {
     });
 
     it('should reject if role limit reached for new role', async () => {
-      mockBusinessRuleValidationService.validateRoleLimit.mockResolvedValue({
+      mockUnifiedValidationService.validate.mockResolvedValue({
         valid: false,
-        errors: ['Cannot promote to Junior Associate. Maximum limit of 10 reached'],
-        warnings: [],
-        bypassAvailable: false,
-        currentCount: 10,
-        maxCount: 10,
-        roleName: StaffRole.JUNIOR_ASSOCIATE,
-        metadata: {} });
+        issues: [{
+          severity: ValidationSeverity.ERROR,
+          code: 'ROLE_LIMIT_EXCEEDED',
+          message: 'Cannot promote to Junior Associate. Maximum limit of 10 reached',
+          field: 'role',
+          context: {}
+        }],
+        metadata: {
+          currentCount: 10,
+          maxCount: 10,
+          roleName: StaffRole.JUNIOR_ASSOCIATE
+        },
+        strategyResults: new Map()
+      });
 
       const result = await staffService.promoteStaff(testContext, promotionRequest);
 

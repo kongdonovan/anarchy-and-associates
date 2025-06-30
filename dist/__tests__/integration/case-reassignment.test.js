@@ -6,7 +6,9 @@ const case_counter_repository_1 = require("../../infrastructure/repositories/cas
 const guild_config_repository_1 = require("../../infrastructure/repositories/guild-config-repository");
 const staff_repository_1 = require("../../infrastructure/repositories/staff-repository");
 const permission_service_1 = require("../../application/services/permission-service");
-const business_rule_validation_service_1 = require("../../application/services/business-rule-validation-service");
+const unified_validation_service_1 = require("../../application/validation/unified-validation-service");
+const business_rule_validation_strategy_1 = require("../../application/validation/strategies/business-rule-validation-strategy");
+const types_1 = require("../../application/validation/types");
 const case_1 = require("../../domain/entities/case");
 const test_utils_1 = require("../helpers/test-utils");
 const database_helpers_1 = require("../helpers/database-helpers");
@@ -23,7 +25,7 @@ describe('Case Reassignment Integration Tests', () => {
     let guildConfigRepository;
     let staffRepository;
     let permissionService;
-    let businessRuleValidationService;
+    let unifiedValidationService;
     let context;
     const testGuildId = 'test-guild-reassign';
     const lawyer1Id = 'lawyer-1';
@@ -41,8 +43,11 @@ describe('Case Reassignment Integration Tests', () => {
         staffRepository = new staff_repository_1.StaffRepository();
         // Initialize services
         permissionService = new permission_service_1.PermissionService(guildConfigRepository);
-        businessRuleValidationService = new business_rule_validation_service_1.BusinessRuleValidationService(guildConfigRepository, staffRepository, caseRepository, permissionService);
-        caseService = new case_service_1.CaseService(caseRepository, caseCounterRepository, guildConfigRepository, permissionService, businessRuleValidationService);
+        unifiedValidationService = new unified_validation_service_1.UnifiedValidationService();
+        // Register validation strategies
+        const businessRuleStrategy = new business_rule_validation_strategy_1.BusinessRuleValidationStrategy(staffRepository, caseRepository, guildConfigRepository, permissionService);
+        unifiedValidationService.registerStrategy(businessRuleStrategy);
+        caseService = new case_service_1.CaseService(caseRepository, caseCounterRepository, guildConfigRepository, permissionService, unifiedValidationService);
         // Create test context
         context = {
             guildId: testGuildId,
@@ -104,29 +109,41 @@ describe('Case Reassignment Integration Tests', () => {
             hiredBy: 'admin-123',
             promotionHistory: []
         });
-        // Mock the validateLawyerPermissions method to always return valid for our test lawyers
-        jest.spyOn(businessRuleValidationService, 'validatePermission').mockImplementation(async (context, permission) => {
+        // Mock the validate method to always return valid for our test lawyers
+        jest.spyOn(unifiedValidationService, 'validate').mockImplementation(async (context, _options) => {
             const lawyerIds = [lawyer1Id, lawyer2Id, lawyer3Id];
-            if (permission === 'lawyer' && lawyerIds.includes(context.userId)) {
-                return {
-                    valid: true,
-                    errors: [],
-                    warnings: [],
-                    bypassAvailable: false,
-                    hasPermission: true,
-                    requiredPermission: permission,
-                    grantedPermissions: [permission]
-                };
+            // Check if the validation context is for a permission check
+            if (context.entityType === 'permission' && context.metadata?.requiredPermission === 'lawyer') {
+                const userId = context.data?.userId || context.metadata?.userId;
+                if (lawyerIds.includes(userId)) {
+                    return {
+                        valid: true,
+                        issues: [],
+                        metadata: {
+                            hasPermission: true,
+                            requiredPermission: 'lawyer',
+                            grantedPermissions: ['lawyer']
+                        },
+                        strategyResults: new Map()
+                    };
+                }
             }
-            // Default return for other cases
+            // Default return for failed validation
             return {
                 valid: false,
-                errors: [`Missing required permission: ${permission}`],
-                warnings: [],
-                bypassAvailable: false,
-                hasPermission: false,
-                requiredPermission: permission,
-                grantedPermissions: []
+                issues: [{
+                        severity: types_1.ValidationSeverity.ERROR,
+                        code: 'MISSING_PERMISSION',
+                        message: 'Missing required permission',
+                        field: 'permission',
+                        context: {}
+                    }],
+                metadata: {
+                    hasPermission: false,
+                    requiredPermission: context.metadata?.requiredPermission || 'unknown',
+                    grantedPermissions: []
+                },
+                strategyResults: new Map()
             };
         });
     });

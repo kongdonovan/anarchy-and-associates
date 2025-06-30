@@ -1,34 +1,7 @@
-import winston from 'winston';
+import { EnhancedLogger } from './enhanced-logger';
 
-const logLevel = process.env.LOG_LEVEL || 'info';
-const isProduction = process.env.NODE_ENV === 'production';
+// Initialize and export the enhanced logger
+const logger = EnhancedLogger.initialize();
 
-const logger = winston.createLogger({
-  level: logLevel,
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.errors({ stack: true }),
-    winston.format.json()
-  ),
-  defaultMeta: { service: 'anarchy-associates-bot' },
-  transports: [
-    new winston.transports.File({ 
-      filename: 'logs/error.log', 
-      level: 'error' 
-    }),
-    new winston.transports.File({ 
-      filename: 'logs/combined.log' 
-    }),
-  ],
-});
-
-if (!isProduction) {
-  logger.add(new winston.transports.Console({
-    format: winston.format.combine(
-      winston.format.colorize(),
-      winston.format.simple()
-    )
-  }));
-}
-
-export { logger };
+// Export both the standard logger interface and enhanced features
+export { logger, EnhancedLogger };

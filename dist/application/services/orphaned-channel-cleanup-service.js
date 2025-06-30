@@ -2,10 +2,10 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OrphanedChannelCleanupService = void 0;
 const discord_js_1 = require("discord.js");
-const audit_log_1 = require("../../domain/entities/audit-log");
 const logger_1 = require("../../infrastructure/logger");
+const audit_log_1 = require("../../domain/entities/audit-log");
 class OrphanedChannelCleanupService {
-    constructor(caseRepository, guildConfigRepository, auditLogRepository, staffRepository, permissionService, _businessRuleValidationService, caseChannelArchiveService) {
+    constructor(caseRepository, guildConfigRepository, auditLogRepository, staffRepository, permissionService, _validationService, caseChannelArchiveService) {
         // Default cleanup configuration
         this.DEFAULT_CONFIG = {
             scanInterval: 1440, // 24 hours

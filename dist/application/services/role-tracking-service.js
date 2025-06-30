@@ -6,10 +6,11 @@ const staff_repository_1 = require("../../infrastructure/repositories/staff-repo
 const audit_log_repository_1 = require("../../infrastructure/repositories/audit-log-repository");
 const case_repository_1 = require("../../infrastructure/repositories/case-repository");
 const guild_config_repository_1 = require("../../infrastructure/repositories/guild-config-repository");
-const staff_role_1 = require("../../domain/entities/staff-role");
+const job_repository_1 = require("../../infrastructure/repositories/job-repository");
+const application_repository_1 = require("../../infrastructure/repositories/application-repository");
 const audit_log_1 = require("../../domain/entities/audit-log");
 const permission_service_1 = require("./permission-service");
-const business_rule_validation_service_1 = require("./business-rule-validation-service");
+const validation_service_factory_1 = require("../validation/validation-service-factory");
 const channel_permission_manager_1 = require("./channel-permission-manager");
 const role_change_cascade_service_1 = require("./role-change-cascade-service");
 const role_synchronization_enhancement_service_1 = require("./role-synchronization-enhancement-service");
@@ -18,12 +19,12 @@ class RoleTrackingService {
     constructor() {
         // Map Discord role names to staff roles based on Anarchy config
         this.STAFF_ROLE_MAPPING = {
-            'Managing Partner': staff_role_1.StaffRole.MANAGING_PARTNER,
-            'Senior Partner': staff_role_1.StaffRole.SENIOR_PARTNER,
-            'Partner': staff_role_1.StaffRole.SENIOR_PARTNER, // Map to Senior Partner since no Junior Partner in new config
-            'Senior Associate': staff_role_1.StaffRole.SENIOR_ASSOCIATE,
-            'Associate': staff_role_1.StaffRole.JUNIOR_ASSOCIATE, // Map to Junior Associate
-            'Paralegal': staff_role_1.StaffRole.PARALEGAL,
+            'Managing Partner': 'Managing Partner',
+            'Senior Partner': 'Senior Partner',
+            'Partner': 'Senior Partner', // Map to Senior Partner since no Junior Partner in new config
+            'Senior Associate': 'Senior Associate',
+            'Associate': 'Junior Associate', // Map to Junior Associate
+            'Paralegal': 'Paralegal',
         };
         // Get staff roles from Discord roles in hierarchy order (highest first)
         this.STAFF_ROLES_HIERARCHY = [
@@ -40,8 +41,19 @@ class RoleTrackingService {
         const caseRepository = new case_repository_1.CaseRepository();
         const guildConfigRepository = new guild_config_repository_1.GuildConfigRepository();
         const permissionService = new permission_service_1.PermissionService(guildConfigRepository);
-        const businessRuleValidationService = new business_rule_validation_service_1.BusinessRuleValidationService(guildConfigRepository, this.staffRepository, caseRepository, permissionService);
-        this.channelPermissionManager = new channel_permission_manager_1.ChannelPermissionManager(caseRepository, this.staffRepository, this.auditLogRepository, businessRuleValidationService);
+        const jobRepository = new job_repository_1.JobRepository();
+        const applicationRepository = new application_repository_1.ApplicationRepository();
+        // Create unified validation service
+        const validationService = validation_service_factory_1.ValidationServiceFactory.createValidationService({
+            staffRepository: this.staffRepository,
+            caseRepository,
+            guildConfigRepository,
+            jobRepository,
+            applicationRepository
+        }, {
+            permissionService
+        });
+        this.channelPermissionManager = new channel_permission_manager_1.ChannelPermissionManager(caseRepository, this.staffRepository, this.auditLogRepository, validationService);
         // Initialize the cascade service
         this.roleChangeCascadeService = new role_change_cascade_service_1.RoleChangeCascadeService();
         // Initialize the role synchronization enhancement service

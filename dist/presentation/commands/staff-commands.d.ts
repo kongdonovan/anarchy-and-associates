@@ -4,13 +4,12 @@ import { BaseCommand } from './base-command';
 export declare class StaffCommands extends BaseCommand {
     private staffRepository;
     private auditLogRepository;
-    private caseRepository;
     private guildConfigRepository;
     private staffService;
     private roleSyncService;
     protected permissionService: PermissionService;
     constructor();
-    hireStaff(user: User, role: string, robloxUsername: string, reason: string, interaction: CommandInteraction): Promise<void>;
+    hireStaff(user: User, roleString: string | undefined, discordRole: any, robloxUsername: string, reason: string, interaction: CommandInteraction): Promise<void>;
     /**
      * Perform the actual staff hiring (separated for reuse in bypass flow)
      */

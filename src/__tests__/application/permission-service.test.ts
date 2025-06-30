@@ -1,6 +1,6 @@
 import { PermissionService, PermissionContext } from '../../application/services/permission-service';
 import { GuildConfigRepository } from '../../infrastructure/repositories/guild-config-repository';
-import { GuildConfig } from '../../domain/entities/guild-config';
+import { GuildConfig } from '../../validation';
 
 // Mock the repository
 jest.mock('../../infrastructure/repositories/guild-config-repository');
@@ -10,16 +10,16 @@ describe('PermissionService', () => {
   let mockRepository: jest.Mocked<GuildConfigRepository>;
 
   const testContext: PermissionContext = {
-    guildId: 'test_guild_123',
-    userId: 'user_123',
-    userRoles: ['role_1', 'role_2'],
+    guildId: '123456789012345678',
+    userId: '234567890123456789',
+    userRoles: ['345678901234567890', '456789012345678901'],
     isGuildOwner: false,
   };
 
   const mockConfig: Partial<GuildConfig> = {
-    guildId: 'test_guild_123',
-    adminUsers: ['admin_user_1'],
-    adminRoles: ['admin_role_1'],
+    guildId: '123456789012345678',
+    adminUsers: ['567890123456789012'],
+    adminRoles: ['678901234567890123'],
     permissions: {
       admin: ['admin_role_1'],
       'senior-staff': ['senior_staff_role_1'], // Updated from hr

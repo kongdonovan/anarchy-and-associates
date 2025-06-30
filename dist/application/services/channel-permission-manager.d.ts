@@ -2,7 +2,7 @@ import { Guild, GuildMember } from 'discord.js';
 import { CaseRepository } from '../../infrastructure/repositories/case-repository';
 import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
 import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-repository';
-import { BusinessRuleValidationService } from './business-rule-validation-service';
+import { UnifiedValidationService } from '../validation/unified-validation-service';
 import { StaffRole } from '../../domain/entities/staff-role';
 export interface ChannelPermissionUpdate {
     channelId: string;
@@ -30,14 +30,14 @@ export declare class ChannelPermissionManager {
     private caseRepository;
     private staffRepository;
     private auditLogRepository;
-    private businessRuleValidationService;
+    private validationService;
     private readonly CHANNEL_PATTERNS;
     private readonly PERMISSION_MATRIX;
-    constructor(caseRepository: CaseRepository, staffRepository: StaffRepository, auditLogRepository: AuditLogRepository, businessRuleValidationService: BusinessRuleValidationService);
+    constructor(caseRepository: CaseRepository, staffRepository: StaffRepository, auditLogRepository: AuditLogRepository, validationService: UnifiedValidationService);
     /**
      * Handle role change and update all relevant channel permissions
      */
-    handleRoleChange(guild: Guild, member: GuildMember, oldRole?: StaffRole, newRole?: StaffRole, changeType?: 'hire' | 'fire' | 'promotion' | 'demotion'): Promise<ChannelPermissionUpdate[]>;
+    handleRoleChange(guild: Guild, member: GuildMember, oldRole?: string, newRole?: string, changeType?: 'hire' | 'fire' | 'promotion' | 'demotion'): Promise<ChannelPermissionUpdate[]>;
     /**
      * Update permissions for a specific channel based on role change
      */

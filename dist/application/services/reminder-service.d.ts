@@ -1,4 +1,4 @@
-import { Reminder, ReminderCreationRequest, ReminderSearchFilters } from '../../domain/entities/reminder';
+import { Reminder, ReminderSearchFilters } from '../../validation';
 import { ReminderRepository } from '../../infrastructure/repositories/reminder-repository';
 import { CaseRepository } from '../../infrastructure/repositories/case-repository';
 import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
@@ -11,7 +11,7 @@ export declare class ReminderService {
     private discordClient;
     constructor(reminderRepository: ReminderRepository, caseRepository: CaseRepository, staffRepository: StaffRepository);
     setDiscordClient(client: Client): void;
-    createReminder(request: ReminderCreationRequest): Promise<Reminder>;
+    createReminder(request: unknown): Promise<Reminder>;
     getUserReminders(userId: string, guildId: string, activeOnly?: boolean): Promise<Reminder[]>;
     cancelReminder(reminderId: string, userId: string): Promise<Reminder | null>;
     getCaseReminders(caseId: string): Promise<Reminder[]>;

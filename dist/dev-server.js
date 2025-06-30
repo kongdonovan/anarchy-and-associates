@@ -38,27 +38,35 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 require("reflect-metadata");
 const discordx_1 = require("discordx");
+const discord_js_1 = require("discord.js");
 const dotenv_1 = require("dotenv");
+const importer_1 = require("@discordx/importer");
 const node_path_1 = __importDefault(require("node:path"));
 const node_watch_1 = __importDefault(require("node-watch"));
-// import { fileURLToPath } from "url"; // Not needed for CommonJS
 const logger_1 = require("./infrastructure/logger");
 const mongo_client_1 = require("./infrastructure/database/mongo-client");
-// Get __dirname equivalent for CommonJS (since we're compiling to CommonJS)
+const reminder_service_1 = require("./application/services/reminder-service");
+const role_tracking_service_1 = require("./application/services/role-tracking-service");
+const reminder_repository_1 = require("./infrastructure/repositories/reminder-repository");
+const case_repository_1 = require("./infrastructure/repositories/case-repository");
+const staff_repository_1 = require("./infrastructure/repositories/staff-repository");
+// Load environment variables
+(0, dotenv_1.config)();
+// Parse configuration from environment or command line
+const config = {
+    hotReload: process.env.DEV_HOT_RELOAD !== 'false' && process.argv.includes('--hot'),
+    guildCommands: process.env.DEV_GUILD_COMMANDS !== 'false'
+};
+// Get __dirname equivalent for CommonJS
 const currentDirname = __dirname;
 // Import pattern for command files
 const importPattern = node_path_1.default.posix.join(currentDirname.replace(/\\/g, "/"), "presentation", "commands", "**", "*.js" // We import the compiled JS files
 );
-// Bot client instance
+// Bot instances
 let client = null;
 let mongoClient = null;
-/**
- * Load all files matching the pattern
- */
-async function loadFiles(src) {
-    const { importx } = await Promise.resolve().then(() => __importStar(require("@discordx/importer")));
-    await importx(src);
-}
+let reminderService = null;
+let roleTrackingService = null;
 /**
  * Initialize MongoDB connection
  */
@@ -67,7 +75,27 @@ async function initializeDatabase() {
         mongoClient = mongo_client_1.MongoDbClient.getInstance();
         await mongoClient.connect();
         logger_1.logger.info('MongoDB connected successfully');
+        // Ensure the connection is globally available for command files
+        global.__mongoClient = mongoClient;
     }
+}
+/**
+ * Initialize all bot services after database connection
+ */
+function initializeServices() {
+    const reminderRepository = new reminder_repository_1.ReminderRepository();
+    const caseRepository = new case_repository_1.CaseRepository();
+    const staffRepository = new staff_repository_1.StaffRepository();
+    reminderService = new reminder_service_1.ReminderService(reminderRepository, caseRepository, staffRepository);
+    roleTrackingService = new role_tracking_service_1.RoleTrackingService();
+    logger_1.logger.info('Services initialized successfully');
+}
+/**
+ * Load all command files matching the pattern
+ */
+async function loadFiles(src) {
+    await (0, importer_1.importx)(src);
+    logger_1.logger.info('Command modules imported successfully');
 }
 /**
  * Initialize commands safely, checking for duplicates
@@ -75,6 +103,16 @@ async function initializeDatabase() {
 async function initializeCommandsSafely(client) {
     try {
         logger_1.logger.info('Initializing application commands...');
+        if (config.guildCommands) {
+            // Use guild-specific commands for faster development
+            const guildIds = Array.from(client.guilds.cache.keys());
+            logger_1.logger.info(`Registering guild commands for ${guildIds.length} guilds`);
+            client.botGuilds = guildIds;
+        }
+        else {
+            logger_1.logger.info('Registering global commands');
+            client.botGuilds = undefined;
+        }
         // Check for existing commands first
         let existingCommands;
         try {
@@ -88,41 +126,32 @@ async function initializeCommandsSafely(client) {
         // Get the commands that discordx wants to register
         const localCommands = client.applicationCommands;
         logger_1.logger.info(`Found ${localCommands.length} local commands to register`);
-        if (existingCommands && existingCommands.size > 0) {
-            // Check if commands are already registered and up to date
+        if (existingCommands && existingCommands.size > 0 && config.hotReload) {
+            // In hot reload mode, check if commands need updating
             const needsUpdate = localCommands.some((localCmd) => {
                 const existingCmd = existingCommands.find((cmd) => cmd.name === localCmd.name);
                 if (!existingCmd) {
                     logger_1.logger.info(`New command found: ${localCmd.name}`);
                     return true;
                 }
-                // Check if command description changed
                 if (existingCmd.description !== localCmd.description) {
                     logger_1.logger.info(`Command ${localCmd.name} description changed`);
                     return true;
                 }
                 return false;
             });
-            // Check for orphaned commands
             const orphanedCommands = existingCommands.filter((discordCmd) => !localCommands.some((localCmd) => localCmd.name === discordCmd.name));
             if (orphanedCommands.size > 0) {
                 logger_1.logger.info(`Found ${orphanedCommands.size} orphaned commands that will be removed`);
             }
             if (!needsUpdate && orphanedCommands.size === 0) {
                 logger_1.logger.info('All commands are already up to date, skipping registration');
-            }
-            else {
-                logger_1.logger.info('Command differences detected, updating commands...');
-                await client.initApplicationCommands();
-                logger_1.logger.info('Slash commands updated successfully');
+                return;
             }
         }
-        else {
-            // No existing commands or couldn't fetch them, proceed with normal registration
-            logger_1.logger.info('No existing commands found, registering all commands...');
-            await client.initApplicationCommands();
-            logger_1.logger.info('Slash commands initialized successfully');
-        }
+        // Initialize commands
+        await client.initApplicationCommands();
+        logger_1.logger.info('Slash commands initialized successfully');
     }
     catch (error) {
         logger_1.logger.error('Error initializing commands:', error);
@@ -135,27 +164,41 @@ async function initializeClient() {
     if (client) {
         return; // Already initialized
     }
-    const { Client } = await Promise.resolve().then(() => __importStar(require("discordx")));
-    const { GatewayIntentBits } = await Promise.resolve().then(() => __importStar(require("discord.js")));
-    client = new Client({
+    client = new discordx_1.Client({
         intents: [
-            GatewayIntentBits.Guilds,
-            GatewayIntentBits.GuildMessages,
-            GatewayIntentBits.GuildMembers,
-            GatewayIntentBits.MessageContent,
+            discord_js_1.GatewayIntentBits.Guilds,
+            discord_js_1.GatewayIntentBits.GuildMessages,
+            discord_js_1.GatewayIntentBits.GuildMembers,
+            discord_js_1.GatewayIntentBits.MessageContent,
         ],
         silent: false,
     });
     client.once('ready', async () => {
-        if (!client.user)
+        if (!client || !client.user)
             return;
         logger_1.logger.info(`Bot logged in as ${client.user.tag}`);
+        // Set bot activity
+        client.user.setActivity('Managing Legal Operations', {
+            type: discord_js_1.ActivityType.Watching,
+        });
+        // Initialize reminder service with Discord client
+        if (reminderService) {
+            reminderService.setDiscordClient(client);
+            logger_1.logger.info('Reminder service integrated with Discord client');
+        }
+        // Initialize role tracking service
+        if (roleTrackingService) {
+            roleTrackingService.initializeTracking(client);
+            logger_1.logger.info('Role tracking service initialized');
+        }
         // Initialize slash commands with smart duplicate prevention
         await initializeCommandsSafely(client);
     });
     client.on('interactionCreate', async (interaction) => {
         try {
-            client.executeInteraction(interaction);
+            if (client) {
+                client.executeInteraction(interaction);
+            }
         }
         catch (error) {
             logger_1.logger.error('Error executing interaction:', error);
@@ -169,7 +212,7 @@ async function initializeClient() {
     await client.login(token);
 }
 /**
- * Reload discordx metadata and events
+ * Reload discordx metadata and events (for hot reload)
  */
 async function reload() {
     try {
@@ -184,7 +227,7 @@ async function reload() {
         if (client) {
             // Rebuild metadata
             await discordx_1.MetadataStorage.instance.build();
-            // Re-initialize commands safely (checking for duplicates)
+            // Re-initialize commands safely
             await initializeCommandsSafely(client);
             logger_1.logger.info("> Reload success");
         }
@@ -198,16 +241,17 @@ async function reload() {
  */
 async function runDevServer() {
     try {
-        // Load environment variables
-        (0, dotenv_1.config)();
-        // Initialize database first
+        logger_1.logger.info('Starting development server with config:', config);
+        // Initialize database first (critical for command file imports)
         await initializeDatabase();
+        // Initialize services that depend on database connection
+        initializeServices();
         // Load initial command files
         await loadFiles(importPattern);
         // Initialize Discord client
         await initializeClient();
-        // Setup hot reload in development
-        if (process.env.NODE_ENV !== "production") {
+        // Setup hot reload if enabled
+        if (config.hotReload) {
             logger_1.logger.info("> Hot-Module-Reload enabled. Project will rebuild and reload on changes.");
             logger_1.logger.info("Watching src/ for changes...");
             (0, node_watch_1.default)("src", { recursive: true }, async (evt, filename) => {
@@ -239,6 +283,9 @@ async function runDevServer() {
                     }
                 }
             });
+        }
+        else {
+            logger_1.logger.info('Hot reload disabled. Restart server to see changes.');
         }
         logger_1.logger.info('Development server started successfully');
     }

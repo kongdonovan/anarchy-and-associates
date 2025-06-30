@@ -21,6 +21,8 @@ const role_synchronization_enhancement_service_1 = require("../../application/se
 const guild_config_repository_1 = require("../../infrastructure/repositories/guild-config-repository");
 const embed_utils_1 = require("../../infrastructure/utils/embed-utils");
 const logger_1 = require("../../infrastructure/logger");
+const audit_decorators_1 = require("../decorators/audit-decorators");
+const audit_log_1 = require("../../domain/entities/audit-log");
 let RoleCommands = class RoleCommands {
     constructor() {
         this.guildConfigRepository = new guild_config_repository_1.GuildConfigRepository();
@@ -402,18 +404,21 @@ let RoleCommands = class RoleCommands {
 exports.RoleCommands = RoleCommands;
 __decorate([
     (0, discordx_1.Slash)({ name: 'sync', description: 'Synchronize Discord roles with staff database' }),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.ROLE_SYNC_PERFORMED, 'medium'),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [discord_js_1.CommandInteraction]),
     __metadata("design:returntype", Promise)
 ], RoleCommands.prototype, "syncRoles", null);
 __decorate([
     (0, discordx_1.Slash)({ name: 'status', description: 'View role tracking system status' }),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.JOB_LIST_VIEWED, 'low'),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [discord_js_1.CommandInteraction]),
     __metadata("design:returntype", Promise)
 ], RoleCommands.prototype, "roleStatus", null);
 __decorate([
     (0, discordx_1.Slash)({ name: 'sync-check', description: 'Check for and optionally resolve staff role conflicts' }),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.SYSTEM_REPAIR, 'medium'),
     __param(0, (0, discordx_1.SlashOption)({
         name: 'auto-resolve',
         description: 'Automatically resolve conflicts by keeping highest role',

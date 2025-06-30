@@ -1,13 +1,14 @@
 import { BaseMongoRepository } from './base-mongo-repository';
 import { 
-  Feedback, 
+  Feedback,
   FeedbackSearchFilters, 
-  FeedbackSortOptions, 
+  FeedbackSortOptions
+} from '../../validation';
+import { 
   FeedbackPaginationOptions,
   StaffPerformanceMetrics,
-  FirmPerformanceMetrics,
-  FeedbackRating
-} from '../../domain/entities/feedback';
+  FirmPerformanceMetrics
+} from '../../domain/entities/feedback'; // Keep interfaces not yet in validation
 import { Filter, Sort } from 'mongodb';
 import { logger } from '../logger';
 
@@ -100,16 +101,22 @@ export class FeedbackRepository extends BaseMongoRepository<Feedback> {
       const averageRating = parseFloat((totalRating / totalFeedback).toFixed(2));
 
       // Rating distribution
-      const ratingDistribution = {
-        [FeedbackRating.ONE_STAR]: 0,
-        [FeedbackRating.TWO_STAR]: 0,
-        [FeedbackRating.THREE_STAR]: 0,
-        [FeedbackRating.FOUR_STAR]: 0,
-        [FeedbackRating.FIVE_STAR]: 0
+      const ratingDistribution: Record<number, number> = {
+        1: 0,
+        2: 0,
+        3: 0,
+        4: 0,
+        5: 0
       };
 
       feedback.forEach(f => {
-        ratingDistribution[f.rating]++;
+        if (f.rating && f.rating >= 1 && f.rating <= 5) {
+          const rating = f.rating;
+          const current = ratingDistribution[rating];
+          if (current !== undefined) {
+            ratingDistribution[rating] = current + 1;
+          }
+        }
       });
 
       // Recent feedback (last 5)
@@ -122,8 +129,8 @@ export class FeedbackRepository extends BaseMongoRepository<Feedback> {
         staffUsername: feedback[0]?.targetStaffUsername || '',
         totalFeedback,
         averageRating,
-        ratingDistribution,
-        recentFeedback
+        ratingDistribution: ratingDistribution as any,
+        recentFeedback: recentFeedback as any[]
       };
     } catch (error) {
       logger.error('Error getting staff performance metrics', { error, staffId, guildId });
@@ -147,16 +154,22 @@ export class FeedbackRepository extends BaseMongoRepository<Feedback> {
         : 0;
 
       // Overall rating distribution
-      const ratingDistribution = {
-        [FeedbackRating.ONE_STAR]: 0,
-        [FeedbackRating.TWO_STAR]: 0,
-        [FeedbackRating.THREE_STAR]: 0,
-        [FeedbackRating.FOUR_STAR]: 0,
-        [FeedbackRating.FIVE_STAR]: 0
+      const ratingDistribution: Record<number, number> = {
+        1: 0,
+        2: 0,
+        3: 0,
+        4: 0,
+        5: 0
       };
 
       allFeedback.forEach(f => {
-        ratingDistribution[f.rating]++;
+        if (f.rating && f.rating >= 1 && f.rating <= 5) {
+          const rating = f.rating;
+          const current = ratingDistribution[rating];
+          if (current !== undefined) {
+            ratingDistribution[rating] = current + 1;
+          }
+        }
       });
 
       // Get unique staff members who have received feedback
@@ -179,9 +192,9 @@ export class FeedbackRepository extends BaseMongoRepository<Feedback> {
         guildId,
         totalFeedback,
         averageRating,
-        staffMetrics,
-        firmWideFeedback,
-        ratingDistribution
+        staffMetrics: staffMetrics as any[],
+        firmWideFeedback: firmWideFeedback as any[],
+        ratingDistribution: ratingDistribution as any
       };
     } catch (error) {
       logger.error('Error getting firm performance metrics', { error, guildId });

@@ -21,8 +21,7 @@ export declare class RepairCommands {
     scanOrphanedChannels(interaction: CommandInteraction): Promise<void>;
     cleanupOrphanedChannels(dryRun: boolean | undefined, archiveOnly: boolean | undefined, interaction: CommandInteraction): Promise<void>;
     configureAutoCleanup(enabled: boolean, interaction: CommandInteraction): Promise<void>;
-    integrityCheck(interaction: CommandInteraction, autoRepair?: boolean): Promise<void>;
+    integrityCheck(autoRepair: boolean | undefined, interaction: CommandInteraction): Promise<void>;
     private createIntegrityReportEmbed;
-    private createValidationRepairResultEmbed;
 }
 //# sourceMappingURL=repair-commands.d.ts.map

@@ -6,13 +6,14 @@ import { ChannelPermissionManager } from './channel-permission-manager';
 import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-repository';
 import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
 import { GuildConfigRepository } from '../../infrastructure/repositories/guild-config-repository';
-import { Case } from '../../domain/entities/case';
-import { StaffRole } from '../../domain/entities/staff-role';
-import { AuditAction } from '../../domain/entities/audit-log';
+import { JobRepository } from '../../infrastructure/repositories/job-repository';
+import { ApplicationRepository } from '../../infrastructure/repositories/application-repository';
 import { logger } from '../../infrastructure/logger';
 import { EmbedUtils } from '../../infrastructure/utils/embed-utils';
+import { Case, StaffRole } from '../../validation';
+import { AuditAction } from '../../domain/entities/audit-log';
 import { PermissionService, PermissionContext } from './permission-service';
-import { BusinessRuleValidationService } from './business-rule-validation-service';
+import { ValidationServiceFactory } from '../validation/validation-service-factory';
 
 export type RoleChangeType = 'hire' | 'fire' | 'promotion' | 'demotion';
 
@@ -32,19 +33,19 @@ export class RoleChangeCascadeService {
 
   // Define which roles have lawyer permissions (can be assigned to cases)
   private readonly LAWYER_ROLES: StaffRole[] = [
-    StaffRole.MANAGING_PARTNER,
-    StaffRole.SENIOR_PARTNER,
-    StaffRole.JUNIOR_PARTNER,
-    StaffRole.SENIOR_ASSOCIATE,
-    StaffRole.JUNIOR_ASSOCIATE
+    'Managing Partner',
+    'Senior Partner',
+    'Junior Partner',
+    'Senior Associate',
+    'Junior Associate'
   ];
 
   // Define which roles have lead attorney permissions
   private readonly LEAD_ATTORNEY_ROLES: StaffRole[] = [
-    StaffRole.MANAGING_PARTNER,
-    StaffRole.SENIOR_PARTNER,
-    StaffRole.JUNIOR_PARTNER,
-    StaffRole.SENIOR_ASSOCIATE
+    'Managing Partner',
+    'Senior Partner',
+    'Junior Partner',
+    'Senior Associate'
   ];
 
   constructor() {
@@ -56,18 +57,28 @@ export class RoleChangeCascadeService {
     const caseCounterRepository = new CaseCounterRepository();
     const guildConfigRepository = new GuildConfigRepository();
     const permissionService = new PermissionService(guildConfigRepository);
-    const businessRuleValidationService = new BusinessRuleValidationService(
-      guildConfigRepository,
-      this.staffRepository,
-      this.caseRepository,
-      permissionService
+    const jobRepository = new JobRepository();
+    const applicationRepository = new ApplicationRepository();
+    
+    // Create unified validation service
+    const validationService = ValidationServiceFactory.createValidationService(
+      {
+        staffRepository: this.staffRepository,
+        caseRepository: this.caseRepository,
+        guildConfigRepository,
+        jobRepository,
+        applicationRepository
+      },
+      {
+        permissionService
+      }
     );
     
     this.channelPermissionManager = new ChannelPermissionManager(
       this.caseRepository,
       this.staffRepository,
       this.auditLogRepository,
-      businessRuleValidationService
+      validationService
     );
 
     this.caseService = new CaseService(
@@ -75,7 +86,7 @@ export class RoleChangeCascadeService {
       caseCounterRepository,
       guildConfigRepository,
       permissionService,
-      businessRuleValidationService
+      validationService
     );
   }
 
@@ -276,12 +287,12 @@ export class RoleChangeCascadeService {
     // Find senior staff to notify
     const managingPartners = await this.staffRepository.findByFilters({
       guildId: guild.id,
-      role: StaffRole.MANAGING_PARTNER,
+      role: 'Managing Partner',
       status: 'active'
     });
     const seniorPartners = await this.staffRepository.findByFilters({
       guildId: guild.id,
-      role: StaffRole.SENIOR_PARTNER,
+      role: 'Senior Partner',
       status: 'active'
     });
     const seniorStaff = [...managingPartners, ...seniorPartners];

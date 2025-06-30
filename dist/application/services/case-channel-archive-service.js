@@ -2,11 +2,11 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CaseChannelArchiveService = void 0;
 const discord_js_1 = require("discord.js");
+const logger_1 = require("../../infrastructure/logger");
 const case_1 = require("../../domain/entities/case");
 const audit_log_1 = require("../../domain/entities/audit-log");
-const logger_1 = require("../../infrastructure/logger");
 class CaseChannelArchiveService {
-    constructor(caseRepository, guildConfigRepository, auditLogRepository, permissionService, _businessRuleValidationService) {
+    constructor(caseRepository, guildConfigRepository, auditLogRepository, permissionService, _validationService) {
         // private _businessRuleValidationService: BusinessRuleValidationService;
         // Default archive configuration
         this.DEFAULT_CONFIG = {

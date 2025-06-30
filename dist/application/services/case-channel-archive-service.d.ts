@@ -3,8 +3,8 @@ import { CaseRepository } from '../../infrastructure/repositories/case-repositor
 import { GuildConfigRepository } from '../../infrastructure/repositories/guild-config-repository';
 import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-repository';
 import { PermissionService, PermissionContext } from './permission-service';
-import { BusinessRuleValidationService } from './business-rule-validation-service';
-import { Case } from '../../domain/entities/case';
+import { UnifiedValidationService } from '../validation/unified-validation-service';
+import { Case } from '../../validation';
 export interface ChannelArchiveConfig {
     archiveCategoryId?: string;
     retentionDays: number;
@@ -40,7 +40,7 @@ export declare class CaseChannelArchiveService {
     private permissionService;
     private readonly DEFAULT_CONFIG;
     private readonly CASE_CHANNEL_PATTERNS;
-    constructor(caseRepository: CaseRepository, guildConfigRepository: GuildConfigRepository, auditLogRepository: AuditLogRepository, permissionService: PermissionService, _businessRuleValidationService: BusinessRuleValidationService);
+    constructor(caseRepository: CaseRepository, guildConfigRepository: GuildConfigRepository, auditLogRepository: AuditLogRepository, permissionService: PermissionService, _validationService: UnifiedValidationService);
     /**
      * Archive a specific case channel when the case is closed
      */

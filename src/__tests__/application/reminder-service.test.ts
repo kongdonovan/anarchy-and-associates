@@ -3,17 +3,19 @@ import { ReminderRepository } from '../../infrastructure/repositories/reminder-r
 import { CaseRepository } from '../../infrastructure/repositories/case-repository';
 import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
 import { 
-  Reminder, 
-  ReminderCreationRequest, 
-  ReminderSearchFilters,
   validateReminderCreation,
   calculateScheduledTime,
   parseTimeString,
   validateReminderTime,
   TimeUnit,
   MAX_REMINDER_DAYS,
-  MAX_REMINDER_MILLISECONDS
+  MAX_REMINDER_MILLISECONDS,
+  ReminderCreationRequest
 } from '../../domain/entities/reminder';
+import { 
+  Reminder, 
+  ReminderSearchFilters 
+} from '../../validation/schemas/domain/reminder.schema';
 import { Case } from '../../domain/entities/case';
 import { Staff } from '../../domain/entities/staff';
 import { TestUtils } from '../helpers/test-utils';
@@ -32,7 +34,7 @@ describe('ReminderService Unit Tests', () => {
   let mockUser: jest.Mocked<User>;
   let mockChannel: jest.Mocked<TextChannel>;
 
-  // Test data constants
+  // Test data constants - Valid Discord snowflakes (17-21 digits)
   const testGuildId = '123456789012345678';
   const testUserId = '234567890123456789';
   const testChannelId = '345678901234567890';
@@ -103,10 +105,10 @@ describe('ReminderService Unit Tests', () => {
   });
 
   describe('createReminder', () => {
-    const mockStaff: Staff = TestUtils.generateMockStaff({
+    const mockStaff = TestUtils.generateMockStaff({
       userId: testUserId,
       guildId: testGuildId
-    });
+    }) as Staff;
 
     const mockReminderRequest: ReminderCreationRequest = {
       guildId: testGuildId,
@@ -117,19 +119,20 @@ describe('ReminderService Unit Tests', () => {
     };
 
     const mockCreatedReminder: Reminder = TestUtils.generateMockReminder({
-      _id: TestUtils.generateObjectId(),
+      _id: TestUtils.generateObjectId().toString(),
       guildId: testGuildId,
       userId: testUserId,
       username: testUsername,
+      channelId: testChannelId,
       message: 'Test reminder message',
       scheduledFor: new Date(Date.now() + 2 * 60 * 60 * 1000), // 2 hours from now
       isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date()
+      createdAt: new Date(),
+      updatedAt: new Date()
     });
 
     beforeEach(() => {
-      mockStaffRepository.findByFilters.mockResolvedValue([mockStaff]);
+      mockStaffRepository.findByFilters.mockResolvedValue([mockStaff] as any);
       mockReminderRepository.add.mockResolvedValue(mockCreatedReminder);
     });
 
@@ -168,20 +171,20 @@ describe('ReminderService Unit Tests', () => {
     });
 
     it('should associate reminder with case when channel has associated case', async () => {
-      const mockCase: Case = TestUtils.generateMockCase({
-        _id: TestUtils.generateObjectId(),
+      const mockCase = TestUtils.generateMockCase({
+        _id: TestUtils.generateObjectId().toString(),
         guildId: testGuildId,
         channelId: testChannelId,
         createdAt: new Date(),
         updatedAt: new Date()
-      });
+      }) as Case;
 
       const requestWithChannel = {
         ...mockReminderRequest,
         channelId: testChannelId
       };
 
-      mockCaseRepository.searchCases.mockResolvedValue([mockCase]);
+      mockCaseRepository.searchCases.mockResolvedValue([mockCase] as any);
 
       await reminderService.createReminder(requestWithChannel);
 
@@ -351,7 +354,7 @@ describe('ReminderService Unit Tests', () => {
 
   describe('cancelReminder', () => {
     const mockReminder: Reminder = TestUtils.generateMockReminder({
-      _id: TestUtils.generateObjectId(),
+      _id: TestUtils.generateObjectId().toString(),
       userId: testUserId,
       guildId: testGuildId,
       isActive: true,
@@ -387,7 +390,7 @@ describe('ReminderService Unit Tests', () => {
     it('should throw error when user tries to cancel another user\'s reminder', async () => {
       const otherUserReminder = {
         ...mockReminder,
-        userId: 'other-user-id'
+        userId: '456789012345678901'
       };
       mockReminderRepository.findById.mockResolvedValue(otherUserReminder);
 
@@ -533,14 +536,14 @@ describe('ReminderService Unit Tests', () => {
     it('should schedule future reminders correctly', async () => {
       const futureTime = new Date(Date.now() + 300000); // 5 minutes from now
       const futureReminder = TestUtils.generateMockReminder({
-        _id: TestUtils.generateObjectId(),
+        _id: TestUtils.generateObjectId().toString(),
         scheduledFor: futureTime,
         isActive: true,
         createdAt: new Date(),
         updatedAt: new Date()
       });
 
-      mockStaffRepository.findByFilters.mockResolvedValue([TestUtils.generateMockStaff()]);
+      mockStaffRepository.findByFilters.mockResolvedValue([TestUtils.generateMockStaff()] as any);
       mockReminderRepository.add.mockResolvedValue(futureReminder);
 
       await reminderService.createReminder({
@@ -625,7 +628,7 @@ describe('ReminderService Unit Tests', () => {
         scheduledFor: new Date(Date.now() + 120000)
       });
 
-      mockStaffRepository.findByFilters.mockResolvedValue([TestUtils.generateMockStaff()]);
+      mockStaffRepository.findByFilters.mockResolvedValue([TestUtils.generateMockStaff()] as any);
       mockReminderRepository.add
         .mockResolvedValueOnce(futureReminder1)
         .mockResolvedValueOnce(futureReminder2);
@@ -827,8 +830,8 @@ describe('ReminderService Unit Tests', () => {
     });
 
     it('should handle concurrent reminder operations', async () => {
-      const staff = TestUtils.generateMockStaff({ userId: testUserId });
-      mockStaffRepository.findByFilters.mockResolvedValue([staff]);
+      const staff = TestUtils.generateMockStaff({ userId: testUserId }) as Staff;
+      mockStaffRepository.findByFilters.mockResolvedValue([staff] as any);
 
       const requests = Array.from({ length: 5 }, (_, i) => ({
         guildId: testGuildId,
@@ -842,7 +845,7 @@ describe('ReminderService Unit Tests', () => {
       mockReminderRepository.add.mockImplementation((data) => 
         Promise.resolve(TestUtils.generateMockReminder({
           ...data,
-          _id: TestUtils.generateObjectId()
+          _id: TestUtils.generateObjectId().toString()
         }))
       );
 
@@ -903,7 +906,7 @@ describe('ReminderService Unit Tests', () => {
         scheduledFor: new Date(Date.now() + 300000) // 5 minutes
       });
 
-      mockStaffRepository.findByFilters.mockResolvedValue([TestUtils.generateMockStaff()]);
+      mockStaffRepository.findByFilters.mockResolvedValue([TestUtils.generateMockStaff()] as any);
       mockReminderRepository.add.mockResolvedValue(futureReminder);
 
       await reminderService.createReminder({

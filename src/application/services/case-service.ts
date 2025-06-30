@@ -1,40 +1,45 @@
+import { generateCaseNumber, generateChannelName, CaseStatus as CaseStatusEnum, CasePriority as CasePriorityEnum, CaseResult as CaseResultEnum } from '../../domain/entities/case'; // Keep utility functions and enums
 import { 
   Case, 
   CaseStatus, 
   CasePriority,
   CaseResult,
-  CaseCreationRequest, 
-  CaseAssignmentRequest,
-  CaseClosureRequest,
   CaseUpdateRequest,
   CaseDocument,
-  CaseNote,
-  generateCaseNumber,
-  generateChannelName
-} from '../../domain/entities/case';
+  CaseNote
+} from '../../validation';
 import { CaseRepository, CaseSearchFilters, CaseSortOptions, CasePaginationOptions } from '../../infrastructure/repositories/case-repository';
 import { CaseCounterRepository } from '../../infrastructure/repositories/case-counter-repository';
 import { GuildConfigRepository } from '../../infrastructure/repositories/guild-config-repository';
 import { PermissionService, PermissionContext } from './permission-service';
-import { BusinessRuleValidationService } from './business-rule-validation-service';
+import { UnifiedValidationService } from '../validation/unified-validation-service';
+import { ValidationMigrationAdapter } from '../validation/migration-adapter';
 import { logger } from '../../infrastructure/logger';
 import { randomUUID } from 'crypto';
 import { Client, CategoryChannel, ChannelType, PermissionFlagsBits, TextChannel } from 'discord.js';
 import { CaseChannelArchiveService } from './case-channel-archive-service';
+import { 
+  CaseOpenRequestSchema,
+  CaseAssignRequestSchema,
+  CaseCloseRequestSchema,
+  ValidationHelpers
+} from '../../validation';
 
 export class CaseService {
   private archiveService?: CaseChannelArchiveService;
+  private validationAdapter: ValidationMigrationAdapter;
 
   constructor(
     private caseRepository: CaseRepository,
     private caseCounterRepository: CaseCounterRepository,
     private guildConfigRepository: GuildConfigRepository,
     private permissionService: PermissionService,
-    private businessRuleValidationService: BusinessRuleValidationService,
+    private validationService: UnifiedValidationService,
     private discordClient?: Client
   ) {
+    this.validationAdapter = new ValidationMigrationAdapter(validationService);
     // Initialize archive service if we have required dependencies
-    if (this.permissionService && this.businessRuleValidationService) {
+    if (this.permissionService && this.validationService) {
       this.initializeArchiveService();
     }
   }
@@ -50,14 +55,21 @@ export class CaseService {
         this.guildConfigRepository,
         auditLogRepository,
         this.permissionService,
-        this.businessRuleValidationService
+        this.validationService
       );
     } catch (error) {
       logger.warn('Failed to initialize archive service:', error);
     }
   }
 
-  public async createCase(context: PermissionContext, request: CaseCreationRequest): Promise<Case> {
+  public async createCase(context: PermissionContext, request: unknown): Promise<Case> {
+    // Validate input using Zod schema
+    const validatedRequest = ValidationHelpers.validateOrThrow(
+      CaseOpenRequestSchema,
+      request,
+      'Case creation request'
+    );
+
     // Check case permission
     const hasPermission = await this.permissionService.hasActionPermission(context, 'case');
     if (!hasPermission) {
@@ -66,15 +78,15 @@ export class CaseService {
 
     // Validate client case limits (5 active cases max per client)
     const caseLimitValidation = await this.validateClientCaseLimits(
-      request.clientId,
-      request.guildId
+      validatedRequest.clientId,
+      validatedRequest.guildId
     );
     
     if (!caseLimitValidation.valid) {
       const errorMessage = caseLimitValidation.errors.join(', ');
       logger.warn('Case creation blocked due to client case limit', {
-        clientId: request.clientId,
-        guildId: request.guildId,
+        clientId: validatedRequest.clientId,
+        guildId: validatedRequest.guildId,
         errors: caseLimitValidation.errors
       });
       throw new Error(errorMessage);
@@ -83,32 +95,32 @@ export class CaseService {
     // Log warnings if client is approaching limit
     if (caseLimitValidation.warnings.length > 0) {
       logger.warn('Client approaching case limit', {
-        clientId: request.clientId,
+        clientId: validatedRequest.clientId,
         warnings: caseLimitValidation.warnings
       });
     }
 
     logger.info('Creating new case', {
-      guildId: request.guildId,
-      clientId: request.clientId,
-      title: request.title,
-      clientCurrentCases: caseLimitValidation.currentCases
+      guildId: validatedRequest.guildId,
+      clientId: validatedRequest.clientId,
+      title: validatedRequest.title,
+      clientCurrentCases: (caseLimitValidation as any).currentCases || 0
     });
 
     // Generate sequential case number
-    const caseCount = await this.caseCounterRepository.getNextCaseNumber(request.guildId);
+    const caseCount = await this.caseCounterRepository.getNextCaseNumber(validatedRequest.guildId);
     const currentYear = new Date().getFullYear();
-    const caseNumber = generateCaseNumber(currentYear, caseCount, request.clientUsername);
+    const caseNumber = generateCaseNumber(currentYear, caseCount, validatedRequest.clientUsername);
 
     const caseData: Omit<Case, '_id' | 'createdAt' | 'updatedAt'> = {
-      guildId: request.guildId,
+      guildId: validatedRequest.guildId,
       caseNumber,
-      clientId: request.clientId,
-      clientUsername: request.clientUsername,
-      title: request.title,
-      description: request.description,
-      status: CaseStatus.PENDING,
-      priority: request.priority || CasePriority.MEDIUM,
+      clientId: validatedRequest.clientId,
+      clientUsername: validatedRequest.clientUsername,
+      title: validatedRequest.title,
+      description: validatedRequest.description,
+      status: CaseStatusEnum.PENDING,
+      priority: validatedRequest.priority as CasePriority || CasePriorityEnum.MEDIUM,
       assignedLawyerIds: [],
       documents: [],
       notes: []
@@ -119,53 +131,66 @@ export class CaseService {
     logger.info('Case created successfully', {
       caseId: createdCase._id,
       caseNumber: createdCase.caseNumber,
-      clientId: request.clientId
+      clientId: validatedRequest.clientId
     });
 
     return createdCase;
   }
 
-  public async assignLawyer(context: PermissionContext, request: CaseAssignmentRequest): Promise<Case> {
+  public async assignLawyer(context: PermissionContext, request: unknown): Promise<Case> {
+    // Validate input using Zod schema
+    const validatedRequest = ValidationHelpers.validateOrThrow(
+      CaseAssignRequestSchema,
+      request,
+      'Case assignment request'
+    );
+
     // Check case permission
     const hasPermission = await this.permissionService.hasActionPermission(context, 'case');
     if (!hasPermission) {
       throw new Error('You do not have permission to assign lawyers to cases');
     }
 
+    // For now, we'll handle single lawyer assignment (first in array)
+    const lawyerId = validatedRequest.lawyerIds[0];
+    if (!lawyerId) {
+      throw new Error('At least one lawyer must be specified');
+    }
+
     // Validate that the lawyer being assigned has the required permissions
     const lawyerValidation = await this.validateLawyerPermissions(
       context.guildId,
-      request.lawyerId,
+      lawyerId,
       'lawyer'
     );
 
     if (!lawyerValidation.valid) {
       const errorMessage = `User cannot be assigned to case: ${lawyerValidation.errors.join(', ')}`;
       logger.warn('Lawyer assignment blocked due to insufficient permissions', {
-        caseId: request.caseId,
-        lawyerId: request.lawyerId,
-        assignedBy: request.assignedBy,
+        caseId: validatedRequest.caseId,
+        lawyerId: lawyerId,
+        assignedBy: validatedRequest.assignedBy,
         errors: lawyerValidation.errors
       });
       throw new Error(errorMessage);
     }
 
     logger.info('Assigning lawyer to case', {
-      caseId: request.caseId,
-      lawyerId: request.lawyerId,
-      assignedBy: request.assignedBy
+      caseId: validatedRequest.caseId,
+      lawyerId: lawyerId,
+      assignedBy: validatedRequest.assignedBy
     });
 
-    const updatedCase = await this.caseRepository.assignLawyer(request.caseId, request.lawyerId);
+    const updatedCase = await this.caseRepository.assignLawyer(validatedRequest.caseId, lawyerId);
     
     if (!updatedCase) {
       throw new Error('Case not found or assignment failed');
     }
 
     logger.info('Lawyer assigned successfully', {
-      caseId: request.caseId,
-      lawyerId: request.lawyerId,
-      isLeadAttorney: updatedCase.leadAttorneyId === request.lawyerId
+      caseId: validatedRequest.caseId,
+      lawyerId: lawyerId,
+      isLeadAttorney: updatedCase.leadAttorneyId === lawyerId
     });
 
     return updatedCase;
@@ -231,7 +256,14 @@ export class CaseService {
     return updatedCase;
   }
 
-  public async closeCase(context: PermissionContext, request: CaseClosureRequest): Promise<Case> {
+  public async closeCase(context: PermissionContext, request: unknown): Promise<Case> {
+    // Validate input using Zod schema
+    const validatedRequest = ValidationHelpers.validateOrThrow(
+      CaseCloseRequestSchema,
+      request,
+      'Case closure request'
+    );
+
     // Check case permission
     const hasPermission = await this.permissionService.hasActionPermission(context, 'case');
     if (!hasPermission) {
@@ -239,30 +271,30 @@ export class CaseService {
     }
 
     logger.info('Closing case', {
-      caseId: request.caseId,
-      result: request.result,
-      closedBy: request.closedBy
+      caseId: validatedRequest.caseId,
+      result: validatedRequest.result,
+      closedBy: validatedRequest.closedBy
     });
 
     // Use atomic conditional update to ensure only open/in-progress cases can be closed
     // This prevents race conditions by checking and updating in a single operation
     const updatedCase = await this.caseRepository.conditionalUpdate(
-      request.caseId,
+      validatedRequest.caseId,
       { 
-        status: CaseStatus.IN_PROGRESS
+        status: CaseStatusEnum.IN_PROGRESS
       } as any, // MongoDB query for "status is IN_PROGRESS"
       {
-        status: CaseStatus.CLOSED,
-        result: request.result,
-        resultNotes: request.resultNotes,
+        status: CaseStatusEnum.CLOSED,
+        result: validatedRequest.result as CaseResult,
+        resultNotes: validatedRequest.resultNotes,
         closedAt: new Date(),
-        closedBy: request.closedBy
+        closedBy: validatedRequest.closedBy
       }
     );
 
     if (!updatedCase) {
       // Check if case exists but is not in closable state
-      const existingCase = await this.caseRepository.findById(request.caseId);
+      const existingCase = await this.caseRepository.findById(validatedRequest.caseId);
       if (!existingCase) {
         throw new Error('Case not found');
       } else {
@@ -271,8 +303,8 @@ export class CaseService {
     }
 
     logger.info('Case closed successfully', {
-      caseId: request.caseId,
-      result: request.result
+      caseId: validatedRequest.caseId,
+      result: validatedRequest.result
     });
 
     // Optionally archive the case channel if Discord client and archive service are available
@@ -286,13 +318,13 @@ export class CaseService {
             .then(result => {
               if (result.success) {
                 logger.info('Case channel archived successfully after case closure', {
-                  caseId: request.caseId,
+                  caseId: validatedRequest.caseId,
                   channelId: result.channelId,
                   archiveCategoryId: result.archiveCategoryId
                 });
               } else {
                 logger.warn('Failed to archive case channel after closure', {
-                  caseId: request.caseId,
+                  caseId: validatedRequest.caseId,
                   channelId: result.channelId,
                   error: result.error
                 });
@@ -300,7 +332,7 @@ export class CaseService {
             })
             .catch(error => {
               logger.error('Error archiving case channel after closure:', {
-                caseId: request.caseId,
+                caseId: validatedRequest.caseId,
                 channelId: updatedCase.channelId,
                 error: error instanceof Error ? error.message : 'Unknown error'
               });
@@ -472,7 +504,7 @@ export class CaseService {
     }
   }
 
-  public async updateCase(context: PermissionContext, request: CaseUpdateRequest): Promise<Case> {
+  public async updateCase(context: PermissionContext, caseId: string, request: CaseUpdateRequest): Promise<Case> {
     // Check case permission
     const hasPermission = await this.permissionService.hasActionPermission(context, 'case');
     if (!hasPermission) {
@@ -484,8 +516,9 @@ export class CaseService {
     if (request.description !== undefined) updates.description = request.description;
     if (request.priority !== undefined) updates.priority = request.priority;
     if (request.status !== undefined) updates.status = request.status;
+    if (request.channelId !== undefined) updates.channelId = request.channelId;
 
-    const updatedCase = await this.caseRepository.update(request.caseId, updates);
+    const updatedCase = await this.caseRepository.update(caseId, updates);
     
     if (!updatedCase) {
       throw new Error('Case not found or update failed');
@@ -665,7 +698,7 @@ export class CaseService {
       throw new Error('Case not found');
     }
 
-    if (existingCase.status !== CaseStatus.PENDING) {
+    if (existingCase.status !== CaseStatusEnum.PENDING) {
       throw new Error(`Case cannot be accepted - current status: ${existingCase.status}`);
     }
 
@@ -688,9 +721,9 @@ export class CaseService {
     // This prevents race conditions by checking and updating in a single operation
     const updatedCase = await this.caseRepository.conditionalUpdate(
       caseId,
-      { status: CaseStatus.PENDING }, // Only update if status is PENDING
+      { status: CaseStatusEnum.PENDING }, // Only update if status is PENDING
       {
-        status: CaseStatus.IN_PROGRESS,
+        status: CaseStatusEnum.IN_PROGRESS,
         leadAttorneyId: context.userId,
         assignedLawyerIds: [context.userId],
         ...(channelId && { channelId })
@@ -853,8 +886,8 @@ export class CaseService {
     // For now, we'll set status to closed with a specific result
     // In a more complex system, you might want a separate "declined" status
     const updatedCase = await this.caseRepository.update(caseId, {
-      status: CaseStatus.CLOSED,
-      result: CaseResult.DISMISSED,
+      status: CaseStatusEnum.CLOSED,
+      result: CaseResultEnum.DISMISSED,
       resultNotes: reason || 'Case declined by staff',
       closedAt: new Date(),
       closedBy: context.userId
@@ -884,7 +917,7 @@ export class CaseService {
         isGuildOwner: false // Will be checked by the validation service
       };
 
-      const validation = await this.businessRuleValidationService.validatePermission(
+      const validation = await this.validationAdapter.validatePermission(
         userContext, 
         requiredPermission
       );
@@ -910,16 +943,19 @@ export class CaseService {
     guildId: string
   ): Promise<{ valid: boolean; errors: string[]; warnings: string[]; currentCases?: number }> {
     try {
-      const validation = await this.businessRuleValidationService.validateClientCaseLimit(
-        clientId,
-        guildId
-      );
+      const context: PermissionContext = {
+        guildId,
+        userId: clientId,
+        userRoles: [],
+        isGuildOwner: false
+      };
+      const validation = await this.validationAdapter.validateClientCaseLimit(context, clientId);
 
       return {
         valid: validation.valid,
         errors: validation.errors,
         warnings: validation.warnings,
-        currentCases: validation.currentCases
+        currentCases: (validation as any).currentCases || 0
       };
     } catch (error) {
       logger.error('Error validating client case limits:', error);

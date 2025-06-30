@@ -35,6 +35,6 @@ var AuditAction;
     AuditAction["CHANNEL_CLEANUP_PERFORMED"] = "channel_cleanup_performed";
     AuditAction["ORPHANED_CHANNEL_DELETED"] = "orphaned_channel_deleted";
     // System Maintenance Actions
-    AuditAction["SystemRepair"] = "system_repair";
+    AuditAction["SYSTEM_REPAIR"] = "system_repair";
 })(AuditAction || (exports.AuditAction = AuditAction = {}));
 //# sourceMappingURL=audit-log.js.map

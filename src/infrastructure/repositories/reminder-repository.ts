@@ -1,44 +1,68 @@
 import { BaseMongoRepository } from './base-mongo-repository';
-import { 
-  Reminder, 
-  ReminderSearchFilters 
-} from '../../domain/entities/reminder';
 import { Filter } from 'mongodb';
 import { logger } from '../logger';
+import {
+  Reminder,
+  ReminderSearchFilters,
+  ValidationHelpers,
+  DiscordSnowflakeSchema,
+  z
+} from '../../validation';
 
 export class ReminderRepository extends BaseMongoRepository<Reminder> {
   constructor() {
     super('reminders');
   }
 
-  public async getActiveReminders(guildId: string): Promise<Reminder[]> {
+  public async getActiveReminders(guildId: unknown): Promise<Reminder[]> {
     try {
-      return this.findWithComplexFilter({
+      const validatedGuildId = ValidationHelpers.validateOrThrow(
+        DiscordSnowflakeSchema,
         guildId,
+        'Guild ID'
+      );
+      return this.findWithComplexFilter({
+        guildId: validatedGuildId,
         isActive: true,
         deliveredAt: { $exists: false }
       } as Filter<Reminder>);
     } catch (error) {
-      logger.error('Error getting active reminders', { error, guildId });
+      logger.error('Error getting active reminders', { error, guildId: String(guildId) });
       throw error;
     }
   }
 
-  public async getUserReminders(userId: string, guildId: string, activeOnly = true): Promise<Reminder[]> {
+  public async getUserReminders(userId: unknown, guildId: unknown, activeOnly: unknown = true): Promise<Reminder[]> {
     try {
-      const query: Filter<Reminder> = {
+      const validatedUserId = ValidationHelpers.validateOrThrow(
+        DiscordSnowflakeSchema,
+        userId,
+        'User ID'
+      );
+      const validatedGuildId = ValidationHelpers.validateOrThrow(
+        DiscordSnowflakeSchema,
         guildId,
-        userId
+        'Guild ID'
+      );
+      const validatedActiveOnly = ValidationHelpers.validateOrThrow(
+        z.boolean(),
+        activeOnly,
+        'Active only flag'
+      );
+
+      const query: Filter<Reminder> = {
+        guildId: validatedGuildId,
+        userId: validatedUserId
       };
 
-      if (activeOnly) {
+      if (validatedActiveOnly) {
         query.isActive = true;
         query.deliveredAt = { $exists: false } as any;
       }
 
       return this.findWithComplexFilter(query, { scheduledFor: 1 }); // Sort by scheduled time
     } catch (error) {
-      logger.error('Error getting user reminders', { error, userId, guildId });
+      logger.error('Error getting user reminders', { error, userId: String(userId), guildId: String(guildId) });
       throw error;
     }
   }
@@ -57,44 +81,71 @@ export class ReminderRepository extends BaseMongoRepository<Reminder> {
     }
   }
 
-  public async markAsDelivered(reminderId: string): Promise<Reminder | null> {
+  public async markAsDelivered(reminderId: unknown): Promise<Reminder | null> {
     try {
-      const updated = await this.update(reminderId, {
+      const validatedReminderId = ValidationHelpers.validateOrThrow(
+        z.string(),
+        reminderId,
+        'Reminder ID'
+      );
+      const updated = await this.update(validatedReminderId, {
         deliveredAt: new Date(),
         isActive: false
       });
 
       if (updated) {
-        logger.info('Reminder marked as delivered', { reminderId });
+        logger.info('Reminder marked as delivered', { reminderId: validatedReminderId });
       }
 
       return updated;
     } catch (error) {
-      logger.error('Error marking reminder as delivered', { error, reminderId });
+      logger.error('Error marking reminder as delivered', { error, reminderId: String(reminderId) });
       throw error;
     }
   }
 
-  public async cancelReminder(reminderId: string): Promise<Reminder | null> {
+  public async cancelReminder(reminderId: unknown): Promise<Reminder | null> {
     try {
-      const updated = await this.update(reminderId, {
+      const validatedReminderId = ValidationHelpers.validateOrThrow(
+        z.string(),
+        reminderId,
+        'Reminder ID'
+      );
+      const updated = await this.update(validatedReminderId, {
         isActive: false
       });
 
       if (updated) {
-        logger.info('Reminder cancelled', { reminderId });
+        logger.info('Reminder cancelled', { reminderId: validatedReminderId });
       }
 
       return updated;
     } catch (error) {
-      logger.error('Error cancelling reminder', { error, reminderId });
+      logger.error('Error cancelling reminder', { error, reminderId: String(reminderId) });
       throw error;
     }
   }
 
-  public async searchReminders(filters: ReminderSearchFilters): Promise<Reminder[]> {
+  public async searchReminders(filters: unknown): Promise<Reminder[]> {
     try {
-      const query = this.buildSearchQuery(filters);
+      // Create a schema for ReminderSearchFilters
+      const ReminderSearchFiltersSchema = z.object({
+        guildId: DiscordSnowflakeSchema.optional(),
+        userId: DiscordSnowflakeSchema.optional(),
+        isActive: z.boolean().optional(),
+        deliveredAt: z.date().optional(),
+        scheduledBefore: z.date().optional(),
+        scheduledAfter: z.date().optional(),
+        caseId: z.string().optional(),
+      }).passthrough();
+      
+      const validatedFilters = ValidationHelpers.validateOrThrow(
+        ReminderSearchFiltersSchema,
+        filters,
+        'Reminder search filters'
+      );
+      
+      const query = this.buildSearchQuery(validatedFilters as ReminderSearchFilters);
       return this.findWithComplexFilter(query, { scheduledFor: 1 });
     } catch (error) {
       logger.error('Error searching reminders', { error, filters });

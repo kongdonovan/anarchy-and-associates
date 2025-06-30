@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ApplicationService = void 0;
 const crypto_1 = require("crypto");
 const logger_1 = require("../../infrastructure/logger");
+const validation_1 = require("../../validation");
 class ApplicationService {
     constructor(applicationRepository, jobRepository, staffRepository, robloxService, permissionService) {
         this.applicationRepository = applicationRepository;
@@ -12,64 +13,68 @@ class ApplicationService {
         this.permissionService = permissionService;
     }
     async submitApplication(request) {
+        // Validate input using Zod schema
+        const validatedRequest = validation_1.ValidationHelpers.validateOrThrow(validation_1.ApplicationSubmitRequestSchema, request, 'Application submission request');
         logger_1.logger.info('Submitting application', {
-            guildId: request.guildId,
-            jobId: request.jobId,
-            applicantId: request.applicantId
+            guildId: validatedRequest.guildId,
+            jobId: validatedRequest.jobId,
+            applicantId: validatedRequest.applicantId
         });
         // Validate the application
-        const validation = await this.validateApplication(request);
+        const validation = await this.validateApplication(validatedRequest);
         if (!validation.isValid) {
             throw new Error(`Application validation failed: ${validation.errors.join(', ')}`);
         }
         // Create the application
         const application = {
-            guildId: request.guildId,
-            jobId: request.jobId,
-            applicantId: request.applicantId,
-            robloxUsername: request.robloxUsername,
-            answers: request.answers,
+            guildId: validatedRequest.guildId,
+            jobId: validatedRequest.jobId.toString(),
+            applicantId: validatedRequest.applicantId,
+            robloxUsername: validatedRequest.robloxUsername,
+            answers: validatedRequest.answers,
             status: 'pending'
         };
         const createdApplication = await this.applicationRepository.add(application);
         logger_1.logger.info('Application submitted successfully', {
             applicationId: createdApplication._id,
-            applicantId: request.applicantId,
-            jobId: request.jobId
+            applicantId: validatedRequest.applicantId,
+            jobId: validatedRequest.jobId
         });
         return createdApplication;
     }
     async reviewApplication(context, request) {
+        // Validate input using Zod schema
+        const validatedRequest = validation_1.ValidationHelpers.validateOrThrow(validation_1.ApplicationReviewRequestSchema, request, 'Application review request');
         // Check HR permission for reviewing applications
         const hasPermission = await this.permissionService.hasHRPermissionWithContext(context);
         if (!hasPermission) {
             throw new Error('You do not have permission to review applications');
         }
         logger_1.logger.info('Reviewing application', {
-            applicationId: request.applicationId,
-            reviewerId: request.reviewerId,
-            approved: request.approved
+            applicationId: validatedRequest.applicationId,
+            reviewerId: validatedRequest.reviewedBy,
+            decision: validatedRequest.decision
         });
-        const application = await this.applicationRepository.findById(request.applicationId);
+        const application = await this.applicationRepository.findById(validatedRequest.applicationId.toString());
         if (!application) {
             throw new Error('Application not found');
         }
         if (application.status !== 'pending') {
             throw new Error(`Application is already ${application.status}`);
         }
-        const updatedApplication = await this.applicationRepository.update(request.applicationId, {
-            status: request.approved ? 'accepted' : 'rejected',
-            reviewedBy: request.reviewerId,
+        const updatedApplication = await this.applicationRepository.update(validatedRequest.applicationId.toString(), {
+            status: validatedRequest.decision,
+            reviewedBy: validatedRequest.reviewedBy,
             reviewedAt: new Date(),
-            reviewReason: request.reason
+            reviewReason: validatedRequest.reason
         });
         if (!updatedApplication) {
             throw new Error('Failed to update application');
         }
         logger_1.logger.info('Application reviewed successfully', {
-            applicationId: request.applicationId,
+            applicationId: validatedRequest.applicationId,
             status: updatedApplication.status,
-            reviewerId: request.reviewerId
+            reviewerId: validatedRequest.reviewedBy
         });
         return updatedApplication;
     }

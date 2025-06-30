@@ -7,7 +7,6 @@ const application_repository_1 = require("../../infrastructure/repositories/appl
 const case_repository_1 = require("../../infrastructure/repositories/case-repository");
 const guild_config_repository_1 = require("../../infrastructure/repositories/guild-config-repository");
 const logger_1 = require("../../infrastructure/logger");
-const staff_role_1 = require("../../domain/entities/staff-role");
 class RepairService {
     constructor() {
         this.staffRepository = new staff_repository_1.StaffRepository();
@@ -49,7 +48,14 @@ class RepairService {
                 }
             }
             // Sync Discord -> Database (remove unauthorized roles)
-            const staffRoleNames = Object.values(staff_role_1.StaffRole);
+            const staffRoleNames = [
+                'Managing Partner',
+                'Senior Partner',
+                'Junior Partner',
+                'Senior Associate',
+                'Junior Associate',
+                'Paralegal'
+            ];
             const discordStaffRoles = guild.roles.cache.filter(role => staffRoleNames.some(staffRole => role.name === staffRole || role.name.toLowerCase().includes(staffRole.toLowerCase())));
             for (const [roleId, role] of discordStaffRoles) {
                 const members = role.members;

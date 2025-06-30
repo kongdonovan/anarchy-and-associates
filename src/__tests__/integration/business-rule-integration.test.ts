@@ -1,7 +1,8 @@
 import { StaffService } from '../../application/services/staff-service';
 import { CaseService } from '../../application/services/case-service';
 import { RetainerService } from '../../application/services/retainer-service';
-import { BusinessRuleValidationService } from '../../application/services/business-rule-validation-service';
+import { UnifiedValidationService } from '../../application/validation/unified-validation-service';
+import { BusinessRuleValidationStrategy } from '../../application/validation/strategies/business-rule-validation-strategy';
 import { PermissionService, PermissionContext } from '../../application/services/permission-service';
 import { GuildOwnerUtils } from '../../infrastructure/utils/guild-owner-utils';
 
@@ -13,9 +14,11 @@ import { RetainerRepository } from '../../infrastructure/repositories/retainer-r
 import { GuildConfigRepository } from '../../infrastructure/repositories/guild-config-repository';
 import { RobloxService } from '../../infrastructure/external/roblox-service';
 
-import { StaffRole } from '../../domain/entities/staff-role';
-import { CaseStatus, CasePriority } from '../../domain/entities/case';
-import { ObjectId } from 'mongodb';
+// Remove StaffRole import - we'll use string literals
+// Remove Staff import - using TestUtils.generateMockStaff instead
+// Remove CaseStatus, CasePriority imports - we'll use string literals
+// Remove ObjectId import - using TestUtils instead
+import { TestUtils } from '../helpers/test-utils';
 
 // Mock all repositories and external services
 jest.mock('../../infrastructure/repositories/staff-repository');
@@ -54,7 +57,7 @@ describe('Business Rule Integration Tests', () => {
   let staffService: StaffService;
   let caseService: CaseService;
   let retainerService: RetainerService;
-  let businessRuleValidationService: BusinessRuleValidationService;
+  let unifiedValidationService: UnifiedValidationService;
   let permissionService: PermissionService;
 
   // Mock repositories
@@ -66,13 +69,13 @@ describe('Business Rule Integration Tests', () => {
   let mockGuildConfigRepo: jest.Mocked<GuildConfigRepository>;
   let mockRobloxService: jest.Mocked<RobloxService>;
 
-  // Test contexts
-  const guildId = 'test_guild_123';
-  const managingPartnerId = 'managing_partner_123';
-  const seniorPartnerId = 'senior_partner_123';
-  const juniorAssociateId = 'junior_associate_123';
-  const regularUserId = 'regular_user_123';
-  const clientId = 'client_123';
+  // Test contexts - using valid Discord snowflake IDs (18-digit strings)
+  const guildId = '123456789012345678';
+  const managingPartnerId = '234567890123456789';
+  const seniorPartnerId = '345678901234567890';
+  const juniorAssociateId = '456789012345678901';
+  const regularUserId = '567890123456789012';
+  const clientId = '678901234567890123';
 
   const guildOwnerContext: PermissionContext = {
     guildId,
@@ -131,18 +134,22 @@ describe('Business Rule Integration Tests', () => {
 
     // Initialize services
     permissionService = new PermissionService(mockGuildConfigRepo);
-    businessRuleValidationService = new BusinessRuleValidationService(
-      mockGuildConfigRepo,
+    unifiedValidationService = new UnifiedValidationService();
+
+    // Register validation strategies
+    const businessRuleStrategy = new BusinessRuleValidationStrategy(
       mockStaffRepo,
       mockCaseRepo,
+      mockGuildConfigRepo,
       permissionService
     );
+    unifiedValidationService.registerStrategy(businessRuleStrategy);
 
     staffService = new StaffService(
       mockStaffRepo,
       mockAuditLogRepo,
       permissionService,
-      businessRuleValidationService
+      unifiedValidationService
     );
 
     caseService = new CaseService(
@@ -150,7 +157,7 @@ describe('Business Rule Integration Tests', () => {
       mockCaseCounterRepo,
       mockGuildConfigRepo,
       permissionService,
-      businessRuleValidationService
+      unifiedValidationService
     );
 
     retainerService = new RetainerService(
@@ -166,7 +173,7 @@ describe('Business Rule Integration Tests', () => {
         [managingPartnerId]: {
           userId: managingPartnerId,
           guildId,
-          role: StaffRole.MANAGING_PARTNER,
+          role: 'Managing Partner',
           status: 'active',
           robloxUsername: 'ManagingPartner1',
           hiredAt: new Date(),
@@ -175,7 +182,7 @@ describe('Business Rule Integration Tests', () => {
         [seniorPartnerId]: {
           userId: seniorPartnerId,
           guildId,
-          role: StaffRole.SENIOR_PARTNER,
+          role: 'Senior Partner',
           status: 'active',
           robloxUsername: 'SeniorPartner1',
           hiredAt: new Date(),
@@ -184,13 +191,13 @@ describe('Business Rule Integration Tests', () => {
         [juniorAssociateId]: {
           userId: juniorAssociateId,
           guildId,
-          role: StaffRole.JUNIOR_ASSOCIATE,
+          role: 'Junior Associate',
           status: 'active',
           robloxUsername: 'JuniorAssociate1',
           hiredAt: new Date(),
           hiredBy: seniorPartnerId,
           promotionHistory: [] } };
-      return staffMembers[userId] || null;
+      return staffMembers[String(userId)] || null;
     });
 
     // Setup default mocks
@@ -198,79 +205,38 @@ describe('Business Rule Integration Tests', () => {
     mockAuditLogRepo.logRoleLimitBypass.mockResolvedValue({} as any);
     mockAuditLogRepo.logBusinessRuleViolation.mockResolvedValue({} as any);
     
-    // Mock permission validation for users based on their roles
-    businessRuleValidationService.validatePermission = jest.fn().mockImplementation(async (context, permission) => {
-      // Guild owner has all permissions
-      if (context.isGuildOwner) {
-        return {
-          valid: true,
-          errors: [],
+    // Setup default case counter mock
+    mockCaseCounterRepo.getNextCaseNumber.mockResolvedValue(1);
+    
+    // Setup default repository mocks for validation service
+    mockStaffRepo.findByGuildId.mockResolvedValue([]);
+    mockStaffRepo.getStaffCountByRole.mockResolvedValue(0);
+    mockStaffRepo.findByRole.mockResolvedValue([]);
+    mockCaseRepo.findByClient.mockResolvedValue([]);
+    
+    // Remove the mock for validatePermission since it doesn't exist on UnifiedValidationService
+    
+    // Mock validation adapter's validatePermission to handle lead attorney checks
+    jest.spyOn(caseService['validationAdapter'], 'validatePermission').mockImplementation(async (context, permission) => {
+      // Senior partners and above should have lead-attorney permission
+      if (permission === 'lead-attorney' && 
+          (context.userId === seniorPartnerId || context.userId === managingPartnerId)) {
+        return { valid: true, errors: [], warnings: [], metadata: {} };
+      }
+      // Junior associates should not have lead-attorney permission
+      if (permission === 'lead-attorney' && context.userId === juniorAssociateId) {
+        return { 
+          valid: false, 
+          errors: ["You don't have permission to perform action: lead-attorney"], 
           warnings: [],
-          bypassAvailable: true,
-          bypassType: 'guild-owner',
-          hasPermission: true,
-          requiredPermission: permission,
-          grantedPermissions: [permission],
-          metadata: {
-            ruleType: 'permission-validation',
-            requiredPermission: permission,
-            bypassReason: 'guild-owner'
-          }
+          metadata: {}
         };
       }
-      
-      // For lead attorney validation when setting lead attorney
-      if (permission === 'lead-attorney' && context.userId === seniorPartnerId) {
-        return {
-          valid: true,
-          errors: [],
-          warnings: [],
-          bypassAvailable: false,
-          hasPermission: true,
-          requiredPermission: permission,
-          grantedPermissions: [permission]
-        };
+      // Default to allowing lawyer permissions for all staff
+      if (permission === 'lawyer') {
+        return { valid: true, errors: [], warnings: [], metadata: {} };
       }
-      
-      // Senior Partner permissions
-      if (context.userId === seniorPartnerId) {
-        const validPermissions = ['lawyer', 'lead-attorney', 'senior-staff'];
-        if (validPermissions.includes(permission)) {
-          return {
-            valid: true,
-            errors: [],
-            warnings: [],
-            bypassAvailable: false,
-            hasPermission: true,
-            requiredPermission: permission,
-            grantedPermissions: [permission]
-          };
-        }
-      }
-      
-      // For regular user, no lead-attorney permission
-      if (permission === 'lead-attorney' && context.userId === regularUserId) {
-        return {
-          valid: false,
-          errors: ['Missing required permission: lead-attorney'],
-          warnings: [],
-          bypassAvailable: false,
-          hasPermission: false,
-          requiredPermission: permission,
-          grantedPermissions: []
-        };
-      }
-      
-      // Default mock implementation
-      return {
-        valid: false,
-        errors: [`Missing required permission: ${permission}`],
-        warnings: [],
-        bypassAvailable: false,
-        hasPermission: false,
-        requiredPermission: permission,
-        grantedPermissions: []
-      };
+      return { valid: false, errors: ['Permission denied'], warnings: [], metadata: {} };
     });
   });
 
@@ -278,15 +244,25 @@ describe('Business Rule Integration Tests', () => {
     describe('Role Limit Enforcement', () => {
       it('should enforce Managing Partner limit (1 max)', async () => {
         // Mock that there's already a Managing Partner
-        mockStaffRepo.getStaffCountByRole.mockResolvedValue(1);
+        mockStaffRepo.findByRole.mockResolvedValue([
+          TestUtils.generateMockStaff({
+            userId: '789012345678901234', 
+            guildId,
+            robloxUsername: 'ExistingMP',
+            status: 'active', 
+            role: 'Managing Partner',
+            hiredBy: '890123456789012345',
+            promotionHistory: []
+          })
+        ]);
         mockStaffRepo.findByUserId.mockResolvedValue(null); // New user
         mockStaffRepo.findStaffByRobloxUsername.mockResolvedValue(null);
 
         const hireRequest = {
           guildId,
-          userId: 'new_managing_partner',
+          userId: '901234567890123456',
           robloxUsername: 'NewManagingPartner',
-          role: StaffRole.MANAGING_PARTNER,
+          role: 'Managing Partner',
           hiredBy: managingPartnerId,
           reason: 'Attempting to hire second Managing Partner' };
 
@@ -299,30 +275,37 @@ describe('Business Rule Integration Tests', () => {
 
       it('should allow guild owner to bypass role limits with audit trail', async () => {
         // Mock that there's already a Managing Partner
-        mockStaffRepo.getStaffCountByRole.mockResolvedValue(1);
+        mockStaffRepo.findByRole.mockResolvedValue([
+          TestUtils.generateMockStaff({
+            userId: '789012345678901234', 
+            guildId,
+            robloxUsername: 'ExistingMP',
+            status: 'active', 
+            role: 'Managing Partner',
+            hiredBy: '890123456789012345',
+            promotionHistory: []
+          })
+        ]);
         mockStaffRepo.findByUserId.mockResolvedValue(null);
         mockStaffRepo.findStaffByRobloxUsername.mockResolvedValue(null);
-        mockStaffRepo.add.mockResolvedValue({
-          _id: new ObjectId(),
-          userId: 'second_managing_partner',
+        mockStaffRepo.add.mockResolvedValue(TestUtils.generateMockStaff({
+          userId: '012345678901234567',
           guildId,
-          role: StaffRole.MANAGING_PARTNER,
-          status: 'active',
-          createdAt: new Date(),
-          updatedAt: new Date()
-        } as any);
+          role: 'Managing Partner',
+          status: 'active'
+        }));
         
         // Mock the validateRobloxUsername method that StaffService uses internally
         jest.spyOn(staffService as any, 'validateRobloxUsername').mockResolvedValue({
           isValid: true,
-          username: 'SecondManagingPartner'
+          username: 'SecondMP'
         });
 
         const hireRequest = {
           guildId,
-          userId: 'second_managing_partner',
-          robloxUsername: 'SecondManagingPartner',
-          role: StaffRole.MANAGING_PARTNER,
+          userId: '012345678901234567',
+          robloxUsername: 'SecondMP',
+          role: 'Managing Partner',
           hiredBy: managingPartnerId,
           reason: 'Emergency hire - guild owner bypass',
           isGuildOwner: true
@@ -335,8 +318,8 @@ describe('Business Rule Integration Tests', () => {
         expect(mockAuditLogRepo.logRoleLimitBypass).toHaveBeenCalledWith(
           guildId,
           managingPartnerId,
-          'second_managing_partner',
-          StaffRole.MANAGING_PARTNER,
+          '012345678901234567',
+          'Managing Partner',
           1,
           1,
           'Emergency hire - guild owner bypass'
@@ -350,9 +333,9 @@ describe('Business Rule Integration Tests', () => {
 
         const hireRequest = {
           guildId,
-          userId: 'new_senior_partner',
+          userId: '112233445566778899',
           robloxUsername: 'NewSeniorPartner',
-          role: StaffRole.SENIOR_PARTNER,
+          role: 'Senior Partner',
           hiredBy: juniorAssociateId,
           reason: 'Junior Associate trying to hire Senior Partner' };
 
@@ -412,12 +395,12 @@ describe('Business Rule Integration Tests', () => {
       it('should enforce 5 active case limit per client', async () => {
         // Mock 5 active cases for client
         mockCaseRepo.findByClient.mockResolvedValue([
-          { guildId, status: CaseStatus.IN_PROGRESS },
-          { guildId, status: CaseStatus.PENDING },
-          { guildId, status: CaseStatus.IN_PROGRESS },
-          { guildId, status: CaseStatus.IN_PROGRESS },
-          { guildId, status: CaseStatus.PENDING },
-          { guildId, status: CaseStatus.CLOSED }, // Closed cases don't count
+          { guildId, status: 'in-progress' },
+          { guildId, status: 'pending' },
+          { guildId, status: 'in-progress' },
+          { guildId, status: 'in-progress' },
+          { guildId, status: 'pending' },
+          { guildId, status: 'closed' }, // Closed cases don't count
         ] as any[]);
 
         const caseRequest = {
@@ -426,7 +409,7 @@ describe('Business Rule Integration Tests', () => {
           clientUsername: 'TestClient',
           title: 'Case that should be rejected',
           description: 'This should fail due to case limit',
-          priority: CasePriority.MEDIUM };
+          priority: 'medium' };
 
         // Should fail due to case limit
         await expect(caseService.createCase(seniorPartnerContext, caseRequest))
@@ -436,20 +419,20 @@ describe('Business Rule Integration Tests', () => {
       it('should allow case creation when under limit', async () => {
         // Mock 3 active cases for client
         mockCaseRepo.findByClient.mockResolvedValue([
-          { guildId, status: CaseStatus.IN_PROGRESS },
-          { guildId, status: CaseStatus.PENDING },
-          { guildId, status: CaseStatus.IN_PROGRESS },
-          { guildId, status: CaseStatus.CLOSED }, // Closed cases don't count
+          { guildId, status: 'in-progress' },
+          { guildId, status: 'pending' },
+          { guildId, status: 'in-progress' },
+          { guildId, status: 'closed' }, // Closed cases don't count
         ] as any[]);
 
         mockCaseCounterRepo.getNextCaseNumber.mockResolvedValue(123);
         mockCaseRepo.add.mockResolvedValue({
-          _id: new ObjectId(),
+          _id: TestUtils.generateObjectId().toString(),
           caseNumber: 'AA-2024-123-TestClient',
           clientId,
           clientUsername: 'TestClient',
           title: 'Valid case',
-          status: CaseStatus.PENDING,
+          status: 'pending',
         createdAt: new Date(),
         updatedAt: new Date()
         } as any);
@@ -459,34 +442,46 @@ describe('Business Rule Integration Tests', () => {
           clientId,
           clientUsername: 'TestClient',
           title: 'Valid case under limit',
-          description: 'This should succeed',
-          priority: CasePriority.MEDIUM };
+          description: 'This should succeed with a valid description',
+          priority: 'medium' };
 
         const result = await caseService.createCase(seniorPartnerContext, caseRequest);
 
         expect(result.caseNumber).toBe('AA-2024-123-TestClient');
-        expect(result.status).toBe(CaseStatus.PENDING);
+        expect(result.status).toBe('pending');
       });
 
       it('should show warnings when approaching case limit', async () => {
         // Mock 4 active cases (approaching limit)
         mockCaseRepo.findByClient.mockResolvedValue([
-          { guildId, status: CaseStatus.IN_PROGRESS },
-          { guildId, status: CaseStatus.PENDING },
-          { guildId, status: CaseStatus.IN_PROGRESS },
-          { guildId, status: CaseStatus.PENDING },
+          { guildId, status: 'in-progress' },
+          { guildId, status: 'pending' },
+          { guildId, status: 'in-progress' },
+          { guildId, status: 'pending' },
         ] as any[]);
 
-        const validation = await businessRuleValidationService.validateClientCaseLimit(clientId, guildId);
+        // Create validation context for client case limit
+        const validationContext = {
+          permissionContext: seniorPartnerContext,
+          entityType: 'case',
+          operation: 'validateClientLimit',
+          data: {
+            clientId,
+            guildId
+          }
+        };
+        const validation = await unifiedValidationService.validate(validationContext);
 
         expect(validation.valid).toBe(true);
-        expect(validation.warnings).toContain('Client has 4 active cases (limit: 5)');
+        // Should have 4 active cases (approaching limit of 5)
+        expect(validation.metadata?.currentCount).toBe(4);
+        expect(validation.metadata?.maxCount).toBe(5);
       });
     });
 
     describe('Lead Attorney Validation', () => {
       it('should only allow qualified staff to be lead attorneys', async () => {
-        const caseId = 'test_case_123';
+        const caseId = TestUtils.generateObjectId().toString();
 
         // Junior Associate shouldn't be able to set lead attorney
         await expect(caseService.setLeadAttorney(juniorAssociateContext, caseId, seniorPartnerId))
@@ -516,7 +511,7 @@ describe('Business Rule Integration Tests', () => {
       });
 
       it('should validate lead attorney permissions before assignment', async () => {
-        const caseId = 'test_case_123';
+        const caseId = TestUtils.generateObjectId().toString();
         mockCaseRepo.findById.mockResolvedValue({
           _id: caseId,
           guildId,
@@ -531,10 +526,10 @@ describe('Business Rule Integration Tests', () => {
       });
 
       it('should require lead-attorney permission to accept cases', async () => {
-        const caseId = 'test_case_123';
+        const caseId = TestUtils.generateObjectId().toString();
         mockCaseRepo.findById.mockResolvedValue({
           _id: caseId,
-          status: CaseStatus.PENDING,
+          status: 'pending',
           guildId,
         createdAt: new Date(),
         updatedAt: new Date()
@@ -547,7 +542,7 @@ describe('Business Rule Integration Tests', () => {
         // Senior Partner should be able to accept cases
         mockCaseRepo.conditionalUpdate.mockResolvedValue({
           _id: caseId,
-          status: CaseStatus.IN_PROGRESS,
+          status: 'in-progress',
           leadAttorneyId: seniorPartnerId,
         createdAt: new Date(),
         updatedAt: new Date()
@@ -555,7 +550,7 @@ describe('Business Rule Integration Tests', () => {
 
         const result = await caseService.acceptCase(seniorPartnerContext, caseId);
 
-        expect(result.status).toBe(CaseStatus.IN_PROGRESS);
+        expect(result.status).toBe('in-progress');
         expect(result.leadAttorneyId).toBe(seniorPartnerId);
       });
     });
@@ -571,7 +566,7 @@ describe('Business Rule Integration Tests', () => {
       mockRetainerRepo.hasPendingRetainer.mockResolvedValue(false);
       mockRetainerRepo.hasActiveRetainer.mockResolvedValue(false);
       mockRetainerRepo.add.mockResolvedValue({
-        _id: new ObjectId(),
+        _id: TestUtils.generateObjectId().toString(),
         status: 'pending',
         ...retainerRequest,
         createdAt: new Date(),
@@ -593,46 +588,75 @@ describe('Business Rule Integration Tests', () => {
   describe('Cross-Service Validation', () => {
     it('should maintain consistency across staff and case assignments', async () => {
       // Validate staff member has correct permissions for case work
-      const staffValidation = await businessRuleValidationService.validateStaffMember(
-        juniorAssociateContext,
-        juniorAssociateId,
-        ['lawyer']
-      );
+      const staffValidationContext = {
+        permissionContext: juniorAssociateContext,
+        entityType: 'staff',
+        operation: 'validateStaffMember',
+        data: {
+          staffId: juniorAssociateId,
+          requiredPermissions: ['lawyer']
+        }
+      };
+      const staffValidation = await unifiedValidationService.validate(staffValidationContext);
 
       expect(staffValidation.valid).toBe(true);
-      expect(staffValidation.isActiveStaff).toBe(true);
-      expect(staffValidation.hasRequiredPermissions).toBe(true);
 
       // But should not have lead-attorney permissions
-      const leadAttorneyValidation = await businessRuleValidationService.validateStaffMember(
-        juniorAssociateContext,
-        juniorAssociateId,
-        ['lead-attorney']
-      );
+      const leadAttorneyValidationContext = {
+        permissionContext: juniorAssociateContext,
+        entityType: 'permission',
+        operation: 'validatePermission',
+        data: {
+          requiredAction: 'lead-attorney'
+        }
+      };
+      const leadAttorneyValidation = await unifiedValidationService.validate(leadAttorneyValidationContext);
 
       expect(leadAttorneyValidation.valid).toBe(false);
-      expect(leadAttorneyValidation.hasRequiredPermissions).toBe(false);
     });
 
     it('should handle complex permission scenarios', async () => {
       // Test guild owner override
-      const guildOwnerValidation = await businessRuleValidationService.validatePermission(
-        guildOwnerContext,
-        'any-permission'
-      );
+      const guildOwnerValidationContext = {
+        permissionContext: guildOwnerContext,
+        entityType: 'permission',
+        operation: 'validatePermission',
+        data: {
+          requiredAction: 'any-permission'
+        }
+      };
+      const guildOwnerValidation = await unifiedValidationService.validate(guildOwnerValidationContext);
 
       expect(guildOwnerValidation.valid).toBe(true);
-      expect(guildOwnerValidation.bypassAvailable).toBe(true);
-      expect(guildOwnerValidation.bypassType).toBe('guild-owner');
 
-      // Test permission inheritance
-      const multipleValidations = await businessRuleValidationService.validateMultiple([
-        businessRuleValidationService.validatePermission(seniorPartnerContext, 'lawyer'),
-        businessRuleValidationService.validatePermission(seniorPartnerContext, 'lead-attorney'),
-        businessRuleValidationService.validatePermission(seniorPartnerContext, 'senior-staff'),
-      ]);
+      // Test permission inheritance - validate multiple permissions sequentially
+      const lawyerContext = {
+        permissionContext: seniorPartnerContext,
+        entityType: 'permission',
+        operation: 'validatePermission',
+        data: { requiredAction: 'lawyer' }
+      };
+      const leadAttorneyContext = {
+        permissionContext: seniorPartnerContext,
+        entityType: 'permission',
+        operation: 'validatePermission',
+        data: { requiredAction: 'lead-attorney' }
+      };
+      const seniorStaffContext = {
+        permissionContext: seniorPartnerContext,
+        entityType: 'permission',
+        operation: 'validatePermission',
+        data: { requiredAction: 'senior-staff' }
+      };
 
-      expect(multipleValidations.valid).toBe(true);
+      const lawyerValidation = await unifiedValidationService.validate(lawyerContext);
+      const leadValidation = await unifiedValidationService.validate(leadAttorneyContext);
+      const seniorValidation = await unifiedValidationService.validate(seniorStaffContext);
+
+      // All should be valid for senior partner
+      expect(lawyerValidation.valid).toBe(true);
+      expect(leadValidation.valid).toBe(true);
+      expect(seniorValidation.valid).toBe(true);
     });
   });
 
@@ -658,7 +682,7 @@ describe('Business Rule Integration Tests', () => {
         bypassAvailable: true,
         currentCount: 1,
         maxCount: 1,
-        roleName: StaffRole.MANAGING_PARTNER,
+        roleName: 'Managing Partner',
         metadata: {} };
 
       const modal = GuildOwnerUtils.createRoleLimitBypassModal(managingPartnerId, validationResult);

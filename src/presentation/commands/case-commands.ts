@@ -22,9 +22,7 @@ import {
 import { Discord, Slash, SlashOption, SlashGroup, ButtonComponent, ModalComponent, SelectMenuComponent } from 'discordx';
 import { CaseService } from '../../application/services/case-service';
 import { PermissionService } from '../../application/services/permission-service';
-import { BusinessRuleValidationService } from '../../application/services/business-rule-validation-service';
-import { CommandValidationService } from '../../application/services/command-validation-service';
-import { CrossEntityValidationService } from '../../application/services/cross-entity-validation-service';
+import { ValidationServiceFactory } from '../../application/validation/validation-service-factory';
 import { CaseRepository } from '../../infrastructure/repositories/case-repository';
 import { CaseCounterRepository } from '../../infrastructure/repositories/case-counter-repository';
 import { GuildConfigRepository } from '../../infrastructure/repositories/guild-config-repository';
@@ -32,10 +30,14 @@ import { StaffRepository } from '../../infrastructure/repositories/staff-reposit
 import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-repository';
 import { ApplicationRepository } from '../../infrastructure/repositories/application-repository';
 import { JobRepository } from '../../infrastructure/repositories/job-repository';
-import { RetainerRepository } from '../../infrastructure/repositories/retainer-repository';
+// import { RetainerRepository } from '../../infrastructure/repositories/retainer-repository';
 import { FeedbackRepository } from '../../infrastructure/repositories/feedback-repository';
-import { ReminderRepository } from '../../infrastructure/repositories/reminder-repository';
+// import { ReminderRepository } from '../../infrastructure/repositories/reminder-repository';
 import { EmbedUtils } from '../../infrastructure/utils/embed-utils';
+import { logger } from '../../infrastructure/logger';
+import { BaseCommand } from './base-command';
+import { ValidatePermissions, ValidateBusinessRules, ValidateEntity } from '../decorators/validation-decorators';
+import { AuditDecorators } from '../decorators/audit-decorators';
 import { 
   Case, 
   CaseStatus, 
@@ -44,13 +46,21 @@ import {
   CaseCreationRequest,
   CaseAssignmentRequest,
   CaseClosureRequest,
-  CaseNote
-} from '../../domain/entities/case';
-import { logger } from '../../infrastructure/logger';
-import { BaseCommand } from './base-command';
-import { ValidatePermissions, ValidateBusinessRules, ValidateEntity } from '../decorators/validation-decorators';
+  CaseNote,
+  Feedback
+} from '../../validation';
 import { AuditAction } from '../../domain/entities/audit-log';
-import { Feedback } from '../../domain/entities/feedback';
+import { 
+  CaseStatus as DomainCaseStatus,
+  CasePriority as DomainCasePriority,
+  CaseResult as DomainCaseResult
+} from '../../domain/entities/case';
+import { 
+  CaseOpenCommandSchema,
+  CaseAssignCommandSchema,
+  CaseCloseCommandSchema,
+  ValidationHelpers
+} from '../../validation';
 
 // Case Template interface
 interface CaseTemplate {
@@ -85,9 +95,9 @@ export class CaseCommands extends BaseCommand {
     const auditLogRepository = new AuditLogRepository();
     const applicationRepository = new ApplicationRepository();
     const jobRepository = new JobRepository();
-    const retainerRepository = new RetainerRepository();
+    // const retainerRepository = new RetainerRepository();
     const feedbackRepository = new FeedbackRepository();
-    const reminderRepository = new ReminderRepository();
+    // const reminderRepository = new ReminderRepository();
 
     this.caseRepository = caseRepository;
     this.auditLogRepository = auditLogRepository;
@@ -95,33 +105,19 @@ export class CaseCommands extends BaseCommand {
 
     // Initialize services
     this.permissionService = new PermissionService(guildConfigRepository);
-    this.businessRuleValidationService = new BusinessRuleValidationService(
-      guildConfigRepository,
-      staffRepository,
-      caseRepository,
-      this.permissionService
-    );
-    this.crossEntityValidationService = new CrossEntityValidationService(
-      staffRepository,
-      caseRepository,
-      applicationRepository,
-      jobRepository,
-      retainerRepository,
-      feedbackRepository,
-      reminderRepository,
-      auditLogRepository
-    );
-    this.commandValidationService = new CommandValidationService(
-      this.businessRuleValidationService,
-      this.crossEntityValidationService
-    );
-
-    // Initialize validation services in base class
-    this.initializeValidationServices(
-      this.commandValidationService,
-      this.businessRuleValidationService,
-      this.crossEntityValidationService,
-      this.permissionService!
+    
+    // Create unified validation service
+    const validationService = ValidationServiceFactory.createValidationService(
+      {
+        staffRepository,
+        caseRepository,
+        guildConfigRepository,
+        jobRepository,
+        applicationRepository
+      },
+      {
+        permissionService: this.permissionService
+      }
     );
 
     this.caseService = new CaseService(
@@ -129,7 +125,7 @@ export class CaseCommands extends BaseCommand {
       caseCounterRepository,
       guildConfigRepository,
       this.permissionService,
-      this.businessRuleValidationService
+      validationService
     );
   }
 
@@ -137,13 +133,30 @@ export class CaseCommands extends BaseCommand {
     const caseRepository = new CaseRepository();
     const caseCounterRepository = new CaseCounterRepository();
     const guildConfigRepository = new GuildConfigRepository();
+    const staffRepository = new StaffRepository();
+    const jobRepository = new JobRepository();
+    const applicationRepository = new ApplicationRepository();
+
+    // Create unified validation service
+    const validationService = ValidationServiceFactory.createValidationService(
+      {
+        staffRepository,
+        caseRepository,
+        guildConfigRepository,
+        jobRepository,
+        applicationRepository
+      },
+      {
+        permissionService: this.permissionService!
+      }
+    );
 
     return new CaseService(
       caseRepository,
       caseCounterRepository,
       guildConfigRepository,
       this.permissionService!,
-      this.businessRuleValidationService!,
+      validationService,
       client
     );
   }
@@ -154,6 +167,7 @@ export class CaseCommands extends BaseCommand {
   })
   @ValidateBusinessRules('client_case_limit')
   @ValidateEntity('case', 'create')
+  @AuditDecorators.CaseCreated()
   async reviewCase(
     @SlashOption({
       description: 'Brief description of your legal matter',
@@ -167,7 +181,30 @@ export class CaseCommands extends BaseCommand {
     try {
       await this.deferReply(interaction, true);
 
-      const guildId = interaction.guildId!;
+      // Validate guild context
+      if (!interaction.guildId) {
+        await this.safeReply(interaction, {
+          embeds: [this.createErrorEmbed('Invalid Server', 'This command can only be used in a server.')],
+          ephemeral: true,
+        });
+        return;
+      }
+
+      // Validate command inputs using Zod schema
+      const commandData = {
+        title: 'Legal consultation request',
+        description: details,
+        priority: 'medium',
+        interaction
+      };
+
+      const validatedData = ValidationHelpers.validateOrThrow(
+        CaseOpenCommandSchema,
+        commandData,
+        'Case review command'
+      );
+
+      const guildId = interaction.guildId;
       const clientId = interaction.user.id;
       const clientUsername = interaction.user.username;
 
@@ -188,9 +225,9 @@ export class CaseCommands extends BaseCommand {
         guildId,
         clientId,
         clientUsername,
-        title: `Legal consultation request`,
-        description: details,
-        priority: CasePriority.MEDIUM
+        title: validatedData.title,
+        description: validatedData.description,
+        priority: validatedData.priority as CasePriority
       };
 
       const context = await this.getPermissionContext(interaction);
@@ -220,14 +257,21 @@ export class CaseCommands extends BaseCommand {
     } catch (error) {
       this.logCommandError(interaction, 'case_review_failed', error);
       
-      let errorMessage = 'An unexpected error occurred while submitting your case review request.';
-      if (error instanceof Error) {
-        errorMessage = error.message;
-      }
+      // Handle Zod validation errors with user-friendly messages
+      if (error instanceof Error && error.message.includes('Validation failed')) {
+        const embed = this.createErrorEmbed('Validation Error', 
+          `${error.message}\n\nPlease contact the bot developer if this issue persists.`);
+        await this.safeReply(interaction, { embeds: [embed], ephemeral: true });
+      } else {
+        let errorMessage = 'An unexpected error occurred while submitting your case review request.';
+        if (error instanceof Error) {
+          errorMessage = error.message;
+        }
 
-      const embed = this.createErrorEmbed('Case Review Failed', errorMessage);
-      
-      await this.safeReply(interaction, { embeds: [embed], ephemeral: true });
+        const embed = this.createErrorEmbed('Case Review Failed', errorMessage);
+        
+        await this.safeReply(interaction, { embeds: [embed], ephemeral: true });
+      }
     }
   }
 
@@ -238,6 +282,7 @@ export class CaseCommands extends BaseCommand {
   @ValidatePermissions('case')
   @ValidateBusinessRules('staff_member')
   @ValidateEntity('case', 'update')
+  @AuditDecorators.CaseAssigned()
   async assignCase(
     @SlashOption({
       description: 'The lawyer to assign to the case',
@@ -251,6 +296,15 @@ export class CaseCommands extends BaseCommand {
     try {
       await this.deferReply(interaction);
 
+      // Validate guild context
+      if (!interaction.guildId) {
+        await this.safeReply(interaction, {
+          embeds: [this.createErrorEmbed('Invalid Server', 'This command can only be used in a server.')],
+          ephemeral: true,
+        });
+        return;
+      }
+
       // This command only works within case channels
       const caseData = await this.getCaseFromChannel(interaction.channelId!);
       if (!caseData) {
@@ -263,9 +317,23 @@ export class CaseCommands extends BaseCommand {
         return;
       }
 
+      // Validate command inputs using Zod schema
+      const commandData = {
+        caseNumber: caseData.caseNumber,
+        lawyer,
+        leadAttorney: false, // Default value for assign command
+        interaction
+      };
+
+      const validatedData = ValidationHelpers.validateOrThrow(
+        CaseAssignCommandSchema,
+        commandData,
+        'Case assign command'
+      );
+
       const assignmentRequest: CaseAssignmentRequest = {
         caseId: caseData._id!.toString(),
-        lawyerId: lawyer.id,
+        lawyerIds: [validatedData.lawyer.id],
         assignedBy: interaction.user.id
       };
 
@@ -290,12 +358,19 @@ export class CaseCommands extends BaseCommand {
     } catch (error) {
       this.logCommandError(interaction, 'assign_lawyer_failed', error);
       
-      const embed = this.createErrorEmbed(
-        'Assignment Failed',
-        error instanceof Error ? error.message : 'Failed to assign lawyer to case.'
-      );
-      
-      await this.safeReply(interaction, { embeds: [embed], ephemeral: true });
+      // Handle Zod validation errors with user-friendly messages
+      if (error instanceof Error && error.message.includes('Validation failed')) {
+        const embed = this.createErrorEmbed('Validation Error', 
+          `${error.message}\n\nPlease contact the bot developer if this issue persists.`);
+        await this.safeReply(interaction, { embeds: [embed], ephemeral: true });
+      } else {
+        const embed = this.createErrorEmbed(
+          'Assignment Failed',
+          error instanceof Error ? error.message : 'Failed to assign lawyer to case.'
+        );
+        
+        await this.safeReply(interaction, { embeds: [embed], ephemeral: true });
+      }
     }
   }
 
@@ -306,6 +381,7 @@ export class CaseCommands extends BaseCommand {
   @ValidatePermissions('case')
   @ValidateBusinessRules('staff_member')
   @ValidateEntity('case', 'update')
+  @AuditDecorators.CaseAssigned()
   async transferCase(
     @SlashOption({
       description: 'Case number to transfer',
@@ -371,7 +447,7 @@ export class CaseCommands extends BaseCommand {
 
       // Validate case limits for target lawyer
       const targetCases = await this.caseRepository.findByLawyer(toLawyer.id);
-      const activeCases = targetCases.filter(c => c.status === CaseStatus.IN_PROGRESS);
+      const activeCases = targetCases.filter(c => c.status === DomainCaseStatus.IN_PROGRESS);
       
       if (activeCases.length >= 10) { // Configurable limit
         const embed = this.createWarningEmbed(
@@ -457,6 +533,7 @@ export class CaseCommands extends BaseCommand {
     name: 'bulk-close'
   })
   @ValidatePermissions('case')
+  @AuditDecorators.AdminAction(AuditAction.CASE_CLOSED, 'medium')
   async bulkCloseCases(
     @SlashOption({
       description: 'Result for all cases being closed',
@@ -484,7 +561,7 @@ export class CaseCommands extends BaseCommand {
       // Get open cases for the guild
       const openCases = await this.caseRepository.findByFilters({
         guildId: interaction.guildId!,
-        status: CaseStatus.IN_PROGRESS
+        status: DomainCaseStatus.IN_PROGRESS
       });
 
       if (openCases.length === 0) {
@@ -626,6 +703,7 @@ export class CaseCommands extends BaseCommand {
     name: 'analytics'
   })
   @ValidatePermissions('case')
+  @AuditDecorators.AdminAction(AuditAction.STAFF_LIST_VIEWED, 'low')
   async caseAnalytics(
     @SlashOption({
       description: 'Time period for analytics (days)',
@@ -652,22 +730,22 @@ export class CaseCommands extends BaseCommand {
         total: allCases.length,
         recent: recentCases.length,
         byStatus: {
-          pending: allCases.filter((c: Case) => c.status === CaseStatus.PENDING).length,
-          inProgress: allCases.filter((c: Case) => c.status === CaseStatus.IN_PROGRESS).length,
-          closed: allCases.filter((c: Case) => c.status === CaseStatus.CLOSED).length
+          pending: allCases.filter((c: Case) => c.status === DomainCaseStatus.PENDING).length,
+          inProgress: allCases.filter((c: Case) => c.status === DomainCaseStatus.IN_PROGRESS).length,
+          closed: allCases.filter((c: Case) => c.status === DomainCaseStatus.CLOSED).length
         },
         byResult: {
-          win: allCases.filter((c: Case) => c.result === CaseResult.WIN).length,
-          loss: allCases.filter((c: Case) => c.result === CaseResult.LOSS).length,
-          settlement: allCases.filter((c: Case) => c.result === CaseResult.SETTLEMENT).length,
-          dismissed: allCases.filter((c: Case) => c.result === CaseResult.DISMISSED).length,
-          withdrawn: allCases.filter((c: Case) => c.result === CaseResult.WITHDRAWN).length
+          win: allCases.filter((c: Case) => c.result === DomainCaseResult.WIN).length,
+          loss: allCases.filter((c: Case) => c.result === DomainCaseResult.LOSS).length,
+          settlement: allCases.filter((c: Case) => c.result === DomainCaseResult.SETTLEMENT).length,
+          dismissed: allCases.filter((c: Case) => c.result === DomainCaseResult.DISMISSED).length,
+          withdrawn: allCases.filter((c: Case) => c.result === DomainCaseResult.WITHDRAWN).length
         }
       };
 
       // Calculate lawyer workload
       const lawyerWorkload = new Map<string, number>();
-      const activeCases = allCases.filter((c: Case) => c.status === CaseStatus.IN_PROGRESS);
+      const activeCases = allCases.filter((c: Case) => c.status === DomainCaseStatus.IN_PROGRESS);
       
       activeCases.forEach((caseData: Case) => {
         caseData.assignedLawyerIds.forEach((lawyerId: string) => {
@@ -681,7 +759,7 @@ export class CaseCommands extends BaseCommand {
         .slice(0, 5);
 
       // Calculate average case duration
-      const closedCases = allCases.filter((c: Case) => c.status === CaseStatus.CLOSED && c.closedAt && c.createdAt);
+      const closedCases = allCases.filter((c: Case) => c.status === DomainCaseStatus.CLOSED && c.closedAt && c.createdAt);
       let avgDuration = 0;
       
       if (closedCases.length > 0) {
@@ -766,6 +844,7 @@ export class CaseCommands extends BaseCommand {
     name: 'template-create'
   })
   @ValidatePermissions('admin')
+  @AuditDecorators.AdminAction(AuditAction.CASE_ASSIGNED, 'medium')
   async createTemplate(
     @SlashOption({
       description: 'Template name',
@@ -859,6 +938,7 @@ export class CaseCommands extends BaseCommand {
   })
   @ValidateBusinessRules('client_case_limit')
   @ValidateEntity('case', 'create')
+  @AuditDecorators.CaseCreated()
   async useTemplate(
     @SlashOption({
       description: 'Additional details for the case',
@@ -991,6 +1071,7 @@ export class CaseCommands extends BaseCommand {
     name: 'debug-permissions'
   })
   @ValidatePermissions('admin')
+  @AuditDecorators.AdminAction(AuditAction.STAFF_LIST_VIEWED, 'low')
   async debugPermissions(
     @SlashOption({
       description: 'Case number to debug',
@@ -1112,6 +1193,7 @@ export class CaseCommands extends BaseCommand {
   })
   @ValidatePermissions('case')
   @ValidateEntity('case', 'update')
+  @AuditDecorators.AdminAction(AuditAction.CASE_CLOSED, 'medium')
   async closeCase(
     @SlashOption({
       description: 'Case result',
@@ -1130,6 +1212,15 @@ export class CaseCommands extends BaseCommand {
     interaction: CommandInteraction
   ): Promise<void> {
     try {
+      // Validate guild context
+      if (!interaction.guildId) {
+        await interaction.reply({
+          embeds: [this.createErrorEmbed('Invalid Server', 'This command can only be used in a server.')],
+          ephemeral: true,
+        });
+        return;
+      }
+
       // This command works within case channels or staff can specify case ID
       const caseData = await this.getCaseFromChannel(interaction.channelId!);
       if (!caseData) {
@@ -1141,6 +1232,20 @@ export class CaseCommands extends BaseCommand {
         await interaction.reply({ embeds: [embed], ephemeral: true });
         return;
       }
+
+      // Validate command inputs using Zod schema
+      const commandData = {
+        caseNumber: caseData.caseNumber,
+        result,
+        notes,
+        interaction
+      };
+
+      const validatedData = ValidationHelpers.validateOrThrow(
+        CaseCloseCommandSchema,
+        commandData,
+        'Case close command'
+      );
 
       // Check permissions: only client or lead counsel can close cases
       const isClient = caseData.clientId === interaction.user.id;
@@ -1158,8 +1263,8 @@ export class CaseCommands extends BaseCommand {
 
       const closureRequest: CaseClosureRequest = {
         caseId: caseData._id!.toString(),
-        result: result as CaseResult,
-        resultNotes: notes,
+        result: validatedData.result as CaseResult,
+        resultNotes: validatedData.notes || undefined,
         closedBy: interaction.user.id
       };
 
@@ -1192,12 +1297,21 @@ export class CaseCommands extends BaseCommand {
     } catch (error) {
       this.logCommandError(interaction, 'close_case_failed', error);
       
-      const embed = this.createErrorEmbed(
-        'Case Closure Failed',
-        error instanceof Error ? error.message : 'Failed to close case.'
-      );
-      
-      await interaction.reply({ embeds: [embed], ephemeral: true });
+      // Handle Zod validation errors with user-friendly messages
+      if (error instanceof Error && error.message.includes('Validation failed')) {
+        await interaction.reply({
+          embeds: [this.createErrorEmbed('Validation Error', 
+            `${error.message}\n\nPlease contact the bot developer if this issue persists.`)],
+          ephemeral: true,
+        });
+      } else {
+        const embed = this.createErrorEmbed(
+          'Case Closure Failed',
+          error instanceof Error ? error.message : 'Failed to close case.'
+        );
+        
+        await interaction.reply({ embeds: [embed], ephemeral: true });
+      }
     }
   }
 
@@ -1206,6 +1320,7 @@ export class CaseCommands extends BaseCommand {
     name: 'list'
   })
   @ValidatePermissions('case', false)
+  @AuditDecorators.AdminAction(AuditAction.STAFF_LIST_VIEWED, 'low')
   async listCases(
     @SlashOption({
       description: 'Filter by case status',
@@ -1276,9 +1391,9 @@ export class CaseCommands extends BaseCommand {
       if (cases.length > 0) {
         const caseList = cases.map(c => {
           const statusEmoji = {
-            [CaseStatus.PENDING]: '⏳',
-            [CaseStatus.IN_PROGRESS]: '🔄',
-            [CaseStatus.CLOSED]: '✅'
+            [DomainCaseStatus.PENDING]: '⏳',
+            [DomainCaseStatus.IN_PROGRESS]: '🔄',
+            [DomainCaseStatus.CLOSED]: '✅'
           }[c.status];
 
           const leadAttorney = c.leadAttorneyId ? `<@${c.leadAttorneyId}>` : 'Unassigned';
@@ -1320,6 +1435,7 @@ export class CaseCommands extends BaseCommand {
   @ValidatePermissions('case')
   @ValidateBusinessRules('staff_member')
   @ValidateEntity('case', 'update')
+  @AuditDecorators.CaseAssigned()
   async reassignStaff(
     @SlashOption({
       description: 'The staff member to reassign',
@@ -1363,7 +1479,7 @@ export class CaseCommands extends BaseCommand {
       const assignedCases = await this.caseRepository.findByLawyer(staff.id);
       const activeCases = assignedCases.filter(c => 
         c.guildId === interaction.guildId! && 
-        c.status === CaseStatus.IN_PROGRESS
+        c.status === DomainCaseStatus.IN_PROGRESS
       );
 
       if (activeCases.length === 0) {
@@ -1444,6 +1560,7 @@ export class CaseCommands extends BaseCommand {
   @ValidatePermissions('case')
   @ValidateBusinessRules('staff_member')
   @ValidateEntity('case', 'update')
+  @AuditDecorators.AdminAction(AuditAction.CASE_ASSIGNED, 'medium')
   async unassignStaff(
     @SlashOption({
       description: 'The staff member to unassign',
@@ -1459,7 +1576,7 @@ export class CaseCommands extends BaseCommand {
       const allAssignedCases = await this.caseRepository.findByLawyer(staff.id);
       const assignedCases = allAssignedCases.filter(c => 
         c.guildId === interaction.guildId! && 
-        c.status === CaseStatus.IN_PROGRESS
+        c.status === DomainCaseStatus.IN_PROGRESS
       );
 
       if (assignedCases.length === 0) {
@@ -1529,6 +1646,7 @@ export class CaseCommands extends BaseCommand {
     name: 'info'
   })
   @ValidatePermissions('case', false)
+  @AuditDecorators.AdminAction(AuditAction.STAFF_LIST_VIEWED, 'low')
   async caseInfo(
     @SlashOption({
       description: 'Case number (optional if used in case channel)',
@@ -1643,16 +1761,16 @@ export class CaseCommands extends BaseCommand {
 
   private buildOverviewTab(embed: EmbedBuilder, caseData: Case): void {
     const statusEmoji = {
-      [CaseStatus.PENDING]: '⏳',
-      [CaseStatus.IN_PROGRESS]: '🔄',
-      [CaseStatus.CLOSED]: '✅'
+      [DomainCaseStatus.PENDING]: '⏳',
+      [DomainCaseStatus.IN_PROGRESS]: '🔄',
+      [DomainCaseStatus.CLOSED]: '✅'
     }[caseData.status];
 
     const priorityEmoji = {
-      [CasePriority.LOW]: '🟢',
-      [CasePriority.MEDIUM]: '🟡',
-      [CasePriority.HIGH]: '🟠',
-      [CasePriority.URGENT]: '🔴'
+      [DomainCasePriority.LOW]: '🟢',
+      [DomainCasePriority.MEDIUM]: '🟡',
+      [DomainCasePriority.HIGH]: '🟠',
+      [DomainCasePriority.URGENT]: '🔴'
     }[caseData.priority];
 
     embed.addFields(
@@ -1671,13 +1789,13 @@ export class CaseCommands extends BaseCommand {
 
     embed.addFields({ name: '📝 Description', value: caseData.description, inline: false });
 
-    if (caseData.status === CaseStatus.CLOSED && caseData.result) {
+    if (caseData.status === DomainCaseStatus.CLOSED && caseData.result) {
       const resultEmoji = {
-        [CaseResult.WIN]: '🏆',
-        [CaseResult.LOSS]: '❌',
-        [CaseResult.SETTLEMENT]: '🤝',
-        [CaseResult.DISMISSED]: '🚫',
-        [CaseResult.WITHDRAWN]: '↩️'
+        [DomainCaseResult.WIN]: '🏆',
+        [DomainCaseResult.LOSS]: '❌',
+        [DomainCaseResult.SETTLEMENT]: '🤝',
+        [DomainCaseResult.DISMISSED]: '🚫',
+        [DomainCaseResult.WITHDRAWN]: '↩️'
       }[caseData.result];
 
       embed.addFields(
@@ -1763,7 +1881,7 @@ export class CaseCommands extends BaseCommand {
     }
 
     // Add lead attorney assignment
-    if (caseData.leadAttorneyId && caseData.status !== CaseStatus.PENDING) {
+    if (caseData.leadAttorneyId && caseData.status !== DomainCaseStatus.PENDING) {
       timelineEvents.push({
         date: caseData.updatedAt || caseData.createdAt || new Date(),
         event: `⚖️ Lead attorney assigned: <@${caseData.leadAttorneyId}>`
@@ -1787,13 +1905,13 @@ export class CaseCommands extends BaseCommand {
     });
 
     // Add case closure
-    if (caseData.status === CaseStatus.CLOSED && caseData.closedAt) {
+    if (caseData.status === DomainCaseStatus.CLOSED && caseData.closedAt) {
       const resultEmoji = caseData.result ? {
-        [CaseResult.WIN]: '🏆',
-        [CaseResult.LOSS]: '❌',
-        [CaseResult.SETTLEMENT]: '🤝',
-        [CaseResult.DISMISSED]: '🚫',
-        [CaseResult.WITHDRAWN]: '↩️'
+        [DomainCaseResult.WIN]: '🏆',
+        [DomainCaseResult.LOSS]: '❌',
+        [DomainCaseResult.SETTLEMENT]: '🤝',
+        [DomainCaseResult.DISMISSED]: '🚫',
+        [DomainCaseResult.WITHDRAWN]: '↩️'
       }[caseData.result] : '✅';
 
       timelineEvents.push({
@@ -1875,6 +1993,7 @@ export class CaseCommands extends BaseCommand {
   @ValidatePermissions('case')
   @ValidateBusinessRules('staff_member')
   @ValidateEntity('case', 'update')
+  @AuditDecorators.AdminAction(AuditAction.LEAD_ATTORNEY_CHANGED, 'medium')
   async setLeadAttorney(
     @SlashOption({
       description: 'The new lead attorney',
@@ -1988,9 +2107,8 @@ export class CaseCommands extends BaseCommand {
       });
 
       // Update case with channel ID
-      await this.caseService.updateCase(context, {
-        caseId: caseData._id!.toString(),
-        status: CaseStatus.PENDING,
+      await this.caseService.updateCase(context, caseData._id!.toString(), {
+        status: DomainCaseStatus.PENDING,
         channelId: channel.id
       });
 
@@ -2431,6 +2549,7 @@ export class CaseCommands extends BaseCommand {
     name: 'search'
   })
   @ValidatePermissions('case')
+  @AuditDecorators.AdminAction(AuditAction.STAFF_LIST_VIEWED, 'low')
   async searchCases(
     @SlashOption({
       description: 'Search term (title, description, client name, or case number)',
@@ -2610,6 +2729,7 @@ export class CaseCommands extends BaseCommand {
     name: 'export'
   })
   @ValidatePermissions('admin')
+  @AuditDecorators.AdminAction(AuditAction.STAFF_LIST_VIEWED, 'low')
   async exportCases(
     @SlashOption({
       description: 'Export format',
@@ -2696,6 +2816,7 @@ export class CaseCommands extends BaseCommand {
   })
   @ValidatePermissions('case')
   @ValidateEntity('case', 'update')
+  @AuditDecorators.AdminAction(AuditAction.CASE_ASSIGNED, 'medium')
   async addCaseNote(
     @SlashOption({
       description: 'Note content',
@@ -2900,9 +3021,9 @@ export class CaseCommands extends BaseCommand {
    */
   private getCaseStatusEmoji(status: CaseStatus): string {
     switch (status) {
-      case CaseStatus.PENDING: return '🟡';
-      case CaseStatus.IN_PROGRESS: return '🟢';
-      case CaseStatus.CLOSED: return '🔴';
+      case DomainCaseStatus.PENDING: return '🟡';
+      case DomainCaseStatus.IN_PROGRESS: return '🟢';
+      case DomainCaseStatus.CLOSED: return '🔴';
       default: return '⚪';
     }
   }
@@ -2912,10 +3033,10 @@ export class CaseCommands extends BaseCommand {
    */
   private getCasePriorityEmoji(priority: CasePriority): string {
     switch (priority) {
-      case CasePriority.LOW: return '🟢';
-      case CasePriority.MEDIUM: return '🟡';
-      case CasePriority.HIGH: return '🟠';
-      case CasePriority.URGENT: return '🔴';
+      case DomainCasePriority.LOW: return '🟢';
+      case DomainCasePriority.MEDIUM: return '🟡';
+      case DomainCasePriority.HIGH: return '🟠';
+      case DomainCasePriority.URGENT: return '🔴';
       default: return '⚪';
     }
   }

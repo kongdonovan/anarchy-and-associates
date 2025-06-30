@@ -1,5 +1,6 @@
 import { BaseMongoRepository } from './base-mongo-repository';
-import { Feedback, FeedbackSearchFilters, FeedbackSortOptions, FeedbackPaginationOptions, StaffPerformanceMetrics, FirmPerformanceMetrics } from '../../domain/entities/feedback';
+import { Feedback, FeedbackSearchFilters, FeedbackSortOptions } from '../../validation';
+import { FeedbackPaginationOptions, StaffPerformanceMetrics, FirmPerformanceMetrics } from '../../domain/entities/feedback';
 export declare class FeedbackRepository extends BaseMongoRepository<Feedback> {
     constructor();
     searchFeedback(filters: FeedbackSearchFilters, sort?: FeedbackSortOptions, pagination?: FeedbackPaginationOptions): Promise<Feedback[]>;

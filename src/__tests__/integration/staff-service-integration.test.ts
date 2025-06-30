@@ -3,8 +3,10 @@ import { StaffRepository } from '../../infrastructure/repositories/staff-reposit
 import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-repository';
 import { GuildConfigRepository } from '../../infrastructure/repositories/guild-config-repository';
 import { CaseRepository } from '../../infrastructure/repositories/case-repository';
+
 import { PermissionService, PermissionContext } from '../../application/services/permission-service';
-import { BusinessRuleValidationService } from '../../application/services/business-rule-validation-service';
+import { UnifiedValidationService } from '../../application/validation/unified-validation-service';
+import { BusinessRuleValidationStrategy } from '../../application/validation/strategies/business-rule-validation-strategy';
 import { StaffRole } from '../../domain/entities/staff-role';
 import { AuditAction } from '../../domain/entities/audit-log';
 import { TestUtils } from '../helpers/test-utils';
@@ -16,8 +18,9 @@ describe('StaffService Integration Tests', () => {
   let auditLogRepository: AuditLogRepository;
   let guildConfigRepository: GuildConfigRepository;
   let caseRepository: CaseRepository;
+
   let permissionService: PermissionService;
-  let businessRuleValidationService: BusinessRuleValidationService;
+  let unifiedValidationService: UnifiedValidationService;
   let context: PermissionContext;
 
   beforeAll(async () => {
@@ -30,22 +33,26 @@ describe('StaffService Integration Tests', () => {
     auditLogRepository = new AuditLogRepository();
     guildConfigRepository = new GuildConfigRepository();
     caseRepository = new CaseRepository();
-    
+
     // Initialize services
     permissionService = new PermissionService(guildConfigRepository);
-    businessRuleValidationService = new BusinessRuleValidationService(
-      guildConfigRepository,
+    unifiedValidationService = new UnifiedValidationService();
+    
+    // Register validation strategies
+    const businessRuleStrategy = new BusinessRuleValidationStrategy(
       staffRepository,
       caseRepository,
+      guildConfigRepository, // GuildConfigRepository parameter
       permissionService
     );
-    staffService = new StaffService(staffRepository, auditLogRepository, permissionService, businessRuleValidationService);
+    unifiedValidationService.registerStrategy(businessRuleStrategy);
+    staffService = new StaffService(staffRepository, auditLogRepository, permissionService, unifiedValidationService);
     
-    // Create test context
+    // Create test context with valid Discord snowflake IDs
     context = {
-      guildId: 'test-guild-123',
-      userId: 'admin-123',
-      userRoles: ['admin-role'],
+      guildId: '123456789012345678',
+      userId: '123456789012345679',
+      userRoles: ['123456789012345680'],
       isGuildOwner: false
     };
     
@@ -53,7 +60,7 @@ describe('StaffService Integration Tests', () => {
     
     // Setup test guild config
     await guildConfigRepository.add({
-      guildId: 'test-guild-123',
+      guildId: '123456789012345678',
       feedbackChannelId: undefined,
       retainerChannelId: undefined,
       caseReviewCategoryId: undefined,
@@ -62,16 +69,16 @@ describe('StaffService Integration Tests', () => {
       applicationChannelId: undefined,
       clientRoleId: undefined,
       permissions: {
-        admin: ['admin-role'],
-        'senior-staff': ['admin-role'],
+        admin: ['123456789012345680'],
+        'senior-staff': ['123456789012345680', '123456789012345681'],
         case: [],
         config: [],
         lawyer: [],
         'lead-attorney': [],
         repair: []
       },
-      adminRoles: ['admin-role'],
-      adminUsers: ['admin-123']
+      adminRoles: ['123456789012345680'],
+      adminUsers: ['123456789012345679']
     });
   });
 
@@ -81,9 +88,9 @@ describe('StaffService Integration Tests', () => {
 
   describe('Staff Hiring Integration', () => {
     it('should hire staff member with complete workflow', async () => {
-      const guildId = 'test-guild-123';
-      const userId = 'user-123';
-      const hiredBy = 'admin-123';
+      const guildId = '123456789012345678';
+      const userId = '234567890123456789';
+      const hiredBy = '345678901234567890';
       const robloxUsername = 'TestRobloxUser';
 
       const result = await staffService.hireStaff(context, {
@@ -121,13 +128,21 @@ describe('StaffService Integration Tests', () => {
     });
 
     it('should enforce role limits during hiring', async () => {
-      const guildId = 'test-guild-123';
-      const hiredBy = 'admin-123';
+      const guildId = '123456789012345678';
+      const hiredBy = '456789012345678901';
+
+      // Create a non-admin context for role limit testing
+      const nonAdminContext: PermissionContext = {
+        guildId: '123456789012345678',
+        userId: '456789012345678901',
+        userRoles: ['123456789012345681'], // senior-staff role from guild config
+        isGuildOwner: false
+      };
 
       // First hire should succeed
-      const firstHire = await staffService.hireStaff(context, {
+      const firstHire = await staffService.hireStaff(nonAdminContext, {
         guildId,
-        userId: 'user-1',
+        userId: '678901234567890123',
         hiredBy,
         robloxUsername: 'User1',
         role: StaffRole.MANAGING_PARTNER
@@ -135,9 +150,9 @@ describe('StaffService Integration Tests', () => {
       expect(firstHire.success).toBe(true);
 
       // Try to hire second Managing Partner (limit is 1)
-      const secondHire = await staffService.hireStaff(context, {
+      const secondHire = await staffService.hireStaff(nonAdminContext, {
         guildId,
-        userId: 'user-2',
+        userId: '789012345678901234',
         hiredBy,
         robloxUsername: 'User2',
         role: StaffRole.MANAGING_PARTNER
@@ -151,9 +166,9 @@ describe('StaffService Integration Tests', () => {
     });
 
     it('should prevent duplicate staff hiring', async () => {
-      const guildId = 'test-guild-123';
-      const userId = 'user-123';
-      const hiredBy = 'admin-123';
+      const guildId = '123456789012345678';
+      const userId = '234567890123456789';
+      const hiredBy = '345678901234567890';
 
       // First hire should succeed
       const firstHire = await staffService.hireStaff(context, {
@@ -178,14 +193,14 @@ describe('StaffService Integration Tests', () => {
     });
 
     it('should handle Roblox username conflicts', async () => {
-      const guildId = 'test-guild-123';
-      const hiredBy = 'admin-123';
+      const guildId = '123456789012345678';
+      const hiredBy = '345678901234567890';
       const robloxUsername = 'ConflictUser';
 
       // First hire with Roblox username
       const firstHire = await staffService.hireStaff(context, {
         guildId,
-        userId: 'user-1',
+        userId: '678901234567890123',
         hiredBy,
         robloxUsername,
         role: StaffRole.PARALEGAL
@@ -195,7 +210,7 @@ describe('StaffService Integration Tests', () => {
       // Second hire with same Roblox username should fail
       const secondHire = await staffService.hireStaff(context, {
         guildId,
-        userId: 'user-2',
+        userId: '789012345678901234',
         hiredBy,
         robloxUsername,
         role: StaffRole.JUNIOR_ASSOCIATE
@@ -209,18 +224,18 @@ describe('StaffService Integration Tests', () => {
     beforeEach(async () => {
       // Create initial staff member for promotion tests
       await staffService.hireStaff(context, {
-        guildId: 'test-guild-123',
-        userId: 'user-123',
-        hiredBy: 'admin-123',
+        guildId: '123456789012345678',
+        userId: '234567890123456789',
+        hiredBy: '345678901234567890',
         robloxUsername: 'TestUser',
         role: StaffRole.PARALEGAL
       });
     });
 
     it('should promote staff member with complete workflow', async () => {
-      const guildId = 'test-guild-123';
-      const userId = 'user-123';
-      const promotedBy = 'manager-123';
+      const guildId = '123456789012345678';
+      const userId = '234567890123456789';
+      const promotedBy = '234567890987654321';
 
       const result = await staffService.promoteStaff(context, {
         guildId,
@@ -253,9 +268,9 @@ describe('StaffService Integration Tests', () => {
     });
 
     it('should prevent invalid promotions', async () => {
-      const guildId = 'test-guild-123';
-      const userId = 'user-123';
-      const promotedBy = 'manager-123';
+      const guildId = '123456789012345678';
+      const userId = '234567890123456789';
+      const promotedBy = '234567890987654321';
 
       // Try to promote to same role
       const sameRoleResult = await staffService.promoteStaff(context, {
@@ -273,18 +288,18 @@ describe('StaffService Integration Tests', () => {
     beforeEach(async () => {
       // Create staff member for firing tests
       await staffService.hireStaff(context, {
-        guildId: 'test-guild-123',
-        userId: 'user-123',
-        hiredBy: 'admin-123',
+        guildId: '123456789012345678',
+        userId: '234567890123456789',
+        hiredBy: '345678901234567890',
         robloxUsername: 'TestUser',
         role: StaffRole.JUNIOR_ASSOCIATE
       });
     });
 
     it('should fire staff member with complete workflow', async () => {
-      const guildId = 'test-guild-123';
-      const userId = 'user-123';
-      const terminatedBy = 'admin-123';
+      const guildId = '123456789012345678';
+      const userId = '234567890123456789';
+      const terminatedBy = '345678901234567890';
       const reason = 'Policy violation';
 
       const result = await staffService.fireStaff(context, {
@@ -308,9 +323,9 @@ describe('StaffService Integration Tests', () => {
     });
 
     it('should prevent firing non-existent staff', async () => {
-      const guildId = 'test-guild-123';
-      const userId = 'non-existent-user';
-      const terminatedBy = 'admin-123';
+      const guildId = '123456789012345678';
+      const userId = '345678909876543210';
+      const terminatedBy = '345678901234567890';
 
       const result = await staffService.fireStaff(context, {
         guildId,
@@ -327,19 +342,19 @@ describe('StaffService Integration Tests', () => {
     beforeEach(async () => {
       // Create diverse staff for testing
       const staffMembers = [
-        { userId: 'user-1', role: StaffRole.MANAGING_PARTNER, robloxUsername: 'ManagingPartner1' },
-        { userId: 'user-2', role: StaffRole.SENIOR_PARTNER, robloxUsername: 'SeniorPartner1' },
-        { userId: 'user-3', role: StaffRole.JUNIOR_PARTNER, robloxUsername: 'JuniorPartner1' },
-        { userId: 'user-4', role: StaffRole.SENIOR_ASSOCIATE, robloxUsername: 'SeniorAssociate1' },
-        { userId: 'user-5', role: StaffRole.JUNIOR_ASSOCIATE, robloxUsername: 'JuniorAssociate1' },
-        { userId: 'user-6', role: StaffRole.PARALEGAL, robloxUsername: 'Paralegal1' }
+        { userId: '678901234567890123', role: StaffRole.MANAGING_PARTNER, robloxUsername: 'ManagingPartner1' },
+        { userId: '789012345678901234', role: StaffRole.SENIOR_PARTNER, robloxUsername: 'SeniorPartner1' },
+        { userId: '890123456789012345', role: StaffRole.JUNIOR_PARTNER, robloxUsername: 'JuniorPartner1' },
+        { userId: '901234567890123456', role: StaffRole.SENIOR_ASSOCIATE, robloxUsername: 'SeniorAssociate1' },
+        { userId: '012345678901234567', role: StaffRole.JUNIOR_ASSOCIATE, robloxUsername: 'JuniorAssociate1' },
+        { userId: '123456789098765432', role: StaffRole.PARALEGAL, robloxUsername: 'Paralegal1' }
       ];
 
       for (const member of staffMembers) {
         const result = await staffService.hireStaff(context, {
-          guildId: 'test-guild-123',
+          guildId: '123456789012345678',
           userId: member.userId,
-          hiredBy: 'admin-123',
+          hiredBy: '345678901234567890',
           robloxUsername: member.robloxUsername,
           role: member.role
         });
@@ -375,61 +390,55 @@ describe('StaffService Integration Tests', () => {
 
   describe('Error Handling and Edge Cases', () => {
     it('should handle database connection failures gracefully', async () => {
-      // Test with malformed input that should cause internal errors but be handled gracefully
-      const result = await staffService.hireStaff(context, {
-        guildId: 'test-guild-123',
-        userId: 'user-123', 
-        hiredBy: 'admin-123',
+      // Test with malformed input that should cause validation errors
+      await expect(staffService.hireStaff(context, {
+        guildId: '123456789012345678',
+        userId: '234567890123456789', 
+        hiredBy: '345678901234567890',
         robloxUsername: 'TestUser123',
         role: 'InvalidRole' as any // Invalid role type
-      });
-      
-      // Service should handle the error gracefully and return failure response
-      expect(result.success).toBe(false);
-      expect(result.error).toBe('Failed to validate role limits');
+      })).rejects.toThrow('Validation failed');
     });
 
     it('should handle malformed staff data', async () => {
       // Test invalid Roblox username (too short - this actually fails validation)
-      const result1 = await staffService.hireStaff(context, {
-        guildId: 'test-guild-123',
-        userId: 'user-invalid-1',
-        hiredBy: 'admin-123',
+      await expect(staffService.hireStaff(context, {
+        guildId: '123456789012345678',
+        userId: '456789098765432109',
+        hiredBy: '345678901234567890',
         robloxUsername: 'X', // Too short (less than 3 chars)
         role: StaffRole.PARALEGAL
-      });
-      expect(result1.success).toBe(false);
+      })).rejects.toThrow('Validation failed');
 
       // Test invalid Roblox username (contains invalid characters)
-      const result2 = await staffService.hireStaff(context, {
-        guildId: 'test-guild-123',
-        userId: 'user-invalid-2',
-        hiredBy: 'admin-123',
+      await expect(staffService.hireStaff(context, {
+        guildId: '123456789012345678',
+        userId: '567890987654321098',
+        hiredBy: '345678901234567890',
         robloxUsername: 'Test@User!', // Contains invalid characters
         role: StaffRole.PARALEGAL
-      });
-      expect(result2.success).toBe(false);
+      })).rejects.toThrow('Validation failed');
     });
   });
 
   describe('Cross-Guild Isolation', () => {
     it('should maintain strict guild isolation', async () => {
-      const guild1 = 'guild-1';
-      const guild2 = 'guild-2';
-      const userId = 'user-123';
+      const guild1 = '678909876543210987';
+      const guild2 = '789098765432109876';
+      const userId = '234567890123456789';
       
       // Create contexts for each guild
       const context1: PermissionContext = {
         guildId: guild1,
-        userId: 'admin-1',
-        userRoles: ['admin-role'],
+        userId: '890987654321098765',
+        userRoles: ['012109876543210987'],
         isGuildOwner: false
       };
       
       const context2: PermissionContext = {
         guildId: guild2,
-        userId: 'admin-2',
-        userRoles: ['admin-role'],
+        userId: '901098765432109876',
+        userRoles: ['012109876543210987'],
         isGuildOwner: false
       };
       
@@ -444,16 +453,16 @@ describe('StaffService Integration Tests', () => {
         applicationChannelId: undefined,
         clientRoleId: undefined,
         permissions: {
-          admin: ['admin-role'],
-          'senior-staff': ['admin-role'],
+          admin: ['012109876543210987'],
+          'senior-staff': ['012109876543210987'],
           case: [],
           config: [],
           lawyer: [],
           'lead-attorney': [],
           repair: []
         },
-        adminRoles: ['admin-role'],
-        adminUsers: ['admin-1']
+        adminRoles: ['012109876543210987'],
+        adminUsers: ['890987654321098765']
       });
       
       await guildConfigRepository.add({
@@ -466,23 +475,23 @@ describe('StaffService Integration Tests', () => {
         applicationChannelId: undefined,
         clientRoleId: undefined,
         permissions: {
-          admin: ['admin-role'],
-          'senior-staff': ['admin-role'],
+          admin: ['012109876543210987'],
+          'senior-staff': ['012109876543210987'],
           case: [],
           config: [],
           lawyer: [],
           'lead-attorney': [],
           repair: []
         },
-        adminRoles: ['admin-role'],
-        adminUsers: ['admin-2']
+        adminRoles: ['012109876543210987'],
+        adminUsers: ['901098765432109876']
       });
 
       // Hire same user in different guilds
       await staffService.hireStaff(context1, {
         guildId: guild1,
         userId,
-        hiredBy: 'admin-1',
+        hiredBy: '890987654321098765',
         robloxUsername: 'User1',
         role: StaffRole.MANAGING_PARTNER
       });
@@ -490,7 +499,7 @@ describe('StaffService Integration Tests', () => {
       await staffService.hireStaff(context2, {
         guildId: guild2,
         userId,
-        hiredBy: 'admin-2',
+        hiredBy: '901098765432109876',
         robloxUsername: 'User2',
         role: StaffRole.PARALEGAL
       });

@@ -3,11 +3,13 @@ import { FeedbackRepository } from '../../infrastructure/repositories/feedback-r
 import { GuildConfigRepository } from '../../infrastructure/repositories/guild-config-repository';
 import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
 import { 
-  Feedback, 
-  FeedbackRating,
-  FeedbackSubmissionRequest,
+  Feedback,
+  FeedbackSubmission as FeedbackSubmissionRequest,
   FeedbackSearchFilters,
-  FeedbackSortOptions,
+  FeedbackSortOptions
+} from '../../validation';
+import { 
+  FeedbackRating,
   FeedbackPaginationOptions,
   StaffPerformanceMetrics,
   FirmPerformanceMetrics
@@ -74,7 +76,7 @@ describe('FeedbackService Unit Tests', () => {
     };
 
     const mockCreatedFeedback: Feedback = TestUtils.generateMockFeedback({
-      _id: TestUtils.generateObjectId(),
+      _id: TestUtils.generateObjectId().toString(),
       guildId: testGuildId,
       submitterId: testClientId,
       submitterUsername: 'testclient',
@@ -405,7 +407,7 @@ describe('FeedbackService Unit Tests', () => {
         [FeedbackRating.FOUR_STAR]: 4,
         [FeedbackRating.FIVE_STAR]: 3
       },
-      recentFeedback: [TestUtils.generateMockFeedback()]
+      recentFeedback: [TestUtils.generateMockFeedback() as any]
     };
 
     it('should get staff performance metrics successfully', async () => {
@@ -456,7 +458,7 @@ describe('FeedbackService Unit Tests', () => {
           recentFeedback: []
         }
       ],
-      firmWideFeedback: [TestUtils.generateMockFeedback({ isForFirm: true })],
+      firmWideFeedback: [TestUtils.generateMockFeedback({ isForFirm: true }) as any],
       ratingDistribution: {
         [FeedbackRating.ONE_STAR]: 1,
         [FeedbackRating.TWO_STAR]: 2,
@@ -647,7 +649,7 @@ describe('FeedbackService Unit Tests', () => {
 
   describe('getFeedbackById', () => {
     const mockFeedback = TestUtils.generateMockFeedback({
-      _id: TestUtils.generateObjectId(),
+      _id: TestUtils.generateObjectId().toString(),
       guildId: testGuildId,
         createdAt: new Date(),
         updatedAt: new Date()

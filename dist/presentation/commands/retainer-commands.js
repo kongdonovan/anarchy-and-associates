@@ -23,6 +23,9 @@ const roblox_service_1 = require("../../infrastructure/external/roblox-service")
 const embed_utils_1 = require("../../infrastructure/utils/embed-utils");
 const permission_utils_1 = require("../../infrastructure/utils/permission-utils");
 const logger_1 = require("../../infrastructure/logger");
+const audit_decorators_1 = require("../decorators/audit-decorators");
+const validation_1 = require("../../validation");
+const audit_log_1 = require("../../domain/entities/audit-log");
 let RetainerCommands = class RetainerCommands {
     constructor() {
         const retainerRepository = new retainer_repository_1.RetainerRepository();
@@ -33,7 +36,14 @@ let RetainerCommands = class RetainerCommands {
     }
     async signRetainer(client, interaction) {
         try {
-            const guildId = interaction.guildId;
+            if (!interaction.guildId) {
+                const embed = embed_utils_1.EmbedUtils.createErrorEmbed('Server Required', 'This command can only be used in a server.');
+                await interaction.reply({ embeds: [embed], ephemeral: true });
+                return;
+            }
+            // Validate inputs
+            const validatedGuildId = validation_1.ValidationHelpers.validateOrThrow(validation_1.DiscordSnowflakeSchema, interaction.guildId, 'Guild ID');
+            const guildId = validatedGuildId;
             const lawyerId = interaction.user.id;
             const clientId = client.id;
             // Check if client role is configured
@@ -212,7 +222,8 @@ let RetainerCommands = class RetainerCommands {
             // Sign the retainer
             const signatureRequest = {
                 retainerId,
-                clientRobloxUsername: robloxUsername
+                clientRobloxUsername: robloxUsername,
+                clientAgreement: true // User agreed via modal confirmation
             };
             const signedRetainer = await this.retainerService.signRetainer(signatureRequest);
             // Success message to client
@@ -353,6 +364,7 @@ __decorate([
         description: 'Send a retainer agreement to a client for signature',
         name: 'sign'
     }),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.JOB_CREATED, 'medium'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'The client to send the retainer agreement to',
         name: 'client',
@@ -369,6 +381,7 @@ __decorate([
         description: 'List all active retainer agreements',
         name: 'list'
     }),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.JOB_LIST_VIEWED, 'low'),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [discord_js_1.CommandInteraction]),
     __metadata("design:returntype", Promise)

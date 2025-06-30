@@ -13,45 +13,11 @@ describe('CommandValidationService', () => {
     beforeEach(() => {
         // Create mock services
         mockBusinessRuleValidationService = {
-            validateRoleLimit: jest.fn().mockResolvedValue({
-                valid: true,
-                errors: [],
-                warnings: [],
-                bypassAvailable: false,
-                currentCount: 0,
-                maxCount: 10,
-                roleName: staff_role_1.StaffRole.JUNIOR_ASSOCIATE
-            }),
-            validateClientCaseLimit: jest.fn().mockResolvedValue({
-                valid: true,
-                errors: [],
-                warnings: [],
-                bypassAvailable: false,
-                currentCases: 0,
-                maxCases: 5,
-                clientId: 'client123'
-            }),
-            validateStaffMember: jest.fn().mockResolvedValue({
-                valid: true,
-                errors: [],
-                warnings: [],
-                bypassAvailable: false
-            }),
-            validatePermission: jest.fn().mockResolvedValue({
-                valid: true,
-                errors: [],
-                warnings: [],
-                bypassAvailable: false,
-                hasPermission: true,
-                requiredPermission: 'senior-staff',
-                grantedPermissions: ['senior-staff']
-            }),
-            validateMultiple: jest.fn().mockResolvedValue({
-                valid: true,
-                errors: [],
-                warnings: [],
-                bypassAvailable: false
-            }),
+            validatePermission: jest.fn().mockResolvedValue({ valid: true, errors: [], warnings: [] }),
+            validateRoleLimit: jest.fn().mockResolvedValue({ valid: true, errors: [], warnings: [] }),
+            validateStaffMember: jest.fn().mockResolvedValue({ valid: true, errors: [], warnings: [] }),
+            validateClientCaseLimit: jest.fn().mockResolvedValue({ valid: true, errors: [], warnings: [] }),
+            validateMultiple: jest.fn().mockResolvedValue({ valid: true, errors: [], warnings: [] })
         };
         mockCrossEntityValidationService = {
             validateBeforeOperation: jest.fn().mockResolvedValue([]),
@@ -104,6 +70,11 @@ describe('CommandValidationService', () => {
                 hasPermission: true,
                 requiredPermission: 'senior-staff',
                 grantedPermissions: ['senior-staff'],
+                metadata: {
+                    hasPermission: true,
+                    requiredPermission: 'senior-staff',
+                    grantedPermissions: ['senior-staff']
+                }
             });
             mockBusinessRuleValidationService.validateRoleLimit.mockResolvedValue({
                 valid: true,
@@ -112,7 +83,7 @@ describe('CommandValidationService', () => {
                 bypassAvailable: false,
                 currentCount: 5,
                 maxCount: 10,
-                roleName: staff_role_1.StaffRole.JUNIOR_ASSOCIATE,
+                roleName: staff_role_1.StaffRole.JUNIOR_ASSOCIATE
             });
             const context = {
                 interaction: mockInteraction,
@@ -133,10 +104,16 @@ describe('CommandValidationService', () => {
                 valid: false,
                 errors: ['Missing required permission: hr'],
                 warnings: [],
-                bypassAvailable: false,
+                bypassAvailable: true,
+                bypassType: 'guild-owner',
                 hasPermission: false,
                 requiredPermission: 'senior-staff',
                 grantedPermissions: [],
+                metadata: {
+                    hasPermission: false,
+                    requiredPermission: 'senior-staff',
+                    grantedPermissions: []
+                }
             });
             const context = {
                 interaction: mockInteraction,
@@ -153,17 +130,7 @@ describe('CommandValidationService', () => {
         it('should offer bypass option for guild owner when validation fails', async () => {
             // Set user as guild owner
             mockPermissionContext.isGuildOwner = true;
-            // Mock failed validation with bypass available
-            mockBusinessRuleValidationService.validateRoleLimit.mockResolvedValue({
-                valid: false,
-                errors: ['Cannot hire Junior Associate. Maximum limit of 10 reached'],
-                warnings: [],
-                bypassAvailable: true,
-                bypassType: 'guild-owner',
-                currentCount: 10,
-                maxCount: 10,
-                roleName: staff_role_1.StaffRole.JUNIOR_ASSOCIATE,
-            });
+            // Mock successful permission validation
             mockBusinessRuleValidationService.validatePermission.mockResolvedValue({
                 valid: true,
                 errors: [],
@@ -172,6 +139,22 @@ describe('CommandValidationService', () => {
                 hasPermission: true,
                 requiredPermission: 'senior-staff',
                 grantedPermissions: ['senior-staff'],
+                metadata: {
+                    hasPermission: true,
+                    requiredPermission: 'senior-staff',
+                    grantedPermissions: ['senior-staff']
+                }
+            });
+            // Mock failed role limit validation with bypass available
+            mockBusinessRuleValidationService.validateRoleLimit.mockResolvedValue({
+                valid: false,
+                errors: ['Cannot hire Junior Associate. Maximum limit of 10 reached'],
+                warnings: [],
+                bypassAvailable: true,
+                bypassType: 'guild-owner',
+                currentCount: 10,
+                maxCount: 10,
+                roleName: staff_role_1.StaffRole.JUNIOR_ASSOCIATE
             });
             const context = {
                 interaction: mockInteraction,
@@ -204,7 +187,7 @@ describe('CommandValidationService', () => {
             expect(mockBusinessRuleValidationService.validateRoleLimit).not.toHaveBeenCalled();
         });
         it('should cache validation results', async () => {
-            // Mock successful validation
+            // Mock successful validations
             mockBusinessRuleValidationService.validatePermission.mockResolvedValue({
                 valid: true,
                 errors: [],
@@ -213,6 +196,20 @@ describe('CommandValidationService', () => {
                 hasPermission: true,
                 requiredPermission: 'senior-staff',
                 grantedPermissions: ['senior-staff'],
+                metadata: {
+                    hasPermission: true,
+                    requiredPermission: 'senior-staff',
+                    grantedPermissions: ['senior-staff']
+                }
+            });
+            mockBusinessRuleValidationService.validateRoleLimit.mockResolvedValue({
+                valid: true,
+                errors: [],
+                warnings: [],
+                bypassAvailable: false,
+                currentCount: 5,
+                maxCount: 10,
+                roleName: staff_role_1.StaffRole.JUNIOR_ASSOCIATE
             });
             const context = {
                 interaction: mockInteraction,
@@ -224,9 +221,11 @@ describe('CommandValidationService', () => {
             // First call
             await commandValidationService.validateCommand(context);
             expect(mockBusinessRuleValidationService.validatePermission).toHaveBeenCalledTimes(1);
+            expect(mockBusinessRuleValidationService.validateRoleLimit).toHaveBeenCalledTimes(1);
             // Second call should use cache
             await commandValidationService.validateCommand(context);
             expect(mockBusinessRuleValidationService.validatePermission).toHaveBeenCalledTimes(1);
+            expect(mockBusinessRuleValidationService.validateRoleLimit).toHaveBeenCalledTimes(1);
         });
         it('should handle custom validation rules', async () => {
             const customValidationFn = jest.fn().mockResolvedValue({
@@ -289,7 +288,7 @@ describe('CommandValidationService', () => {
                 bypassAvailable: false,
                 currentCases: 4,
                 maxCases: 5,
-                clientId: 'client123',
+                clientId: 'client123'
             });
             const context = {
                 interaction: mockInteraction,

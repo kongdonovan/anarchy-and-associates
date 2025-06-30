@@ -1,26 +1,33 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RetainerRepository = void 0;
-const retainer_1 = require("../../domain/entities/retainer");
 const base_mongo_repository_1 = require("./base-mongo-repository");
+const validation_1 = require("../../validation");
+const retainer_1 = require("../../domain/entities/retainer");
 class RetainerRepository extends base_mongo_repository_1.BaseMongoRepository {
     constructor() {
         super('retainers');
     }
     async findByClient(clientId) {
-        return this.findByFilters({ clientId });
+        const validatedClientId = validation_1.ValidationHelpers.validateOrThrow(validation_1.DiscordSnowflakeSchema, clientId, 'Client ID');
+        return this.findByFilters({ clientId: validatedClientId });
     }
     async findByLawyer(lawyerId) {
-        return this.findByFilters({ lawyerId });
+        const validatedLawyerId = validation_1.ValidationHelpers.validateOrThrow(validation_1.DiscordSnowflakeSchema, lawyerId, 'Lawyer ID');
+        return this.findByFilters({ lawyerId: validatedLawyerId });
     }
     async findByStatus(status) {
-        return this.findByFilters({ status });
+        const validatedStatus = validation_1.ValidationHelpers.validateOrThrow(validation_1.RetainerStatusSchema, status, 'Retainer status');
+        return this.findByFilters({ status: validatedStatus });
     }
     async findByGuild(guildId) {
-        return this.findByFilters({ guildId });
+        const validatedGuildId = validation_1.ValidationHelpers.validateOrThrow(validation_1.DiscordSnowflakeSchema, guildId, 'Guild ID');
+        return this.findByFilters({ guildId: validatedGuildId });
     }
     async findByGuildAndStatus(guildId, status) {
-        return this.findByFilters({ guildId, status });
+        const validatedGuildId = validation_1.ValidationHelpers.validateOrThrow(validation_1.DiscordSnowflakeSchema, guildId, 'Guild ID');
+        const validatedStatus = validation_1.ValidationHelpers.validateOrThrow(validation_1.RetainerStatusSchema, status, 'Retainer status');
+        return this.findByFilters({ guildId: validatedGuildId, status: validatedStatus });
     }
     async findActiveRetainers(guildId) {
         return this.findByGuildAndStatus(guildId, retainer_1.RetainerStatus.SIGNED);
@@ -29,7 +36,9 @@ class RetainerRepository extends base_mongo_repository_1.BaseMongoRepository {
         return this.findByGuildAndStatus(guildId, retainer_1.RetainerStatus.PENDING);
     }
     async findByClientAndStatus(clientId, status) {
-        return this.findByFilters({ clientId, status });
+        const validatedClientId = validation_1.ValidationHelpers.validateOrThrow(validation_1.DiscordSnowflakeSchema, clientId, 'Client ID');
+        const validatedStatus = validation_1.ValidationHelpers.validateOrThrow(validation_1.RetainerStatusSchema, status, 'Retainer status');
+        return this.findByFilters({ clientId: validatedClientId, status: validatedStatus });
     }
     async hasActiveRetainer(clientId) {
         const activeRetainers = await this.findByClientAndStatus(clientId, retainer_1.RetainerStatus.SIGNED);
@@ -40,7 +49,8 @@ class RetainerRepository extends base_mongo_repository_1.BaseMongoRepository {
         return pendingRetainers.length > 0;
     }
     async findClientRetainers(clientId, includeAll = false) {
-        if (includeAll) {
+        const validatedIncludeAll = validation_1.ValidationHelpers.validateOrThrow(validation_1.z.boolean(), includeAll, 'Include all flag');
+        if (validatedIncludeAll) {
             return this.findByClient(clientId);
         }
         // Only return active retainers by default

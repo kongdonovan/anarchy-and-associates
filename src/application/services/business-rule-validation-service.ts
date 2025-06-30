@@ -2,9 +2,11 @@ import { GuildConfigRepository } from '../../infrastructure/repositories/guild-c
 import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
 import { CaseRepository } from '../../infrastructure/repositories/case-repository';
 import { PermissionService, PermissionContext } from './permission-service';
-import { StaffRole, RoleUtils } from '../../domain/entities/staff-role';
-import { CaseStatus } from '../../domain/entities/case';
+import { RoleUtils } from '../../domain/entities/staff-role'; // Keep utility functions
 import { logger } from '../../infrastructure/logger';
+import { StaffRole } from '../../validation';
+import { StaffRole as StaffRoleEnum } from '../../domain/entities/staff-role';
+import { CaseStatus as CaseStatusEnum } from '../../domain/entities/case';
 
 export interface ValidationResult {
   valid: boolean;
@@ -69,7 +71,7 @@ export class BusinessRuleValidationService {
   ): Promise<RoleLimitValidationResult> {
     try {
       const currentCount = await this.staffRepository.getStaffCountByRole(context.guildId, role);
-      const maxCount = RoleUtils.getRoleMaxCount(role);
+      const maxCount = RoleUtils.getRoleMaxCount(role as StaffRoleEnum);
       const canHire = currentCount < maxCount;
 
       const result: RoleLimitValidationResult = {
@@ -124,7 +126,7 @@ export class BusinessRuleValidationService {
       const activeCases = await this.caseRepository.findByClient(clientId);
       const activeCount = activeCases.filter(c => 
         c.guildId === guildId && 
-        (c.status === CaseStatus.PENDING || c.status === CaseStatus.IN_PROGRESS)
+        (c.status === CaseStatusEnum.PENDING || c.status === CaseStatusEnum.IN_PROGRESS)
       ).length;
       
       const maxCases = 5;
@@ -419,7 +421,7 @@ export class BusinessRuleValidationService {
   ): Promise<boolean> {
     if (!staffRole || !permission) return false;
 
-    const roleLevel = RoleUtils.getRoleLevel(staffRole);
+    const roleLevel = RoleUtils.getRoleLevel(staffRole as StaffRoleEnum);
     
     switch (permission) {
       case 'senior-staff':

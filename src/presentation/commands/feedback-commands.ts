@@ -11,12 +11,14 @@ import { GuildConfigRepository } from '../../infrastructure/repositories/guild-c
 import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
 import { EmbedUtils } from '../../infrastructure/utils/embed-utils';
 import { 
-  FeedbackRating, 
-  isValidRating,
   getStarDisplay,
-  getRatingText
-} from '../../domain/entities/feedback';
+  getRatingText,
+  FeedbackRating as DomainFeedbackRating
+} from '../../domain/entities/feedback'; // Keep utility functions
 import { logger } from '../../infrastructure/logger';
+import { AuditDecorators } from '../decorators/audit-decorators';
+import { ValidationHelpers, DiscordSnowflakeSchema, z, FeedbackRating } from '../../validation';
+import { AuditAction } from '../../domain/entities/audit-log';
 
 @Discord()
 @SlashGroup({ description: 'Feedback management commands', name: 'feedback' })
@@ -40,6 +42,7 @@ export class FeedbackCommands {
     description: 'Submit feedback for staff or the firm',
     name: 'submit'
   })
+  @AuditDecorators.AdminAction(AuditAction.JOB_CREATED, 'medium')
   async submitFeedback(
     @SlashOption({
       description: 'Rating from 1-5 stars',
@@ -67,27 +70,35 @@ export class FeedbackCommands {
     interaction: CommandInteraction
   ): Promise<void> {
     try {
-      const guildId = interaction.guildId!;
+      if (!interaction.guildId) {
+        const embed = EmbedUtils.createErrorEmbed(
+          'Server Required',
+          'This command can only be used in a server.'
+        );
+        await interaction.reply({ embeds: [embed], ephemeral: true });
+        return;
+      }
+
+      // Validate inputs
+      const validatedGuildId = ValidationHelpers.validateOrThrow(
+        DiscordSnowflakeSchema,
+        interaction.guildId,
+        'Guild ID'
+      );
+      const validatedRating = ValidationHelpers.validateOrThrow(
+        z.number().int().min(1).max(5),
+        rating,
+        'Rating'
+      );
+      const validatedComment = ValidationHelpers.validateOrThrow(
+        z.string().min(1).max(1000),
+        comment,
+        'Feedback comment'
+      );
+
+      const guildId = validatedGuildId;
       const submitterId = interaction.user.id;
       const submitterUsername = interaction.user.username;
-
-      if (!isValidRating(rating)) {
-        const embed = EmbedUtils.createErrorEmbed(
-          'Invalid Rating',
-          'Rating must be between 1 and 5 stars.'
-        );
-        await interaction.reply({ embeds: [embed], ephemeral: true });
-        return;
-      }
-
-      if (comment.length > 1000) {
-        const embed = EmbedUtils.createErrorEmbed(
-          'Comment Too Long',
-          'Feedback comments cannot exceed 1000 characters.'
-        );
-        await interaction.reply({ embeds: [embed], ephemeral: true });
-        return;
-      }
 
       // Submit the feedback
       await this.feedbackService.submitFeedback({
@@ -96,44 +107,41 @@ export class FeedbackCommands {
         submitterUsername,
         targetStaffId: staff?.id,
         targetStaffUsername: staff?.username,
-        rating: rating as FeedbackRating,
-        comment
+        rating: validatedRating as FeedbackRating,
+        comment: validatedComment
       });
 
       // Get feedback channel ID
       const feedbackChannelId = await this.feedbackService.getFeedbackChannelId(guildId);
 
-      // Create feedback embed
-      const feedbackEmbed = new EmbedBuilder()
-        .setTitle('⭐ New Feedback Received')
-        .setColor(this.getRatingColor(rating as FeedbackRating))
-        .addFields([
+      // Create professional feedback embed
+      const feedbackEmbed = EmbedUtils.createDocumentEmbed({
+        title: 'Client Feedback Submission',
+        documentType: 'feedback',
+        description: `A new performance evaluation has been submitted for ${staff ? 'an individual staff member' : 'the firm as a whole'}.`,
+        fields: [
           {
-            name: 'From',
-            value: `${submitterUsername}`,
+            name: '§ Evaluator',
+            value: submitterUsername,
             inline: true
           },
           {
-            name: 'For',
-            value: staff ? `${staff.username}` : 'Anarchy & Associates (Firm-wide)',
+            name: '§ Subject',
+            value: staff ? staff.username : '*Anarchy & Associates (Firm-wide Evaluation)*',
             inline: true
           },
           {
-            name: 'Rating',
+            name: '§ Performance Rating',
             value: `${getStarDisplay(rating as FeedbackRating)} (${rating}/5 - ${getRatingText(rating as FeedbackRating)})`,
             inline: false
           },
           {
-            name: 'Comment',
+            name: '§ Detailed Feedback',
             value: comment,
             inline: false
           }
-        ])
-        .setTimestamp()
-        .setFooter({
-          text: 'Anarchy & Associates',
-          iconURL: interaction.guild?.iconURL() || undefined
-        });
+        ]
+      }).setColor(this.getProfessionalRatingColor(rating as FeedbackRating));
 
       // Send to feedback channel if configured
       if (feedbackChannelId) {
@@ -188,6 +196,7 @@ export class FeedbackCommands {
     description: 'View feedback and performance metrics',
     name: 'view'
   })
+  @AuditDecorators.AdminAction(AuditAction.JOB_LIST_VIEWED, 'low')
   async viewFeedback(
     @SlashOption({
       description: 'Staff member to view feedback for (leave blank for firm overview)',
@@ -347,19 +356,23 @@ export class FeedbackCommands {
   }
 
   private getRatingColor(rating: FeedbackRating): number {
+    return this.getProfessionalRatingColor(rating);
+  }
+  
+  private getProfessionalRatingColor(rating: FeedbackRating): number {
     switch (rating) {
-      case FeedbackRating.FIVE_STAR:
-        return 0x00ff00; // Green
-      case FeedbackRating.FOUR_STAR:
-        return 0x9acd32; // Yellow-green
-      case FeedbackRating.THREE_STAR:
-        return 0xffd700; // Gold
-      case FeedbackRating.TWO_STAR:
-        return 0xff8c00; // Orange
-      case FeedbackRating.ONE_STAR:
-        return 0xff0000; // Red
+      case DomainFeedbackRating.FIVE_STAR:
+        return 0x2D7D46; // Deep Forest Green - Excellence
+      case DomainFeedbackRating.FOUR_STAR:
+        return 0xD4AF37; // Deep Gold - Above Average
+      case DomainFeedbackRating.THREE_STAR:
+        return 0x36393F; // Charcoal - Satisfactory
+      case DomainFeedbackRating.TWO_STAR:
+        return 0xF0B232; // Amber - Needs Improvement
+      case DomainFeedbackRating.ONE_STAR:
+        return 0xA62019; // Deep Crimson - Unsatisfactory
       default:
-        return 0x3498db; // Blue
+        return 0x1E3A5F; // Navy Blue - Default
     }
   }
 }

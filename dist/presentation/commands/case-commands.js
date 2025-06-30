@@ -18,9 +18,7 @@ const discord_js_1 = require("discord.js");
 const discordx_1 = require("discordx");
 const case_service_1 = require("../../application/services/case-service");
 const permission_service_1 = require("../../application/services/permission-service");
-const business_rule_validation_service_1 = require("../../application/services/business-rule-validation-service");
-const command_validation_service_1 = require("../../application/services/command-validation-service");
-const cross_entity_validation_service_1 = require("../../application/services/cross-entity-validation-service");
+const validation_service_factory_1 = require("../../application/validation/validation-service-factory");
 const case_repository_1 = require("../../infrastructure/repositories/case-repository");
 const case_counter_repository_1 = require("../../infrastructure/repositories/case-counter-repository");
 const guild_config_repository_1 = require("../../infrastructure/repositories/guild-config-repository");
@@ -28,15 +26,17 @@ const staff_repository_1 = require("../../infrastructure/repositories/staff-repo
 const audit_log_repository_1 = require("../../infrastructure/repositories/audit-log-repository");
 const application_repository_1 = require("../../infrastructure/repositories/application-repository");
 const job_repository_1 = require("../../infrastructure/repositories/job-repository");
-const retainer_repository_1 = require("../../infrastructure/repositories/retainer-repository");
+// import { RetainerRepository } from '../../infrastructure/repositories/retainer-repository';
 const feedback_repository_1 = require("../../infrastructure/repositories/feedback-repository");
-const reminder_repository_1 = require("../../infrastructure/repositories/reminder-repository");
+// import { ReminderRepository } from '../../infrastructure/repositories/reminder-repository';
 const embed_utils_1 = require("../../infrastructure/utils/embed-utils");
-const case_1 = require("../../domain/entities/case");
 const logger_1 = require("../../infrastructure/logger");
 const base_command_1 = require("./base-command");
 const validation_decorators_1 = require("../decorators/validation-decorators");
+const audit_decorators_1 = require("../decorators/audit-decorators");
 const audit_log_1 = require("../../domain/entities/audit-log");
+const case_1 = require("../../domain/entities/case");
+const validation_1 = require("../../validation");
 let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.BaseCommand {
     constructor() {
         super();
@@ -47,30 +47,64 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
         const auditLogRepository = new audit_log_repository_1.AuditLogRepository();
         const applicationRepository = new application_repository_1.ApplicationRepository();
         const jobRepository = new job_repository_1.JobRepository();
-        const retainerRepository = new retainer_repository_1.RetainerRepository();
+        // const retainerRepository = new RetainerRepository();
         const feedbackRepository = new feedback_repository_1.FeedbackRepository();
-        const reminderRepository = new reminder_repository_1.ReminderRepository();
+        // const reminderRepository = new ReminderRepository();
         this.caseRepository = caseRepository;
         this.auditLogRepository = auditLogRepository;
         this.feedbackRepository = feedbackRepository;
         // Initialize services
         this.permissionService = new permission_service_1.PermissionService(guildConfigRepository);
-        this.businessRuleValidationService = new business_rule_validation_service_1.BusinessRuleValidationService(guildConfigRepository, staffRepository, caseRepository, this.permissionService);
-        this.crossEntityValidationService = new cross_entity_validation_service_1.CrossEntityValidationService(staffRepository, caseRepository, applicationRepository, jobRepository, retainerRepository, feedbackRepository, reminderRepository, auditLogRepository);
-        this.commandValidationService = new command_validation_service_1.CommandValidationService(this.businessRuleValidationService, this.crossEntityValidationService);
-        // Initialize validation services in base class
-        this.initializeValidationServices(this.commandValidationService, this.businessRuleValidationService, this.crossEntityValidationService, this.permissionService);
-        this.caseService = new case_service_1.CaseService(caseRepository, caseCounterRepository, guildConfigRepository, this.permissionService, this.businessRuleValidationService);
+        // Create unified validation service
+        const validationService = validation_service_factory_1.ValidationServiceFactory.createValidationService({
+            staffRepository,
+            caseRepository,
+            guildConfigRepository,
+            jobRepository,
+            applicationRepository
+        }, {
+            permissionService: this.permissionService
+        });
+        this.caseService = new case_service_1.CaseService(caseRepository, caseCounterRepository, guildConfigRepository, this.permissionService, validationService);
     }
     getCaseServiceWithClient(client) {
         const caseRepository = new case_repository_1.CaseRepository();
         const caseCounterRepository = new case_counter_repository_1.CaseCounterRepository();
         const guildConfigRepository = new guild_config_repository_1.GuildConfigRepository();
-        return new case_service_1.CaseService(caseRepository, caseCounterRepository, guildConfigRepository, this.permissionService, this.businessRuleValidationService, client);
+        const staffRepository = new staff_repository_1.StaffRepository();
+        const jobRepository = new job_repository_1.JobRepository();
+        const applicationRepository = new application_repository_1.ApplicationRepository();
+        // Create unified validation service
+        const validationService = validation_service_factory_1.ValidationServiceFactory.createValidationService({
+            staffRepository,
+            caseRepository,
+            guildConfigRepository,
+            jobRepository,
+            applicationRepository
+        }, {
+            permissionService: this.permissionService
+        });
+        return new case_service_1.CaseService(caseRepository, caseCounterRepository, guildConfigRepository, this.permissionService, validationService, client);
     }
     async reviewCase(details, interaction) {
         try {
             await this.deferReply(interaction, true);
+            // Validate guild context
+            if (!interaction.guildId) {
+                await this.safeReply(interaction, {
+                    embeds: [this.createErrorEmbed('Invalid Server', 'This command can only be used in a server.')],
+                    ephemeral: true,
+                });
+                return;
+            }
+            // Validate command inputs using Zod schema
+            const commandData = {
+                title: 'Legal consultation request',
+                description: details,
+                priority: 'medium',
+                interaction
+            };
+            const validatedData = validation_1.ValidationHelpers.validateOrThrow(validation_1.CaseOpenCommandSchema, commandData, 'Case review command');
             const guildId = interaction.guildId;
             const clientId = interaction.user.id;
             const clientUsername = interaction.user.username;
@@ -86,9 +120,9 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
                 guildId,
                 clientId,
                 clientUsername,
-                title: `Legal consultation request`,
-                description: details,
-                priority: case_1.CasePriority.MEDIUM
+                title: validatedData.title,
+                description: validatedData.description,
+                priority: validatedData.priority
             };
             const context = await this.getPermissionContext(interaction);
             const newCase = await this.caseService.createCase(context, caseRequest);
@@ -109,17 +143,32 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
         }
         catch (error) {
             this.logCommandError(interaction, 'case_review_failed', error);
-            let errorMessage = 'An unexpected error occurred while submitting your case review request.';
-            if (error instanceof Error) {
-                errorMessage = error.message;
+            // Handle Zod validation errors with user-friendly messages
+            if (error instanceof Error && error.message.includes('Validation failed')) {
+                const embed = this.createErrorEmbed('Validation Error', `${error.message}\n\nPlease contact the bot developer if this issue persists.`);
+                await this.safeReply(interaction, { embeds: [embed], ephemeral: true });
             }
-            const embed = this.createErrorEmbed('Case Review Failed', errorMessage);
-            await this.safeReply(interaction, { embeds: [embed], ephemeral: true });
+            else {
+                let errorMessage = 'An unexpected error occurred while submitting your case review request.';
+                if (error instanceof Error) {
+                    errorMessage = error.message;
+                }
+                const embed = this.createErrorEmbed('Case Review Failed', errorMessage);
+                await this.safeReply(interaction, { embeds: [embed], ephemeral: true });
+            }
         }
     }
     async assignCase(lawyer, interaction) {
         try {
             await this.deferReply(interaction);
+            // Validate guild context
+            if (!interaction.guildId) {
+                await this.safeReply(interaction, {
+                    embeds: [this.createErrorEmbed('Invalid Server', 'This command can only be used in a server.')],
+                    ephemeral: true,
+                });
+                return;
+            }
             // This command only works within case channels
             const caseData = await this.getCaseFromChannel(interaction.channelId);
             if (!caseData) {
@@ -127,9 +176,17 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
                 await this.safeReply(interaction, { embeds: [embed], ephemeral: true });
                 return;
             }
+            // Validate command inputs using Zod schema
+            const commandData = {
+                caseNumber: caseData.caseNumber,
+                lawyer,
+                leadAttorney: false, // Default value for assign command
+                interaction
+            };
+            const validatedData = validation_1.ValidationHelpers.validateOrThrow(validation_1.CaseAssignCommandSchema, commandData, 'Case assign command');
             const assignmentRequest = {
                 caseId: caseData._id.toString(),
-                lawyerId: lawyer.id,
+                lawyerIds: [validatedData.lawyer.id],
                 assignedBy: interaction.user.id
             };
             const context = await this.getPermissionContext(interaction);
@@ -146,8 +203,15 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
         }
         catch (error) {
             this.logCommandError(interaction, 'assign_lawyer_failed', error);
-            const embed = this.createErrorEmbed('Assignment Failed', error instanceof Error ? error.message : 'Failed to assign lawyer to case.');
-            await this.safeReply(interaction, { embeds: [embed], ephemeral: true });
+            // Handle Zod validation errors with user-friendly messages
+            if (error instanceof Error && error.message.includes('Validation failed')) {
+                const embed = this.createErrorEmbed('Validation Error', `${error.message}\n\nPlease contact the bot developer if this issue persists.`);
+                await this.safeReply(interaction, { embeds: [embed], ephemeral: true });
+            }
+            else {
+                const embed = this.createErrorEmbed('Assignment Failed', error instanceof Error ? error.message : 'Failed to assign lawyer to case.');
+                await this.safeReply(interaction, { embeds: [embed], ephemeral: true });
+            }
         }
     }
     async transferCase(caseNumber, fromLawyer, toLawyer, reason, interaction) {
@@ -650,6 +714,14 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
     }
     async closeCase(result, notes, interaction) {
         try {
+            // Validate guild context
+            if (!interaction.guildId) {
+                await interaction.reply({
+                    embeds: [this.createErrorEmbed('Invalid Server', 'This command can only be used in a server.')],
+                    ephemeral: true,
+                });
+                return;
+            }
             // This command works within case channels or staff can specify case ID
             const caseData = await this.getCaseFromChannel(interaction.channelId);
             if (!caseData) {
@@ -657,6 +729,14 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
                 await interaction.reply({ embeds: [embed], ephemeral: true });
                 return;
             }
+            // Validate command inputs using Zod schema
+            const commandData = {
+                caseNumber: caseData.caseNumber,
+                result,
+                notes,
+                interaction
+            };
+            const validatedData = validation_1.ValidationHelpers.validateOrThrow(validation_1.CaseCloseCommandSchema, commandData, 'Case close command');
             // Check permissions: only client or lead counsel can close cases
             const isClient = caseData.clientId === interaction.user.id;
             const isLeadCounsel = caseData.leadAttorneyId === interaction.user.id;
@@ -667,8 +747,8 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
             }
             const closureRequest = {
                 caseId: caseData._id.toString(),
-                result: result,
-                resultNotes: notes,
+                result: validatedData.result,
+                resultNotes: validatedData.notes || undefined,
                 closedBy: interaction.user.id
             };
             const context = await this.getPermissionContext(interaction);
@@ -691,8 +771,17 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
         }
         catch (error) {
             this.logCommandError(interaction, 'close_case_failed', error);
-            const embed = this.createErrorEmbed('Case Closure Failed', error instanceof Error ? error.message : 'Failed to close case.');
-            await interaction.reply({ embeds: [embed], ephemeral: true });
+            // Handle Zod validation errors with user-friendly messages
+            if (error instanceof Error && error.message.includes('Validation failed')) {
+                await interaction.reply({
+                    embeds: [this.createErrorEmbed('Validation Error', `${error.message}\n\nPlease contact the bot developer if this issue persists.`)],
+                    ephemeral: true,
+                });
+            }
+            else {
+                const embed = this.createErrorEmbed('Case Closure Failed', error instanceof Error ? error.message : 'Failed to close case.');
+                await interaction.reply({ embeds: [embed], ephemeral: true });
+            }
         }
     }
     async listCases(status, lawyer, search, page, interaction) {
@@ -1182,8 +1271,7 @@ let CaseCommands = CaseCommands_1 = class CaseCommands extends base_command_1.Ba
                 ]
             });
             // Update case with channel ID
-            await this.caseService.updateCase(context, {
-                caseId: caseData._id.toString(),
+            await this.caseService.updateCase(context, caseData._id.toString(), {
                 status: case_1.CaseStatus.PENDING,
                 channelId: channel.id
             });
@@ -1850,6 +1938,7 @@ __decorate([
     }),
     (0, validation_decorators_1.ValidateBusinessRules)('client_case_limit'),
     (0, validation_decorators_1.ValidateEntity)('case', 'create'),
+    audit_decorators_1.AuditDecorators.CaseCreated(),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Brief description of your legal matter',
         name: 'details',
@@ -1868,6 +1957,7 @@ __decorate([
     (0, validation_decorators_1.ValidatePermissions)('case'),
     (0, validation_decorators_1.ValidateBusinessRules)('staff_member'),
     (0, validation_decorators_1.ValidateEntity)('case', 'update'),
+    audit_decorators_1.AuditDecorators.CaseAssigned(),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'The lawyer to assign to the case',
         name: 'lawyer',
@@ -1887,6 +1977,7 @@ __decorate([
     (0, validation_decorators_1.ValidatePermissions)('case'),
     (0, validation_decorators_1.ValidateBusinessRules)('staff_member'),
     (0, validation_decorators_1.ValidateEntity)('case', 'update'),
+    audit_decorators_1.AuditDecorators.CaseAssigned(),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Case number to transfer',
         name: 'casenumber',
@@ -1922,6 +2013,7 @@ __decorate([
         name: 'bulk-close'
     }),
     (0, validation_decorators_1.ValidatePermissions)('case'),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.CASE_CLOSED, 'medium'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Result for all cases being closed',
         name: 'result',
@@ -1944,6 +2036,7 @@ __decorate([
         name: 'analytics'
     }),
     (0, validation_decorators_1.ValidatePermissions)('case'),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.STAFF_LIST_VIEWED, 'low'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Time period for analytics (days)',
         name: 'period',
@@ -1960,6 +2053,7 @@ __decorate([
         name: 'template-create'
     }),
     (0, validation_decorators_1.ValidatePermissions)('admin'),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.CASE_ASSIGNED, 'medium'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Template name',
         name: 'name',
@@ -1995,6 +2089,7 @@ __decorate([
     }),
     (0, validation_decorators_1.ValidateBusinessRules)('client_case_limit'),
     (0, validation_decorators_1.ValidateEntity)('case', 'create'),
+    audit_decorators_1.AuditDecorators.CaseCreated(),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Additional details for the case',
         name: 'details',
@@ -2017,6 +2112,7 @@ __decorate([
         name: 'debug-permissions'
     }),
     (0, validation_decorators_1.ValidatePermissions)('admin'),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.STAFF_LIST_VIEWED, 'low'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Case number to debug',
         name: 'casenumber',
@@ -2041,6 +2137,7 @@ __decorate([
     }),
     (0, validation_decorators_1.ValidatePermissions)('case'),
     (0, validation_decorators_1.ValidateEntity)('case', 'update'),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.CASE_CLOSED, 'medium'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Case result',
         name: 'result',
@@ -2063,6 +2160,7 @@ __decorate([
         name: 'list'
     }),
     (0, validation_decorators_1.ValidatePermissions)('case', false),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.STAFF_LIST_VIEWED, 'low'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Filter by case status',
         name: 'status',
@@ -2099,6 +2197,7 @@ __decorate([
     (0, validation_decorators_1.ValidatePermissions)('case'),
     (0, validation_decorators_1.ValidateBusinessRules)('staff_member'),
     (0, validation_decorators_1.ValidateEntity)('case', 'update'),
+    audit_decorators_1.AuditDecorators.CaseAssigned(),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'The staff member to reassign',
         name: 'staff',
@@ -2123,6 +2222,7 @@ __decorate([
     (0, validation_decorators_1.ValidatePermissions)('case'),
     (0, validation_decorators_1.ValidateBusinessRules)('staff_member'),
     (0, validation_decorators_1.ValidateEntity)('case', 'update'),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.CASE_ASSIGNED, 'medium'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'The staff member to unassign',
         name: 'staff',
@@ -2140,6 +2240,7 @@ __decorate([
         name: 'info'
     }),
     (0, validation_decorators_1.ValidatePermissions)('case', false),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.STAFF_LIST_VIEWED, 'low'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Case number (optional if used in case channel)',
         name: 'casenumber',
@@ -2164,6 +2265,7 @@ __decorate([
     (0, validation_decorators_1.ValidatePermissions)('case'),
     (0, validation_decorators_1.ValidateBusinessRules)('staff_member'),
     (0, validation_decorators_1.ValidateEntity)('case', 'update'),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.LEAD_ATTORNEY_CHANGED, 'medium'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'The new lead attorney',
         name: 'attorney',
@@ -2211,6 +2313,7 @@ __decorate([
         name: 'search'
     }),
     (0, validation_decorators_1.ValidatePermissions)('case'),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.STAFF_LIST_VIEWED, 'low'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Search term (title, description, client name, or case number)',
         name: 'query',
@@ -2259,6 +2362,7 @@ __decorate([
         name: 'export'
     }),
     (0, validation_decorators_1.ValidatePermissions)('admin'),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.STAFF_LIST_VIEWED, 'low'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Export format',
         name: 'format',
@@ -2276,6 +2380,7 @@ __decorate([
     }),
     (0, validation_decorators_1.ValidatePermissions)('case'),
     (0, validation_decorators_1.ValidateEntity)('case', 'update'),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.CASE_ASSIGNED, 'medium'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Note content',
         name: 'content',

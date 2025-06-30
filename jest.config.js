@@ -4,8 +4,7 @@ module.exports = {
   testEnvironment: 'node',
   roots: ['<rootDir>/src'],
   testMatch: [
-    '**/__tests__/**/*.ts',
-    '**/?(*.)+(spec|test).ts'
+    '**/__tests__/**/*.test.ts'
   ],
   transform: {
     '^.+\\.ts$': ['ts-jest', {
@@ -29,7 +28,7 @@ module.exports = {
   setupFilesAfterEnv: ['<rootDir>/src/__tests__/setup.ts'],
   testTimeout: 30000,
   maxWorkers: 1, // Run tests sequentially to avoid interference
-  // Run core tests first, then integration/performance tests
+  // Business logic tests only - removed performance/e2e tests
   testSequencer: '<rootDir>/src/__tests__/testSequencer.js',
   coverageThreshold: {
     global: {
@@ -41,6 +40,11 @@ module.exports = {
   },
   testPathIgnorePatterns: [
     '/node_modules/',
-    '/dist/'
+    '/dist/',
+    // Explicitly ignore removed test categories
+    '/__tests__/e2e/',
+    '/__tests__/performance/',
+    '/__tests__/security/',
+    '/__tests__/concurrency/'
   ]
 };

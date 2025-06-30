@@ -4,507 +4,202 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Read the initial instructions and all saved serena memories.
 
-## Development Commands
+## Quick Start
 
-### Building and Development
+### Development Commands
 ```bash
-# Build the project
-npm run build
+# Build and run
+npm run build          # Compile TypeScript
+npm start             # Start production bot
+npm run dev           # Development with hot reload
+npm run type-check    # Type check without compilation
 
-# Start production bot
-npm start
+# Testing (prefer individual tests for speed)
+npm test              # Run all tests
+npm test -- --testPathPattern="staff-service.test.ts"  # Specific file
+npm test -- --testNamePattern="should create staff"     # Pattern match
 
-# Development with hot reload
-npm run dev
-
-# Type checking without compilation
-npm run type-check
-```
-
-### Testing
-When testing, opt to run individual tests or test files instead of entire suites for speed.
-```bash
-# Run all tests
-npm test
-
-# Run tests in watch mode
-npm run test:watch
-
-# Run tests with coverage
-npm run test:coverage
-
-# Run specific test file
-npm test -- --testPathPattern="staff-service.test.ts"
-
-# Run tests matching pattern
-npm test -- --testNamePattern="should create staff member"
-```
-
-### Code Quality
-```bash
-# Lint code
-npm run lint
-
-# Auto-fix linting issues
-npm run lint:fix
-
-# Format code with Prettier
-npm run format
+# Code quality
+npm run lint          # Check code style
+npm run lint:fix      # Auto-fix issues
+npm run format        # Prettier formatting
 ```
 
 ## Architecture Overview
 
-This is an **enterprise-grade Discord bot for Anarchy & Associates legal firm** built with TypeScript, following Domain-Driven Design (DDD) and Clean Architecture principles. The bot manages comprehensive legal firm operations including staff management, case tracking, job applications, retainer agreements, and client feedback.
+Enterprise Discord bot for Anarchy & Associates legal firm using Domain-Driven Design and Clean Architecture.
 
-### Core Architecture Layers
+### 📚 Layer Documentation
+**IMPORTANT**: Refer to detailed layer documentation for deep dives:
+- **[Domain Layer](docs/DOMAIN_LAYER.md)**: Entities, business rules, domain logic
+- **[Application Layer](docs/APPLICATION_LAYER.md)**: Services, use cases, workflows
+- **[Infrastructure Layer](docs/INFRASTRUCTURE_LAYER.md)**: Database, Discord.js, external services
+- **[Presentation Layer](docs/PRESENTATION_LAYER.md)**: Commands, interactions, UI
 
-1. **Domain Layer** (`src/domain/`): 12 business entities and core domain logic
-2. **Application Layer** (`src/application/`): 16 business services implementing use cases 
-3. **Infrastructure Layer** (`src/infrastructure/`): 11 repositories, MongoDB integration, external services
-4. **Presentation Layer** (`src/presentation/`): 11 command files with 77+ Discord slash commands
+**When modifying code, update the corresponding layer documentation!**
 
-### Key Technologies & Scale
-- **Discord.js v14** with **discordx** decorators for slash commands
-- **MongoDB** with custom repository pattern and 11 specialized repositories
-- **TypeScript** with strict mode and decorators
-- **Winston** for structured logging
-- **Jest** with 31 test files and 95%+ code coverage
-- **31 test files** covering unit, integration, E2E, performance, and security testing
-
-## Critical Architecture Patterns
-
-### 1. Discord Command Structure
-Commands use discordx decorators and are grouped by functionality:
-
-```typescript
-@Discord()
-@SlashGroup({ name: 'staff', description: 'Staff management commands' })
-@SlashGroup('staff')
-export class StaffCommands {
-  @Slash({ name: 'hire', description: 'Hire a new staff member' })
-  async hireStaff(/* ... */) { /* ... */ }
-}
+### 🏗️ Quick Architecture Reference
+```
+src/
+├── domain/         # Business entities & rules (no external deps)
+├── application/    # Service orchestration & use cases
+├── infrastructure/ # MongoDB, Discord.js, external integrations
+└── presentation/   # Discord slash commands & interactions
 ```
 
-### 2. Permission System
-The bot implements a sophisticated permission system with:
-- **Guild owners**: Always have all permissions
-- **Admin users/roles**: Configured per guild  
-- **Action-based permissions**: `admin`, `hr`, `case`, `config`, `retainer`, `repair`
+## Critical Patterns & Conventions
 
-Check permissions in commands:
+### 🔐 Permission Checking (ALWAYS DO THIS)
 ```typescript
+// In every command that modifies data:
 const context = await this.getPermissionContext(interaction);
 const hasPermission = await this.permissionService.hasActionPermission(context, 'admin');
-```
-
-### 3. Repository Pattern
-All data access uses MongoDB repositories extending `BaseMongoRepository`:
-
-```typescript
-export class StaffRepository extends BaseMongoRepository<Staff> {
-  constructor() {
-    super('staff'); // Collection name
-  }
-  
-  // Domain-specific query methods
-  public async findByGuildId(guildId: string): Promise<Staff[]> {
-    return await this.findByFilters({ guildId, status: 'active' });
-  }
+if (!hasPermission) {
+  await interaction.reply({ 
+    embeds: [this.createErrorEmbed('Insufficient permissions')], 
+    ephemeral: true 
+  });
+  return;
 }
 ```
 
-### 4. Role Hierarchy System
-Staff roles have a numerical hierarchy (level 1-6) with promotion/demotion logic:
-- **Managing Partner** (Level 6) - 1 max
-- **Senior Partner** (Level 5) - 3 max  
-- **Junior Partner** (Level 4) - 5 max
-- **Senior Associate** (Level 3) - 10 max
-- **Junior Associate** (Level 2) - 10 max
-- **Paralegal** (Level 1) - 10 max
-
-### 5. Automatic Role Tracking
-The bot monitors Discord role changes and automatically updates the staff database:
-- **Hiring**: User gains first staff role
-- **Firing**: User loses all staff roles
-- **Promotion**: User gains higher-level role
-- **Demotion**: User gets lower-level role
-
-## Server Setup System
-
-The bot can completely rebuild Discord servers using `ANARCHY_SERVER_CONFIG`:
-
-### Configuration Structure
+### 📝 Unified Validation System
 ```typescript
-// Categories with channels and permissions
-const INFORMATION_CATEGORY = {
-  name: "Information",
-  channels: [
-    { name: "welcome", type: ChannelType.GuildText },
-    { name: "rules", type: ChannelType.GuildText }
-  ]
-};
-
-// Roles with hierarchy, permissions, and limits
-const ROLES = [
-  { 
-    name: "Managing Partner", 
-    color: "DarkRed", 
-    permissions: [PermissionFlagsBits.Administrator],
-    maxCount: 1
-  }
-];
+// Use for all business rule validation:
+const validationResult = await this.validationService.validate(
+  UnifiedValidationService.createContext({
+    permissionContext: context,
+    entityType: 'staff',
+    operation: 'hire',
+    data: { userId, role }
+  })
+);
 ```
 
-### Critical Server Setup Commands
-- `/admin setupserver` - **COMPLETELY WIPES AND REBUILDS SERVER**
+### 🎨 Consistent Embed Styling
+```typescript
+// Always use EmbedUtils for consistency:
+const embed = EmbedUtils.createAALegalEmbed({ title, description });
+const error = EmbedUtils.createErrorEmbed('Error', message);
+const success = EmbedUtils.createSuccessEmbed('Success', message);
+```
+
+### ⚠️ Critical Warnings
+
+#### 🚨 DESTRUCTIVE COMMAND
+`/admin setupserver` - **COMPLETELY WIPES AND REBUILDS THE SERVER**
 - Requires confirmation: "DELETE EVERYTHING"
-- Creates roles, channels, categories, and jobs per configuration
+- Deletes ALL channels, roles, and categories
+- Creates default information message in welcome channel
+- Sets welcome channel as default information channel
+- Use with extreme caution!
 
-## System Architecture & Services
+#### 🔒 Security Requirements
+- ALWAYS validate permissions before operations
+- ALWAYS use parameterized queries (repository pattern handles this)
+- NEVER log sensitive data (tokens, passwords)
+- ALWAYS audit log significant actions
 
-### Core Business Services (16 Services)
+## Common Development Tasks
 
-#### 🏢 Staff Management Services
-- **StaffService**: Complete staff lifecycle management with role hierarchy enforcement
-- **RoleTrackingService**: Automatic Discord role synchronization with database
-- **DiscordRoleSyncService**: Bidirectional role synchronization and management
+### Adding a New Command
+1. Add to appropriate command file in `src/presentation/commands/`
+2. Use `@Slash` decorator with proper group
+3. Implement permission checking
+4. Add service method if needed
+5. Update tests
+6. Document in PRESENTATION_LAYER.md
 
-#### 💼 Job & Application Management Services  
-- **JobService**: Job posting management with role-based creation and custom questions
-- **ApplicationService**: Job application processing with validation and review workflows
-- **JobQuestionService**: Dynamic job application questions with template system
-- **JobCleanupService**: Automated cleanup of expired jobs and Discord roles
+### Adding a New Service
+1. Create in `src/application/services/`
+2. Follow constructor dependency injection pattern
+3. Implement proper error handling
+4. Add unit tests with mocked dependencies
+5. Document in APPLICATION_LAYER.md
 
-#### ⚖️ Case Management Services
-- **CaseService**: Comprehensive legal case management from creation to closure
-  - Sequential case numbering system
-  - Automatic Discord channel creation for cases
-  - Lead attorney and team assignment
-  - Document and note management
-  - Case status workflow (pending → in progress → closed)
+### Database Changes
+1. Update entity in `src/domain/entities/`
+2. Update repository if needed
+3. Add migration logic if changing existing data
+4. Update tests
+5. Document in DOMAIN_LAYER.md
 
-#### 📋 Client & Retainer Services
-- **RetainerService**: Legal retainer agreements with digital signature workflow
-- **FeedbackService**: Client feedback collection and staff performance metrics
+### Testing Requirements
+- Minimum 95% code coverage
+- Test all permission boundaries
+- Test error scenarios
+- Mock external dependencies
+- Use MongoDB Memory Server for integration tests
 
-#### ⏰ Automation Services
-- **ReminderService**: Scheduled reminders with Discord integration and natural language parsing
-
-#### 🔧 System Management Services
-- **PermissionService**: Sophisticated role-based access control with action-based permissions
-- **RepairService**: System integrity maintenance and health checks
-- **MetricsService**: Comprehensive system metrics and performance analytics
-- **AnarchyServerSetupService**: Complete Discord server setup and configuration
-- **HelpService**: Contextual help system with permission-aware filtering
-
-### Database Entities & Relationships
-
-#### Core Entities (12 Entities)
-- **Staff**: User employment records with 6-level role hierarchy
-- **Job**: Position postings with application workflows and custom questions
-- **Application**: Job applications with validation and review processes
-- **Case**: Legal case management with sequential numbering and channel creation
-- **Feedback**: Client feedback collection with performance metrics
-- **Retainer**: Legal retainer agreements with digital signatures
-- **Reminder**: Automated reminder system with natural language parsing
-- **AuditLog**: Complete audit trail of all system actions
-- **GuildConfig**: Per-guild configuration and settings
-- **CaseCounter**: Sequential case numbering system
-- **Base**: Common entity fields and patterns
-- **Permission**: Advanced permission management
-
-#### Entity Relationships
-- Staff ↔ Applications (many-to-many via applications)
-- Staff ↔ Cases (one-to-many as case assignee with lead attorney designation)
-- Jobs ↔ Applications (one-to-many with custom questions)
-- Cases ↔ Feedback (one-to-many with performance tracking)
-- Cases ↔ Reminders (one-to-many for case-related reminders)
-- All entities include `guildId` for multi-server support
-- Comprehensive audit logging across all entities
-
-## Environment Configuration
+## Environment Setup
 
 ### Required Environment Variables
 ```bash
-# Discord
-DISCORD_BOT_TOKEN=your_discord_bot_token
-
-# MongoDB
+DISCORD_BOT_TOKEN=your_bot_token
 MONGODB_URI=mongodb://localhost:27017/anarchy-associates
 MONGODB_DB_NAME=anarchy-associates
-
-# Roblox Integration (optional)
-ROBLOX_COOKIE=optional_roblox_cookie
+ROBLOX_COOKIE=optional_for_roblox_integration
 ```
 
-### Bot Permissions Required
-The bot needs these Discord intents and permissions:
-- `GuildMembers` - For role tracking
-- `Guilds` - For guild information
-- `GuildMessages` - For message handling
-- `MessageContent` - For message content access
+### Discord Bot Permissions
+Required intents: `GuildMembers`, `Guilds`, `GuildMessages`, `MessageContent`
 
-## Development Patterns
+## Key Business Rules
 
-### Error Handling
-Always wrap interactions in try-catch with proper error embeds:
+### Staff Role Hierarchy & Limits
+- Managing Partner (1 max) → Senior Partner (3) → Junior Partner (5) → Senior Associate (10) → Junior Associate (10) → Paralegal (10)
+- Promotions must follow hierarchy
+- Guild owner can bypass limits
 
-```typescript
-try {
-  // Command logic
-  await interaction.reply({ embeds: [successEmbed] });
-} catch (error) {
-  logger.error('Error in command:', error);
-  await interaction.reply({ 
-    embeds: [this.createErrorEmbed('Command failed')], 
-    ephemeral: true 
-  });
-}
+### Case Management
+- Sequential numbering: `YYYY-NNNN-Username`
+- Max 5 active cases per client
+- Automatic Discord channel creation
+- Closed cases archived, not deleted
+
+### Permission System
+- Guild owner: All permissions
+- Admin roles/users: Configured per guild
+- Action-based: `admin`, `hr`, `case`, `config`, `retainer`, `repair`
+- Inherited permissions (e.g., admin inherits all)
+
+### Information Channel Management
+- `/info set` - Create/update information message in current channel
+- `/info addfield` - Add fields to existing information message
+- `/info remove` - Remove information message from channel
+- `/info list` - List all information channels in server
+- `/info sync` - Re-sync information message if deleted
+- `/admin setdefaultinfo` - Set default information channel (auto-creates message if none exists)
+
+## Performance Targets
+- Command response: <100ms
+- Bulk operations: <5s for 100 items
+- Concurrent operations: Support 5+ simultaneous
+- Database queries: Indexed and optimized
+
+## Debugging Tips
+
+### Common Issues
+1. **Permission denied**: Check guild config and user roles
+2. **Command not showing**: Restart bot and check decorators
+3. **Database timeout**: Check MongoDB connection string
+4. **Test failures**: Run with `--runInBand` for debugging
+
+### Useful Debug Commands
+```bash
+npm run dev -- --inspect  # Node debugger
+npm test -- --verbose     # Detailed test output
+npm test -- --coverage    # Coverage report
 ```
 
-### Embed Patterns
-Use `EmbedUtils` for consistent styling:
+## Important Notes
 
-```typescript
-// Legal firm branded embed
-const embed = EmbedUtils.createAALegalEmbed({
-  title: 'Staff Information',
-  description: 'Member details'
-});
+- **Always** update tests when changing code
+- **Always** handle errors gracefully with user feedback
+- **Always** use transactions for multi-step operations
+- **Never** trust user input - validate everything
+- **Never** modify audit logs after creation
+- **Prefer** editing existing files over creating new ones
+- **Document** significant changes in appropriate layer docs
 
-// Simple error/success embeds
-const errorEmbed = EmbedUtils.createErrorEmbed('Error', 'Something went wrong');
-const successEmbed = EmbedUtils.createSuccessEmbed('Success', 'Operation completed');
-```
-
-### Permission Checking Pattern
-Standard permission check in all admin commands:
-
-```typescript
-private async getPermissionContext(interaction: CommandInteraction): Promise<PermissionContext> {
-  const member = interaction.guild?.members.cache.get(interaction.user.id);
-  return {
-    guildId: interaction.guildId!,
-    userId: interaction.user.id,
-    userRoles: member?.roles.cache.map(role => role.id) || [],
-    isGuildOwner: interaction.guild?.ownerId === interaction.user.id,
-  };
-}
-```
-
-### Service Initialization
-Services are initialized in `Bot.initializeServices()` after database connection:
-
-```typescript
-private initializeServices(): void {
-  this.reminderService = new ReminderService(reminderRepository, caseRepository, staffRepository);
-  this.roleTrackingService = new RoleTrackingService();
-  // Services are automatically integrated with Discord client in ready event
-}
-```
-
-## Comprehensive Discord Command System
-
-### Slash Commands by Category (77+ Commands)
-
-#### Admin Commands (`/admin`)
-- `setupserver` - Complete server rebuild (DESTRUCTIVE - requires "DELETE EVERYTHING" confirmation)
-- `cleardata` - Database cleanup operations with safety checks
-- `config` - Guild configuration management (roles, channels, permissions)
-- `repair` - System integrity checks and repairs
-- `metrics` - System performance and usage analytics
-
-#### Staff Management Commands (`/staff`)
-- `hire` - Hire new staff members with role hierarchy validation
-- `fire` - Terminate staff members with audit trail
-- `promote` - Promote staff to higher roles with limit enforcement
-- `demote` - Demote staff to lower roles
-- `list` - View all staff members with filtering and pagination
-- `info` - View detailed individual staff information
-- `hierarchy` - Display staff hierarchy and role counts
-- `sync` - Manual role synchronization between Discord and database
-
-#### Case Management Commands (`/case`)
-- `create` - Create new legal cases with automatic channel creation
-- `assign` - Assign cases to staff members
-- `reassign` - Transfer case ownership between staff
-- `close` - Close completed cases with outcome tracking
-- `list` - View active cases with filtering
-- `info` - View detailed case information
-- `accept` - Accept pending cases
-- `decline` - Decline cases with reasons
-- `addnote` - Add notes to cases (internal/client-visible)
-- `adddocument` - Attach documents to cases
-- `setlead` - Designate lead attorney for cases
-
-#### Job & Application Commands (`/job`)
-- `post` - Create job postings with custom questions
-- `list` - View available positions with filtering
-- `applications` - View job applications with review status
-- `close` - Close job postings
-- `questions` - Manage job application questions
-- `apply` - Submit job applications (user-facing)
-- `review` - Review and process applications
-- `stats` - Job posting and application statistics
-
-#### Retainer Management Commands (`/retainer`)
-- `create` - Create new retainer agreements
-- `sign` - Process digital signatures
-- `cancel` - Cancel pending retainers
-- `list` - View retainer agreements
-- `stats` - Retainer statistics and metrics
-
-#### Feedback System Commands (`/feedback`)
-- `submit` - Submit client feedback (client-only)
-- `list` - View feedback with filtering
-- `stats` - Staff and firm performance metrics
-- `performance` - Individual staff performance analytics
-
-#### Reminder System Commands (`/reminder`)
-- `create` - Create scheduled reminders with natural language
-- `list` - View user reminders
-- `cancel` - Cancel scheduled reminders
-- `case` - View case-related reminders
-
-#### Role Management Commands (`/role`)
-- `assign` - Assign Discord roles
-- `remove` - Remove Discord roles
-- `sync` - Synchronize roles with database
-- `cleanup` - Clean up orphaned roles
-
-#### System Commands (`/repair`, `/metrics`, `/help`)
-- Comprehensive system maintenance
-- Performance analytics and monitoring
-- Contextual help with permission-aware filtering
-
-### Command Architecture Features
-- **Permission-based access**: All commands check appropriate permissions
-- **Audit trail**: All actions logged with full context
-- **Error handling**: Comprehensive error recovery and user feedback
-- **Guild isolation**: Multi-server support with data separation
-- **Rate limiting**: Abuse prevention and performance optimization
-
-## Testing Strategy & Coverage
-
-### Comprehensive Test Suite (31 Test Files, 95%+ Coverage)
-
-#### Test Categories
-- **Application Tests** (8 files): Service layer business logic testing
-- **Domain Tests** (6 files): Entity and domain logic validation
-- **Infrastructure Tests** (7 files): Repository and database integration testing
-- **Integration Tests** (4 files): End-to-end workflow testing
-- **E2E Tests** (2 files): Complete Discord command workflow testing
-- **Performance Tests** (1 file): Load testing and performance validation
-- **Security Tests** (1 file): Permission boundary and access control testing
-- **Concurrency Tests** (1 file): Race condition and concurrent operation testing
-- **Error Handling Tests** (1 file): Rollback scenarios and error recovery
-
-#### Testing Infrastructure
-- **MongoDB Memory Server**: Isolated database testing environment
-- **Jest** with custom test sequencer for ordered execution
-- **Global setup/teardown**: Automated database lifecycle management
-- **Test helpers**: Reusable utilities for common testing operations
-- **Coverage reporting**: Detailed code coverage analysis
-- **Mock services**: Comprehensive mocking for external dependencies
-
-#### Testing Patterns
-
-##### Repository Testing
-```typescript
-describe('StaffRepository', () => {
-  beforeEach(async () => {
-    await mongoClient.connect();
-    repository = new StaffRepository();
-  });
-  
-  afterEach(async () => {
-    await mongoClient.clearDatabase();
-  });
-  
-  // Integration tests with real database
-});
-```
-
-##### Service Testing
-```typescript
-const mockStaffRepo = {
-  findByUserId: jest.fn(),
-  add: jest.fn(),
-  update: jest.fn()
-} as jest.Mocked<Partial<StaffRepository>>;
-
-// Unit tests with mocked dependencies
-```
-
-##### Command Testing
-```typescript
-// E2E command testing with Discord interaction mocking
-const mockInteraction = {
-  guildId: 'test-guild',
-  user: { id: 'test-user' },
-  reply: jest.fn()
-};
-```
-
-#### Test Quality Metrics
-- **95%+ code coverage** across all layers
-- **Boundary testing** for all permission checks
-- **Error scenario coverage** for graceful failure handling
-- **Performance benchmarks** for critical operations
-- **Security validation** for all access controls
-
-## File Structure Conventions
-
-### Command Files
-- Group related commands in single files (e.g., `staff-commands.ts`)
-- Use `@SlashGroup` decorators for command organization
-- Each command file handles one domain area
-
-### Service Files  
-- Business logic services in `src/application/services/`
-- Infrastructure services in `src/infrastructure/`
-- Services follow single responsibility principle
-
-### Entity Files
-- Domain entities in `src/domain/entities/`
-- Each entity includes its related interfaces and enums
-- Base entity provides common fields (`_id`, `createdAt`, `updatedAt`)
-
-## Critical Security Considerations
-
-### Permission Validation
-ALWAYS validate permissions before sensitive operations:
-- Server setup commands require admin permissions
-- Role management requires specific action permissions
-- User data access requires proper authorization
-
-### Data Validation
-Use proper input validation for:
-- User IDs (Discord snowflakes)
-- Guild IDs (Discord snowflakes)  
-- Enum values (StaffRole, AuditAction)
-- String lengths and formats
-
-### Audit Logging
-All significant actions are logged to `AuditLog` collection:
-- Staff changes (hire/fire/promote/demote)
-- Permission modifications
-- Configuration changes
-- Administrative actions
-
-## Bot Lifecycle Management
-
-### Graceful Shutdown
-The bot handles process signals and shuts down gracefully:
-- Closes Discord connection
-- Closes MongoDB connection  
-- Logs shutdown completion
-
-### Service Integration
-Services are lifecycle-aware:
-- `ReminderService` integrates with Discord client when ready
-- `RoleTrackingService` registers event handlers on initialization
-- Database connections are established before service initialization
-
-This architecture ensures scalability, maintainability, and proper separation of concerns while providing comprehensive legal firm management capabilities through Discord.
+Remember: This is a production system for a legal firm. Code quality, security, and reliability are paramount.
