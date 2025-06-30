@@ -2,10 +2,10 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RoleSynchronizationEnhancementService = exports.ConflictSeverity = void 0;
 const audit_log_repository_1 = require("../../infrastructure/repositories/audit-log-repository");
-const staff_role_1 = require("../../domain/entities/staff-role");
-const audit_log_1 = require("../../domain/entities/audit-log");
+const staff_role_1 = require("../../domain/entities/staff-role"); // Keep utility functions
 const logger_1 = require("../../infrastructure/logger");
 const embed_utils_1 = require("../../infrastructure/utils/embed-utils");
+const audit_log_1 = require("../../domain/entities/audit-log");
 var ConflictSeverity;
 (function (ConflictSeverity) {
     ConflictSeverity["LOW"] = "low";
@@ -17,12 +17,12 @@ class RoleSynchronizationEnhancementService {
     constructor() {
         // Map Discord role names to staff roles (same as RoleTrackingService)
         this.STAFF_ROLE_MAPPING = {
-            'Managing Partner': staff_role_1.StaffRole.MANAGING_PARTNER,
-            'Senior Partner': staff_role_1.StaffRole.SENIOR_PARTNER,
-            'Partner': staff_role_1.StaffRole.SENIOR_PARTNER,
-            'Senior Associate': staff_role_1.StaffRole.SENIOR_ASSOCIATE,
-            'Associate': staff_role_1.StaffRole.JUNIOR_ASSOCIATE,
-            'Paralegal': staff_role_1.StaffRole.PARALEGAL,
+            'Managing Partner': 'Managing Partner',
+            'Senior Partner': 'Senior Partner',
+            'Partner': 'Senior Partner',
+            'Senior Associate': 'Senior Associate',
+            'Associate': 'Junior Associate',
+            'Paralegal': 'Paralegal',
         };
         // Staff roles in hierarchy order (highest first)
         this.STAFF_ROLES_HIERARCHY = [

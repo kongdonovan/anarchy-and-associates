@@ -1,6 +1,5 @@
 import { BaseMongoRepository } from './base-mongo-repository';
-import { Job } from '../../domain/entities/job';
-import { StaffRole } from '../../domain/entities/staff-role';
+import { Job, StaffRole } from '../../validation';
 export interface JobSearchFilters {
     isOpen?: boolean;
     staffRole?: StaffRole;
@@ -15,17 +14,17 @@ export interface JobListResult {
 }
 export declare class JobRepository extends BaseMongoRepository<Job> {
     constructor();
-    findByGuildId(guildId: string): Promise<Job[]>;
-    findOpenJobs(guildId: string): Promise<Job[]>;
-    findJobsByStaffRole(guildId: string, staffRole: StaffRole): Promise<Job[]>;
-    searchJobs(guildId: string, filters: JobSearchFilters, page?: number, limit?: number): Promise<JobListResult>;
-    createJob(jobData: Omit<Job, '_id' | 'createdAt' | 'updatedAt'>): Promise<Job>;
-    updateJob(jobId: string, updates: Partial<Job>): Promise<Job | null>;
-    closeJob(guildId: string, jobId: string, closedBy: string, _removeRole?: boolean): Promise<Job | null>;
-    removeJob(guildId: string, jobId: string, removedBy: string): Promise<boolean>;
-    incrementApplicationCount(jobId: string): Promise<Job | null>;
-    incrementHiredCount(jobId: string): Promise<Job | null>;
-    getJobStatistics(guildId: string): Promise<{
+    findByGuildId(guildId: unknown): Promise<Job[]>;
+    findOpenJobs(guildId: unknown): Promise<Job[]>;
+    findJobsByStaffRole(guildId: unknown, staffRole: unknown): Promise<Job[]>;
+    searchJobs(guildId: unknown, filters: unknown, page?: unknown, limit?: unknown): Promise<JobListResult>;
+    createJob(jobData: unknown): Promise<Job>;
+    updateJob(jobId: unknown, updates: unknown): Promise<Job | null>;
+    closeJob(guildId: unknown, jobId: unknown, closedBy: unknown, _removeRole?: unknown): Promise<Job | null>;
+    removeJob(guildId: unknown, jobId: unknown, removedBy: unknown): Promise<boolean>;
+    incrementApplicationCount(jobId: unknown): Promise<Job | null>;
+    incrementHiredCount(jobId: unknown): Promise<Job | null>;
+    getJobStatistics(guildId: unknown): Promise<{
         totalJobs: number;
         openJobs: number;
         closedJobs: number;
@@ -33,8 +32,8 @@ export declare class JobRepository extends BaseMongoRepository<Job> {
         totalHired: number;
         jobsByRole: Record<StaffRole, number>;
     }>;
-    findJobsNeedingRoleCleanup(guildId: string): Promise<Job[]>;
-    markRoleCleanupComplete(jobId: string): Promise<Job | null>;
-    getOpenJobsForRole(guildId: string, staffRole: StaffRole): Promise<Job[]>;
+    findJobsNeedingRoleCleanup(guildId: unknown): Promise<Job[]>;
+    markRoleCleanupComplete(jobId: unknown): Promise<Job | null>;
+    getOpenJobsForRole(guildId: unknown, staffRole: unknown): Promise<Job[]>;
 }
 //# sourceMappingURL=job-repository.d.ts.map

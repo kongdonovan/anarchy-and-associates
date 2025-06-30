@@ -8,28 +8,29 @@ const channel_permission_manager_1 = require("./channel-permission-manager");
 const audit_log_repository_1 = require("../../infrastructure/repositories/audit-log-repository");
 const staff_repository_1 = require("../../infrastructure/repositories/staff-repository");
 const guild_config_repository_1 = require("../../infrastructure/repositories/guild-config-repository");
-const staff_role_1 = require("../../domain/entities/staff-role");
-const audit_log_1 = require("../../domain/entities/audit-log");
+const job_repository_1 = require("../../infrastructure/repositories/job-repository");
+const application_repository_1 = require("../../infrastructure/repositories/application-repository");
 const logger_1 = require("../../infrastructure/logger");
 const embed_utils_1 = require("../../infrastructure/utils/embed-utils");
+const audit_log_1 = require("../../domain/entities/audit-log");
 const permission_service_1 = require("./permission-service");
-const business_rule_validation_service_1 = require("./business-rule-validation-service");
+const validation_service_factory_1 = require("../validation/validation-service-factory");
 class RoleChangeCascadeService {
     constructor() {
         // Define which roles have lawyer permissions (can be assigned to cases)
         this.LAWYER_ROLES = [
-            staff_role_1.StaffRole.MANAGING_PARTNER,
-            staff_role_1.StaffRole.SENIOR_PARTNER,
-            staff_role_1.StaffRole.JUNIOR_PARTNER,
-            staff_role_1.StaffRole.SENIOR_ASSOCIATE,
-            staff_role_1.StaffRole.JUNIOR_ASSOCIATE
+            'Managing Partner',
+            'Senior Partner',
+            'Junior Partner',
+            'Senior Associate',
+            'Junior Associate'
         ];
         // Define which roles have lead attorney permissions
         this.LEAD_ATTORNEY_ROLES = [
-            staff_role_1.StaffRole.MANAGING_PARTNER,
-            staff_role_1.StaffRole.SENIOR_PARTNER,
-            staff_role_1.StaffRole.JUNIOR_PARTNER,
-            staff_role_1.StaffRole.SENIOR_ASSOCIATE
+            'Managing Partner',
+            'Senior Partner',
+            'Junior Partner',
+            'Senior Associate'
         ];
         this.caseRepository = new case_repository_1.CaseRepository();
         this.auditLogRepository = new audit_log_repository_1.AuditLogRepository();
@@ -38,9 +39,20 @@ class RoleChangeCascadeService {
         const caseCounterRepository = new case_counter_repository_1.CaseCounterRepository();
         const guildConfigRepository = new guild_config_repository_1.GuildConfigRepository();
         const permissionService = new permission_service_1.PermissionService(guildConfigRepository);
-        const businessRuleValidationService = new business_rule_validation_service_1.BusinessRuleValidationService(guildConfigRepository, this.staffRepository, this.caseRepository, permissionService);
-        this.channelPermissionManager = new channel_permission_manager_1.ChannelPermissionManager(this.caseRepository, this.staffRepository, this.auditLogRepository, businessRuleValidationService);
-        this.caseService = new case_service_1.CaseService(this.caseRepository, caseCounterRepository, guildConfigRepository, permissionService, businessRuleValidationService);
+        const jobRepository = new job_repository_1.JobRepository();
+        const applicationRepository = new application_repository_1.ApplicationRepository();
+        // Create unified validation service
+        const validationService = validation_service_factory_1.ValidationServiceFactory.createValidationService({
+            staffRepository: this.staffRepository,
+            caseRepository: this.caseRepository,
+            guildConfigRepository,
+            jobRepository,
+            applicationRepository
+        }, {
+            permissionService
+        });
+        this.channelPermissionManager = new channel_permission_manager_1.ChannelPermissionManager(this.caseRepository, this.staffRepository, this.auditLogRepository, validationService);
+        this.caseService = new case_service_1.CaseService(this.caseRepository, caseCounterRepository, guildConfigRepository, permissionService, validationService);
     }
     /**
      * Initialize the cascade service with Discord client
@@ -198,12 +210,12 @@ class RoleChangeCascadeService {
         // Find senior staff to notify
         const managingPartners = await this.staffRepository.findByFilters({
             guildId: guild.id,
-            role: staff_role_1.StaffRole.MANAGING_PARTNER,
+            role: 'Managing Partner',
             status: 'active'
         });
         const seniorPartners = await this.staffRepository.findByFilters({
             guildId: guild.id,
-            role: staff_role_1.StaffRole.SENIOR_PARTNER,
+            role: 'Senior Partner',
             status: 'active'
         });
         const seniorStaff = [...managingPartners, ...seniorPartners];

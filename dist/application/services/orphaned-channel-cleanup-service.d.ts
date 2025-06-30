@@ -4,7 +4,7 @@ import { GuildConfigRepository } from '../../infrastructure/repositories/guild-c
 import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-repository';
 import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
 import { PermissionService, PermissionContext } from './permission-service';
-import { BusinessRuleValidationService } from './business-rule-validation-service';
+import { UnifiedValidationService } from '../validation/unified-validation-service';
 import { CaseChannelArchiveService } from './case-channel-archive-service';
 export interface ChannelCleanupConfig {
     scanInterval: number;
@@ -66,7 +66,7 @@ export declare class OrphanedChannelCleanupService {
     private readonly DEFAULT_CONFIG;
     private readonly CHANNEL_PATTERNS;
     private cleanupIntervals;
-    constructor(caseRepository: CaseRepository, guildConfigRepository: GuildConfigRepository, auditLogRepository: AuditLogRepository, staffRepository: StaffRepository, permissionService: PermissionService, _businessRuleValidationService: BusinessRuleValidationService, caseChannelArchiveService: CaseChannelArchiveService);
+    constructor(caseRepository: CaseRepository, guildConfigRepository: GuildConfigRepository, auditLogRepository: AuditLogRepository, staffRepository: StaffRepository, permissionService: PermissionService, _validationService: UnifiedValidationService, caseChannelArchiveService: CaseChannelArchiveService);
     /**
      * Perform a comprehensive scan for orphaned channels
      */

@@ -2,12 +2,13 @@ import { CaseChannelArchiveService, OrphanedChannelInfo } from '../../applicatio
 import { CaseRepository } from '../../infrastructure/repositories/case-repository';
 import { GuildConfigRepository } from '../../infrastructure/repositories/guild-config-repository';
 import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-repository';
-import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
+
 import { PermissionService, PermissionContext } from '../../application/services/permission-service';
-import { BusinessRuleValidationService } from '../../application/services/business-rule-validation-service';
-import { Case, CaseStatus, CasePriority } from '../../domain/entities/case';
+import { UnifiedValidationService } from '../../application/validation/unified-validation-service';
+import { Case } from '../../validation';
+import { CaseStatus, CasePriority } from '../../domain/entities/case';
 import { ChannelType } from 'discord.js';
-import { ObjectId } from 'mongodb';
+import { TestUtils } from '../helpers/test-utils';
 
 
 // Mock all dependencies
@@ -16,16 +17,16 @@ jest.mock('../../infrastructure/repositories/guild-config-repository');
 jest.mock('../../infrastructure/repositories/audit-log-repository');
 jest.mock('../../infrastructure/repositories/staff-repository');
 jest.mock('../../application/services/permission-service');
-jest.mock('../../application/services/business-rule-validation-service');
+jest.mock('../../application/validation/unified-validation-service');
 
 describe('CaseChannelArchiveService', () => {
   let archiveService: CaseChannelArchiveService;
   let mockCaseRepo: jest.Mocked<CaseRepository>;
   let mockGuildConfigRepo: jest.Mocked<GuildConfigRepository>;
   let mockAuditLogRepo: jest.Mocked<AuditLogRepository>;
-  let mockStaffRepo: jest.Mocked<StaffRepository>;
+
   let mockPermissionService: jest.Mocked<PermissionService>;
-  let mockBusinessRuleValidationService: jest.Mocked<BusinessRuleValidationService>;
+  let mockUnifiedValidationService: jest.Mocked<UnifiedValidationService>;
 
   // Mock Discord objects
   let mockGuild: any;
@@ -33,30 +34,25 @@ describe('CaseChannelArchiveService', () => {
   let mockArchiveCategory: any;
   let mockContext: PermissionContext;
 
-  const testGuildId = 'test_guild_123';
-  const testChannelId = 'channel_123';
-  const testUserId = 'user_123';
+  const testGuildId = '123456789012345678';
+  const testChannelId = '234567890123456789';
+  const testUserId = '345678901234567890';
 
   beforeEach(() => {
     // Initialize mocked dependencies
     mockCaseRepo = new CaseRepository() as jest.Mocked<CaseRepository>;
     mockGuildConfigRepo = new GuildConfigRepository() as jest.Mocked<GuildConfigRepository>;
     mockAuditLogRepo = new AuditLogRepository() as jest.Mocked<AuditLogRepository>;
-    mockStaffRepo = new StaffRepository() as jest.Mocked<StaffRepository>;
+
     mockPermissionService = new PermissionService(mockGuildConfigRepo) as jest.Mocked<PermissionService>;
-    mockBusinessRuleValidationService = new BusinessRuleValidationService(
-      mockGuildConfigRepo,
-      mockStaffRepo,
-      mockCaseRepo,
-      mockPermissionService
-    ) as jest.Mocked<BusinessRuleValidationService>;
+    mockUnifiedValidationService = new UnifiedValidationService() as jest.Mocked<UnifiedValidationService>;
 
     archiveService = new CaseChannelArchiveService(
       mockCaseRepo,
       mockGuildConfigRepo,
       mockAuditLogRepo,
       mockPermissionService,
-      mockBusinessRuleValidationService
+      mockUnifiedValidationService
     );
 
     // Setup mock Discord objects
@@ -138,9 +134,15 @@ describe('CaseChannelArchiveService', () => {
 
     // Setup default mocks
     mockPermissionService.hasActionPermission.mockResolvedValue(true);
-    (mockBusinessRuleValidationService as any).validateArchiveRules = jest.fn().mockResolvedValue(true);
+    mockUnifiedValidationService.validate = jest.fn().mockResolvedValue({
+      isValid: true,
+      valid: true,
+      issues: [],
+      metadata: {},
+      strategyResults: new Map()
+    });
     mockGuildConfigRepo.findByGuildId.mockResolvedValue({
-      _id: new ObjectId('507f1f77bcf86cd799439011'),
+      _id: TestUtils.generateObjectId().toString(),
       guildId: testGuildId,
       caseArchiveCategoryId: 'archive_category_123',
       permissions: {
@@ -163,7 +165,7 @@ describe('CaseChannelArchiveService', () => {
   describe('archiveCaseChannel', () => {
     it('should archive a case channel successfully', async () => {
       const caseData: Partial<Case> = {
-        _id: new ObjectId('507f1f77bcf86cd799439012'),
+        _id: TestUtils.generateObjectId().toString(),
         guildId: testGuildId,
         caseNumber: 'AA-2024-123',
         clientId: 'client_123',
@@ -198,7 +200,7 @@ describe('CaseChannelArchiveService', () => {
 
     it('should handle case with no channel', async () => {
       const caseData: Case = {
-        _id: new ObjectId('507f1f77bcf86cd799439013'),
+        _id: TestUtils.generateObjectId().toString(),
         guildId: testGuildId,
         caseNumber: 'AA-2024-123',
         clientId: 'client_123',
@@ -223,7 +225,7 @@ describe('CaseChannelArchiveService', () => {
 
     it('should handle channel not found in guild', async () => {
       const caseData: Case = {
-        _id: new ObjectId('507f1f77bcf86cd799439014'),
+        _id: TestUtils.generateObjectId().toString(),
         guildId: testGuildId,
         caseNumber: 'AA-2024-123',
         clientId: 'client_123',
@@ -250,7 +252,7 @@ describe('CaseChannelArchiveService', () => {
       mockPermissionService.hasActionPermission.mockResolvedValue(false);
 
       const caseData: Case = {
-        _id: new ObjectId('507f1f77bcf86cd799439015'),
+        _id: TestUtils.generateObjectId().toString(),
         guildId: testGuildId,
         caseNumber: 'AA-2024-123',
         clientId: 'client_123',
@@ -277,7 +279,7 @@ describe('CaseChannelArchiveService', () => {
       // Remove existing archive category
       mockGuild.channels.cache.delete('archive_category_123');
       mockGuildConfigRepo.findByGuildId.mockResolvedValue({
-        _id: new ObjectId('507f1f77bcf86cd799439016'),
+        _id: TestUtils.generateObjectId().toString(),
         guildId: testGuildId,
         // No caseArchiveCategoryId
         permissions: {
@@ -296,7 +298,7 @@ describe('CaseChannelArchiveService', () => {
       });
 
       const caseData: Case = {
-        _id: new ObjectId('507f1f77bcf86cd799439017'),
+        _id: TestUtils.generateObjectId().toString(),
         guildId: testGuildId,
         caseNumber: 'AA-2024-123',
         clientId: 'client_123',
@@ -328,7 +330,7 @@ describe('CaseChannelArchiveService', () => {
     it('should archive multiple closed case channels', async () => {
       const closedCases: Case[] = [
         {
-          _id: new ObjectId('507f1f77bcf86cd799439001'),
+          _id: TestUtils.generateObjectId().toString(),
           guildId: testGuildId,
           caseNumber: 'AA-2024-001',
           clientId: 'client_1',
@@ -346,7 +348,7 @@ describe('CaseChannelArchiveService', () => {
           updatedAt: new Date()
         },
         {
-          _id: new ObjectId('507f1f77bcf86cd799439002'),
+          _id: TestUtils.generateObjectId().toString(),
           guildId: testGuildId,
           caseNumber: 'AA-2024-002',
           clientId: 'client_2',
@@ -416,7 +418,7 @@ describe('CaseChannelArchiveService', () => {
       mockCaseRepo.findByFilters.mockImplementation(async (filters) => {
         if (filters.channelId === testChannelId) {
           return [{
-            _id: new ObjectId(),
+            _id: TestUtils.generateObjectId().toString(),
             guildId: testGuildId,
             caseNumber: 'AA-2024-123',
             clientId: 'client_123',
@@ -535,7 +537,7 @@ describe('CaseChannelArchiveService', () => {
       mockChannel.edit.mockRejectedValue(new Error('Discord API error'));
 
       const caseData: Case = {
-        _id: new ObjectId('507f1f77bcf86cd799439018'),
+        _id: TestUtils.generateObjectId().toString(),
         guildId: testGuildId,
         caseNumber: 'AA-2024-123',
         clientId: 'client_123',
@@ -562,7 +564,7 @@ describe('CaseChannelArchiveService', () => {
       mockAuditLogRepo.add.mockRejectedValue(new Error('Audit log error'));
 
       const caseData: Case = {
-        _id: new ObjectId('507f1f77bcf86cd799439019'),
+        _id: TestUtils.generateObjectId().toString(),
         guildId: testGuildId,
         caseNumber: 'AA-2024-123',
         clientId: 'client_123',
@@ -590,7 +592,7 @@ describe('CaseChannelArchiveService', () => {
       mockGuildConfigRepo.findByGuildId.mockResolvedValue(null);
 
       const caseData: Case = {
-        _id: new ObjectId('507f1f77bcf86cd799439020'),
+        _id: TestUtils.generateObjectId().toString(),
         guildId: testGuildId,
         caseNumber: 'AA-2024-123',
         clientId: 'client_123',
@@ -616,7 +618,7 @@ describe('CaseChannelArchiveService', () => {
       mockGuildConfigRepo.findByGuildId.mockRejectedValue(new Error('Database error'));
 
       const caseData: Case = {
-        _id: new ObjectId('507f1f77bcf86cd799439021'),
+        _id: TestUtils.generateObjectId().toString(),
         guildId: testGuildId,
         caseNumber: 'AA-2024-123',
         clientId: 'client_123',

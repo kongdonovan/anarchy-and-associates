@@ -3,11 +3,12 @@ import { StaffRepository } from '../../infrastructure/repositories/staff-reposit
 import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-repository';
 import { CaseRepository } from '../../infrastructure/repositories/case-repository';
 import { GuildConfigRepository } from '../../infrastructure/repositories/guild-config-repository';
-import { Staff, PromotionRecord } from '../../domain/entities/staff';
-import { StaffRole } from '../../domain/entities/staff-role';
+import { JobRepository } from '../../infrastructure/repositories/job-repository';
+import { ApplicationRepository } from '../../infrastructure/repositories/application-repository';
+import { Staff, PromotionRecord, StaffRole as StaffRoleType } from '../../validation';
 import { AuditAction } from '../../domain/entities/audit-log';
 import { PermissionService } from './permission-service';
-import { BusinessRuleValidationService } from './business-rule-validation-service';
+import { ValidationServiceFactory } from '../validation/validation-service-factory';
 import { ChannelPermissionManager } from './channel-permission-manager';
 import { RoleChangeCascadeService } from './role-change-cascade-service';
 import { RoleSynchronizationEnhancementService } from './role-synchronization-enhancement-service';
@@ -31,13 +32,13 @@ export class RoleTrackingService {
   private roleSynchronizationEnhancementService: RoleSynchronizationEnhancementService;
   
   // Map Discord role names to staff roles based on Anarchy config
-  private readonly STAFF_ROLE_MAPPING: Record<string, StaffRole> = {
-    'Managing Partner': StaffRole.MANAGING_PARTNER,
-    'Senior Partner': StaffRole.SENIOR_PARTNER,
-    'Partner': StaffRole.SENIOR_PARTNER, // Map to Senior Partner since no Junior Partner in new config
-    'Senior Associate': StaffRole.SENIOR_ASSOCIATE,
-    'Associate': StaffRole.JUNIOR_ASSOCIATE, // Map to Junior Associate
-    'Paralegal': StaffRole.PARALEGAL,
+  private readonly STAFF_ROLE_MAPPING: Record<string, StaffRoleType> = {
+    'Managing Partner': 'Managing Partner',
+    'Senior Partner': 'Senior Partner',
+    'Partner': 'Senior Partner', // Map to Senior Partner since no Junior Partner in new config
+    'Senior Associate': 'Senior Associate',
+    'Associate': 'Junior Associate', // Map to Junior Associate
+    'Paralegal': 'Paralegal',
   };
 
   // Get staff roles from Discord roles in hierarchy order (highest first)
@@ -58,18 +59,28 @@ export class RoleTrackingService {
     const caseRepository = new CaseRepository();
     const guildConfigRepository = new GuildConfigRepository();
     const permissionService = new PermissionService(guildConfigRepository);
-    const businessRuleValidationService = new BusinessRuleValidationService(
-      guildConfigRepository,
-      this.staffRepository,
-      caseRepository,
-      permissionService
+    const jobRepository = new JobRepository();
+    const applicationRepository = new ApplicationRepository();
+    
+    // Create unified validation service
+    const validationService = ValidationServiceFactory.createValidationService(
+      {
+        staffRepository: this.staffRepository,
+        caseRepository,
+        guildConfigRepository,
+        jobRepository,
+        applicationRepository
+      },
+      {
+        permissionService
+      }
     );
     
     this.channelPermissionManager = new ChannelPermissionManager(
       caseRepository,
       this.staffRepository,
       this.auditLogRepository,
-      businessRuleValidationService
+      validationService
     );
     
     // Initialize the cascade service
@@ -514,7 +525,7 @@ export class RoleTrackingService {
   /**
    * Map Discord role name to StaffRole enum
    */
-  private mapDiscordRoleToStaffRole(discordRoleName: string): StaffRole | null {
+  private mapDiscordRoleToStaffRole(discordRoleName: string): StaffRoleType | null {
     return this.STAFF_ROLE_MAPPING[discordRoleName] || null;
   }
 

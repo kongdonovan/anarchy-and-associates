@@ -13,6 +13,8 @@ import {
 import { MetricsService, BotMetrics, LawyerStats, AllLawyerStats } from '../../application/services/metrics-service';
 import { EmbedUtils } from '../../infrastructure/utils/embed-utils';
 import { logger } from '../../infrastructure/logger';
+import { AuditDecorators } from '../decorators/audit-decorators';
+import { AuditAction } from '../../domain/entities/audit-log';
 
 @Discord()
 @SlashGroup({ name: 'metrics', description: 'Bot metrics and statistics commands' })
@@ -191,6 +193,7 @@ export class MetricsCommands {
   }
 
   @Slash({ name: 'overview', description: 'Display bot and server statistics' })
+  @AuditDecorators.AdminAction(AuditAction.STAFF_LIST_VIEWED, 'low')
   async metrics(interaction: CommandInteraction): Promise<void> {
     try {
       if (!interaction.guild) {
@@ -227,6 +230,7 @@ export class MetricsCommands {
   }
 
   @Slash({ name: 'lawyer-stats', description: 'View win/loss statistics for lawyers' })
+  @AuditDecorators.AdminAction(AuditAction.STAFF_INFO_VIEWED, 'low')
   async stats(
     @SlashOption({
       name: 'user',

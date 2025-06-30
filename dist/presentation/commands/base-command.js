@@ -1,7 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BaseCommand = void 0;
-const discord_js_1 = require("discord.js");
 const embed_utils_1 = require("../../infrastructure/utils/embed-utils");
 const logger_1 = require("../../infrastructure/logger");
 class BaseCommand {
@@ -122,25 +121,13 @@ class BaseCommand {
      * Create warning embed with consistent styling
      */
     createWarningEmbed(title, description) {
-        return new discord_js_1.EmbedBuilder()
-            .setTitle(`⚠️ ${title}`)
-            .setDescription(description)
-            .setColor(0xFFCC00)
-            .setTimestamp();
+        return embed_utils_1.EmbedUtils.createWarningEmbed(title, description);
     }
     /**
      * Create info embed with consistent styling
      */
     createInfoEmbed(title, description, fields) {
-        const embed = new discord_js_1.EmbedBuilder()
-            .setTitle(`ℹ️ ${title}`)
-            .setDescription(description)
-            .setColor(0x3498db)
-            .setTimestamp();
-        if (fields) {
-            embed.addFields(fields);
-        }
-        return embed;
+        return embed_utils_1.EmbedUtils.createInfoEmbed(title, description, fields);
     }
     /**
      * Log command execution with context

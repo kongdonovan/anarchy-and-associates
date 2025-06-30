@@ -28,18 +28,20 @@ const permission_service_1 = require("../../application/services/permission-serv
 const roblox_service_1 = require("../../infrastructure/external/roblox-service");
 const embed_utils_1 = require("../../infrastructure/utils/embed-utils");
 const permission_utils_1 = require("../../infrastructure/utils/permission-utils");
-const staff_role_1 = require("../../domain/entities/staff-role");
-const job_1 = require("../../domain/entities/job");
+const staff_role_1 = require("../../domain/entities/staff-role"); // Keep utility functions
+const job_1 = require("../../domain/entities/job"); // Keep constants
 const logger_1 = require("../../infrastructure/logger");
 const base_command_1 = require("./base-command");
 const validation_decorators_1 = require("../decorators/validation-decorators");
-const business_rule_validation_service_1 = require("../../application/services/business-rule-validation-service");
-const command_validation_service_1 = require("../../application/services/command-validation-service");
-const cross_entity_validation_service_1 = require("../../application/services/cross-entity-validation-service");
-const case_repository_1 = require("../../infrastructure/repositories/case-repository");
-const retainer_repository_1 = require("../../infrastructure/repositories/retainer-repository");
-const feedback_repository_1 = require("../../infrastructure/repositories/feedback-repository");
-const reminder_repository_1 = require("../../infrastructure/repositories/reminder-repository");
+const audit_decorators_1 = require("../decorators/audit-decorators");
+const audit_log_1 = require("../../domain/entities/audit-log");
+const validation_1 = require("../../validation");
+// import { UnifiedValidationService } from '../../application/validation/unified-validation-service';
+// import { ValidationServiceFactory } from '../../application/validation/validation-service-factory';
+// import { CaseRepository } from '../../infrastructure/repositories/case-repository';
+// import { RetainerRepository } from '../../infrastructure/repositories/retainer-repository';
+// import { FeedbackRepository } from '../../infrastructure/repositories/feedback-repository';
+// import { ReminderRepository } from '../../infrastructure/repositories/reminder-repository';
 let JobsCommands = class JobsCommands extends base_command_1.BaseCommand {
     constructor() {
         super();
@@ -49,26 +51,47 @@ let JobsCommands = class JobsCommands extends base_command_1.BaseCommand {
         const applicationRepository = new application_repository_1.ApplicationRepository();
         const robloxService = roblox_service_1.RobloxService.getInstance();
         const guildConfigRepository = new guild_config_repository_1.GuildConfigRepository();
-        const caseRepository = new case_repository_1.CaseRepository();
-        const retainerRepository = new retainer_repository_1.RetainerRepository();
-        const feedbackRepository = new feedback_repository_1.FeedbackRepository();
-        const reminderRepository = new reminder_repository_1.ReminderRepository();
-        this.jobService = new job_service_1.JobService(jobRepository, auditLogRepository, staffRepository, this.permissionService);
+        const permissionService = new permission_service_1.PermissionService(guildConfigRepository);
+        // const caseRepository = new CaseRepository();
+        // const retainerRepository = new RetainerRepository();
+        // const feedbackRepository = new FeedbackRepository();
+        // const reminderRepository = new ReminderRepository();
+        this.permissionService = permissionService;
+        this.jobService = new job_service_1.JobService(jobRepository, auditLogRepository, staffRepository, permissionService);
         this.questionService = new job_question_service_1.JobQuestionService();
         this.cleanupService = new job_cleanup_service_1.JobCleanupService(jobRepository, auditLogRepository);
-        this.applicationService = new application_service_1.ApplicationService(applicationRepository, jobRepository, staffRepository, robloxService, this.permissionService);
+        this.applicationService = new application_service_1.ApplicationService(applicationRepository, jobRepository, staffRepository, robloxService, permissionService);
         this.jobRepository = jobRepository;
         this.guildConfigRepository = guildConfigRepository;
-        // Initialize services for validation
-        this.permissionService = new permission_service_1.PermissionService(guildConfigRepository);
-        this.businessRuleValidationService = new business_rule_validation_service_1.BusinessRuleValidationService(guildConfigRepository, staffRepository, caseRepository, this.permissionService);
-        this.crossEntityValidationService = new cross_entity_validation_service_1.CrossEntityValidationService(staffRepository, caseRepository, applicationRepository, jobRepository, retainerRepository, feedbackRepository, reminderRepository, auditLogRepository);
-        this.commandValidationService = new command_validation_service_1.CommandValidationService(this.businessRuleValidationService, this.crossEntityValidationService);
-        // Initialize validation services in base class
-        this.initializeValidationServices(this.commandValidationService, this.businessRuleValidationService, this.crossEntityValidationService, this.permissionService);
+        // Create unified validation service
+        // const validationService = ValidationServiceFactory.createValidationService(
+        //   {
+        //     staffRepository,
+        //     caseRepository,
+        //     guildConfigRepository,
+        //     jobRepository,
+        //     applicationRepository
+        //   },
+        //   {
+        //     permissionService: this.permissionService
+        //   }
+        // );
     }
     async apply(interaction) {
         try {
+            // Validate guild context
+            if (!interaction.guildId) {
+                await interaction.reply({
+                    embeds: [this.createErrorEmbed('Invalid Server', 'This command can only be used in a server.')],
+                    ephemeral: true,
+                });
+                return;
+            }
+            // Validate command inputs using Zod schema
+            const commandData = {
+                interaction
+            };
+            validation_1.ValidationHelpers.validateOrThrow(validation_1.JobApplyCommandSchema, commandData, 'Job apply command');
             const guildId = interaction.guildId;
             // Get open jobs
             const openJobs = await this.jobRepository.findByFilters({ guildId, isOpen: true });
@@ -104,8 +127,15 @@ let JobsCommands = class JobsCommands extends base_command_1.BaseCommand {
         }
         catch (error) {
             logger_1.logger.error('Error in apply command:', error);
-            const embed = embed_utils_1.EmbedUtils.createErrorEmbed('Application Error', 'An error occurred while loading job applications. Please try again later.');
-            await interaction.reply({ embeds: [embed], ephemeral: true });
+            // Handle Zod validation errors with user-friendly messages
+            if (error instanceof Error && error.message.includes('Validation failed')) {
+                const embed = embed_utils_1.EmbedUtils.createErrorEmbed('Validation Error', `${error.message}\n\nPlease contact the bot developer if this issue persists.`);
+                await interaction.reply({ embeds: [embed], ephemeral: true });
+            }
+            else {
+                const embed = embed_utils_1.EmbedUtils.createErrorEmbed('Application Error', 'An error occurred while loading job applications. Please try again later.');
+                await interaction.reply({ embeds: [embed], ephemeral: true });
+            }
         }
     }
     async list(status, role, search, page, interaction) {
@@ -139,20 +169,14 @@ let JobsCommands = class JobsCommands extends base_command_1.BaseCommand {
             const context = await this.getPermissionContext(interaction);
             const result = await this.jobService.listJobs(context, filters, currentPage);
             if (result.jobs.length === 0) {
-                const embed = new discord_js_1.EmbedBuilder()
-                    .setTitle('📋 Job Listings')
-                    .setDescription('No jobs found matching your criteria.')
-                    .setColor('#FFA500')
-                    .setTimestamp();
+                const embed = embed_utils_1.EmbedUtils.createInfoEmbed('Career Opportunities', 'No positions currently match your search criteria. Please check back regularly for new opportunities.');
                 await interaction.followUp({ embeds: [embed] });
                 return;
             }
-            const embed = new discord_js_1.EmbedBuilder()
-                .setTitle('📋 Job Listings')
-                .setColor('#0099FF')
-                .setTimestamp()
-                .setFooter({
-                text: `Page ${result.currentPage} of ${result.totalPages} | Total: ${result.total} jobs`,
+            const embed = embed_utils_1.EmbedUtils.createAALegalEmbed({
+                title: '⚖️ Career Opportunities at Anarchy & Associates',
+                color: 'secondary',
+                footer: `Page ${result.currentPage} of ${result.totalPages} | ${result.total} Positions Available`
             });
             let description = '';
             for (const job of result.jobs) {
@@ -161,7 +185,7 @@ let JobsCommands = class JobsCommands extends base_command_1.BaseCommand {
                 description += `${statusIcon} **${job.title}**\n`;
                 description += `└ ${job.staffRole}${roleLimit} | Posted by <@${job.postedBy}>\n`;
                 description += `└ Applications: ${job.applicationCount} | Hired: ${job.hiredCount}\n`;
-                description += `└ ID: \`${job._id?.toHexString()}\`\n\n`;
+                description += `└ ID: \`${job._id}\`\n\n`;
             }
             embed.setDescription(description);
             const row = new discord_js_1.ActionRowBuilder();
@@ -191,19 +215,28 @@ let JobsCommands = class JobsCommands extends base_command_1.BaseCommand {
     async add(title, description, role, discordRole, interaction) {
         try {
             await interaction.deferReply();
-            if (!staff_role_1.RoleUtils.isValidRole(role)) {
+            // Validate guild context
+            if (!interaction.guildId) {
                 await interaction.followUp({
-                    content: `❌ Invalid role. Valid roles are: ${staff_role_1.RoleUtils.getAllRoles().join(', ')}`,
+                    embeds: [this.createErrorEmbed('Invalid Server', 'This command can only be used in a server.')],
                     ephemeral: true,
                 });
                 return;
             }
+            // Validate command inputs using Zod schema
+            const commandData = {
+                title,
+                description,
+                role,
+                interaction
+            };
+            const validatedData = validation_1.ValidationHelpers.validateOrThrow(validation_1.JobPostCommandSchema, commandData, 'Job post command');
             const guildId = interaction.guildId;
             const request = {
                 guildId,
-                title,
-                description,
-                staffRole: role,
+                title: validatedData.title,
+                description: validatedData.description,
+                staffRole: validatedData.role,
                 roleId: discordRole,
                 postedBy: interaction.user.id,
             };
@@ -220,16 +253,25 @@ let JobsCommands = class JobsCommands extends base_command_1.BaseCommand {
             const embed = new discord_js_1.EmbedBuilder()
                 .setTitle('✅ Job Created Successfully')
                 .setColor('#00FF00')
-                .addFields({ name: 'Title', value: job.title, inline: true }, { name: 'Staff Role', value: job.staffRole, inline: true }, { name: 'Position Limit', value: job.limit?.toString() || 'No limit', inline: true }, { name: 'Description', value: job.description }, { name: 'Job ID', value: job._id?.toHexString() || 'Unknown', inline: true }, { name: 'Discord Role', value: `<@&${job.roleId}>`, inline: true }, { name: 'Questions', value: `${job.questions.length} questions (${job_1.DEFAULT_JOB_QUESTIONS.length} default + ${job.questions.length - job_1.DEFAULT_JOB_QUESTIONS.length} custom)`, inline: true })
+                .addFields({ name: 'Title', value: job.title, inline: true }, { name: 'Staff Role', value: job.staffRole, inline: true }, { name: 'Position Limit', value: job.limit?.toString() || 'No limit', inline: true }, { name: 'Description', value: job.description }, { name: 'Job ID', value: job._id || 'Unknown', inline: true }, { name: 'Discord Role', value: `<@&${job.roleId}>`, inline: true }, { name: 'Questions', value: `${job.questions.length} questions (${job_1.DEFAULT_JOB_QUESTIONS.length} default + ${job.questions.length - job_1.DEFAULT_JOB_QUESTIONS.length} custom)`, inline: true })
                 .setTimestamp();
             await interaction.followUp({ embeds: [embed] });
         }
         catch (error) {
             logger_1.logger.error('Error in job add command:', error);
-            await interaction.followUp({
-                content: '❌ An error occurred while creating the job.',
-                ephemeral: true,
-            });
+            // Handle Zod validation errors with user-friendly messages
+            if (error instanceof Error && error.message.includes('Validation failed')) {
+                await interaction.followUp({
+                    embeds: [this.createErrorEmbed('Validation Error', `${error.message}\n\nPlease contact the bot developer if this issue persists.`)],
+                    ephemeral: true,
+                });
+            }
+            else {
+                await interaction.followUp({
+                    content: '❌ An error occurred while creating the job.',
+                    ephemeral: true,
+                });
+            }
         }
     }
     async edit(jobId, title, description, role, discordRole, status, interaction) {
@@ -332,8 +374,23 @@ let JobsCommands = class JobsCommands extends base_command_1.BaseCommand {
     async close(jobId, interaction) {
         try {
             await interaction.deferReply();
+            // Validate guild context
+            if (!interaction.guildId) {
+                await interaction.followUp({
+                    embeds: [this.createErrorEmbed('Invalid Server', 'This command can only be used in a server.')],
+                    ephemeral: true,
+                });
+                return;
+            }
+            // Validate command inputs using Zod schema
+            const commandData = {
+                jobId,
+                reason: undefined, // Optional field
+                interaction
+            };
+            const validatedData = validation_1.ValidationHelpers.validateOrThrow(validation_1.JobCloseCommandSchema, commandData, 'Job close command');
             const context = await this.getPermissionContext(interaction);
-            const result = await this.jobService.closeJob(context, jobId);
+            const result = await this.jobService.closeJob(context, validatedData.jobId);
             if (!result.success) {
                 await interaction.followUp({
                     content: `❌ Failed to close job: ${result.error}`,
@@ -351,10 +408,19 @@ let JobsCommands = class JobsCommands extends base_command_1.BaseCommand {
         }
         catch (error) {
             logger_1.logger.error('Error in job close command:', error);
-            await interaction.followUp({
-                content: '❌ An error occurred while closing the job.',
-                ephemeral: true,
-            });
+            // Handle Zod validation errors with user-friendly messages
+            if (error instanceof Error && error.message.includes('Validation failed')) {
+                await interaction.followUp({
+                    embeds: [this.createErrorEmbed('Validation Error', `${error.message}\n\nPlease contact the bot developer if this issue persists.`)],
+                    ephemeral: true,
+                });
+            }
+            else {
+                await interaction.followUp({
+                    content: '❌ An error occurred while closing the job.',
+                    ephemeral: true,
+                });
+            }
         }
     }
     async remove(jobId, interaction) {
@@ -431,7 +497,7 @@ let JobsCommands = class JobsCommands extends base_command_1.BaseCommand {
                 description += `${statusIcon} **${job.title}**\n`;
                 description += `└ ${job.staffRole}${roleLimit} | Posted by <@${job.postedBy}>\n`;
                 description += `└ Applications: ${job.applicationCount} | Hired: ${job.hiredCount}\n`;
-                description += `└ ID: \`${job._id?.toHexString()}\`\n\n`;
+                description += `└ ID: \`${job._id}\`\n\n`;
             }
             embed.setDescription(description);
             const row = new discord_js_1.ActionRowBuilder();
@@ -1144,6 +1210,7 @@ __decorate([
 __decorate([
     (0, discordx_1.Slash)({ name: 'list', description: 'List all jobs with filtering and pagination' }),
     (0, validation_decorators_1.ValidatePermissions)('senior-staff'),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.JOB_LIST_VIEWED, 'low'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Filter by job status (open/closed/all)',
         name: 'status',
@@ -1178,6 +1245,7 @@ __decorate([
     (0, validation_decorators_1.ValidatePermissions)('senior-staff'),
     (0, validation_decorators_1.ValidateBusinessRules)('role_limit'),
     (0, validation_decorators_1.ValidateEntity)('job', 'create'),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.JOB_CREATED, 'medium'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Job title',
         name: 'title',
@@ -1210,6 +1278,7 @@ __decorate([
     (0, discordx_1.Slash)({ name: 'edit', description: 'Edit an existing job posting' }),
     (0, validation_decorators_1.ValidatePermissions)('senior-staff'),
     (0, validation_decorators_1.ValidateEntity)('job', 'update'),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.JOB_UPDATED, 'medium'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Job ID to edit',
         name: 'job_id',
@@ -1253,6 +1322,7 @@ __decorate([
 __decorate([
     (0, discordx_1.Slash)({ name: 'info', description: 'View detailed information about a specific job' }),
     (0, validation_decorators_1.ValidatePermissions)('senior-staff'),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.JOB_INFO_VIEWED, 'low'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Job ID to view',
         name: 'job_id',
@@ -1267,6 +1337,7 @@ __decorate([
     (0, discordx_1.Slash)({ name: 'close', description: 'Close a job posting (keeps it in database)' }),
     (0, validation_decorators_1.ValidatePermissions)('senior-staff'),
     (0, validation_decorators_1.ValidateEntity)('job', 'update'),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.JOB_CLOSED, 'medium'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Job ID to close',
         name: 'job_id',
@@ -1281,6 +1352,7 @@ __decorate([
     (0, discordx_1.Slash)({ name: 'remove', description: 'Remove a job posting permanently from database' }),
     (0, validation_decorators_1.ValidatePermissions)('senior-staff'),
     (0, validation_decorators_1.ValidateEntity)('job', 'delete'),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.JOB_REMOVED, 'medium'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Job ID to remove',
         name: 'job_id',
@@ -1300,6 +1372,7 @@ __decorate([
 __decorate([
     (0, discordx_1.Slash)({ name: 'questions', description: 'List available question templates for jobs' }),
     (0, validation_decorators_1.ValidatePermissions)('senior-staff'),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.JOB_LIST_VIEWED, 'low'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Filter by category',
         name: 'category',
@@ -1313,6 +1386,7 @@ __decorate([
 __decorate([
     (0, discordx_1.Slash)({ name: 'question-preview', description: 'Preview a specific question template' }),
     (0, validation_decorators_1.ValidatePermissions)('senior-staff'),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.JOB_INFO_VIEWED, 'low'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Template ID to preview',
         name: 'template_id',
@@ -1326,6 +1400,7 @@ __decorate([
 __decorate([
     (0, discordx_1.Slash)({ name: 'add-questions', description: 'Add custom questions to a job using templates' }),
     (0, validation_decorators_1.ValidatePermissions)('senior-staff'),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.JOB_UPDATED, 'medium'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Job ID to add questions to',
         name: 'job_id',
@@ -1351,6 +1426,7 @@ __decorate([
 __decorate([
     (0, discordx_1.Slash)({ name: 'cleanup-roles', description: 'Clean up Discord roles for closed jobs' }),
     (0, validation_decorators_1.ValidatePermissions)('senior-staff'),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.SYSTEM_REPAIR, 'medium'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Perform dry run without making changes',
         name: 'dry_run',
@@ -1364,6 +1440,7 @@ __decorate([
 __decorate([
     (0, discordx_1.Slash)({ name: 'cleanup-report', description: 'Get cleanup report for jobs and roles' }),
     (0, validation_decorators_1.ValidatePermissions)('senior-staff'),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.JOB_LIST_VIEWED, 'low'),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [discord_js_1.CommandInteraction]),
     __metadata("design:returntype", Promise)
@@ -1371,6 +1448,7 @@ __decorate([
 __decorate([
     (0, discordx_1.Slash)({ name: 'cleanup-expired', description: 'Automatically close expired jobs (30+ days old)' }),
     (0, validation_decorators_1.ValidatePermissions)('senior-staff'),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.JOB_UPDATED, 'medium'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Maximum days a job can stay open (default: 30)',
         name: 'max_days',

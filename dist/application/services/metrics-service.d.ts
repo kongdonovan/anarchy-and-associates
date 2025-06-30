@@ -1,5 +1,5 @@
 import { Guild } from 'discord.js';
-import { StaffRole } from '../../domain/entities/staff-role';
+import { StaffRole } from '../../validation';
 export interface BotMetrics {
     uptime: {
         duration: string;

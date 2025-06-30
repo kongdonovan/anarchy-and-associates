@@ -51,7 +51,7 @@ describe('FeedbackService Unit Tests', () => {
             comment: 'Great service and very professional!'
         };
         const mockCreatedFeedback = test_utils_1.TestUtils.generateMockFeedback({
-            _id: test_utils_1.TestUtils.generateObjectId(),
+            _id: test_utils_1.TestUtils.generateObjectId().toString(),
             guildId: testGuildId,
             submitterId: testClientId,
             submitterUsername: 'testclient',
@@ -509,7 +509,7 @@ describe('FeedbackService Unit Tests', () => {
     });
     describe('getFeedbackById', () => {
         const mockFeedback = test_utils_1.TestUtils.generateMockFeedback({
-            _id: test_utils_1.TestUtils.generateObjectId(),
+            _id: test_utils_1.TestUtils.generateObjectId().toString(),
             guildId: testGuildId,
             createdAt: new Date(),
             updatedAt: new Date()

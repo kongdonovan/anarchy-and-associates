@@ -60,6 +60,12 @@ class MongoDbClient {
         }
         return this.database;
     }
+    getClient() {
+        if (!this.client) {
+            throw new Error('Client not connected. Call connect() first.');
+        }
+        return this.client;
+    }
     isConnected() {
         return this.client !== null && this.database !== null;
     }

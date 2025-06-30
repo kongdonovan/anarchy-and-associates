@@ -34,7 +34,7 @@ export enum AuditAction {
   CHANNEL_CLEANUP_PERFORMED = 'channel_cleanup_performed',
   ORPHANED_CHANNEL_DELETED = 'orphaned_channel_deleted',
   // System Maintenance Actions
-  SystemRepair = 'system_repair',
+  SYSTEM_REPAIR = 'system_repair',
 }
 
 export interface AuditLog extends BaseEntity {

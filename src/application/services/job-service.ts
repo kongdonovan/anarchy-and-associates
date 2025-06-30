@@ -1,11 +1,16 @@
 import { JobRepository, JobSearchFilters, JobListResult } from '../../infrastructure/repositories/job-repository';
-import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-repository';
 import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
-import { Job, JobQuestion, DEFAULT_JOB_QUESTIONS } from '../../domain/entities/job';
-import { StaffRole, RoleUtils } from '../../domain/entities/staff-role';
-import { AuditAction } from '../../domain/entities/audit-log';
+import { DEFAULT_JOB_QUESTIONS } from '../../domain/entities/job'; // Keep constants
+import { RoleUtils } from '../../domain/entities/staff-role'; // Keep utility functions
+import { Job, JobQuestion, StaffRole } from '../../validation';
 import { PermissionService, PermissionContext } from './permission-service';
 import { logger } from '../../infrastructure/logger';
+import {
+  JobPostRequestSchema,
+  JobCloseRequestSchema,
+  JobOperationResultSchema,
+  ValidationHelpers
+} from '../../validation';
 
 export interface JobCreateRequest {
   guildId: string;
@@ -30,23 +35,28 @@ export interface JobUpdateRequest {
 
 export class JobService {
   private jobRepository: JobRepository;
-  private auditLogRepository: AuditLogRepository;
   private permissionService: PermissionService;
 
   constructor(
     jobRepository: JobRepository,
-    auditLogRepository: AuditLogRepository,
+    _auditLogRepository: any, // Keep for compatibility but unused
     _staffRepository: StaffRepository, // Future use for staff validation
     permissionService: PermissionService
   ) {
     this.jobRepository = jobRepository;
-    this.auditLogRepository = auditLogRepository;
     this.permissionService = permissionService;
     // _staffRepository reserved for future use
   }
 
-  public async createJob(context: PermissionContext, request: JobCreateRequest): Promise<{ success: boolean; job?: Job; error?: string }> {
+  public async createJob(context: PermissionContext, request: unknown): Promise<{ success: boolean; job?: Job; error?: string }> {
     try {
+      // Validate input using Zod schema
+      const validatedRequest = ValidationHelpers.validateOrThrow(
+        JobPostRequestSchema,
+        request,
+        'Job creation request'
+      );
+
       // Check HR permission for creating jobs
       const hasPermission = await this.permissionService.hasHRPermissionWithContext(context);
       if (!hasPermission) {
@@ -56,7 +66,10 @@ export class JobService {
         };
       }
 
-      const { guildId, title, description, staffRole, roleId, customQuestions, postedBy } = request;
+      const { guildId, title, description, roleId, questions: customQuestions, postedBy } = validatedRequest;
+      
+      // Extract staffRole - it can be either StaffRole or string in the schema
+      const staffRole = validatedRequest.staffRole as StaffRole;
 
       // Validate staff role
       if (!RoleUtils.isValidRole(staffRole)) {
@@ -107,32 +120,29 @@ export class JobService {
 
       const job = await this.jobRepository.createJob(jobData);
 
-      // Log the action
-      await this.auditLogRepository.logAction({
-        guildId,
-        action: AuditAction.JOB_CREATED,
-        actorId: postedBy,
-        details: {
-          after: {
-            staffRole,
-          },
-          metadata: {
-            jobId: job._id?.toHexString(),
-            title,
-            roleId,
-          },
-        },
-        timestamp: new Date(),
-      });
+
 
       logger.info(`Job created: ${title} for ${staffRole} by ${postedBy} in guild ${guildId}`);
 
-      return {
+      // Validate output
+      const result = {
         success: true,
         job,
       };
+
+      return ValidationHelpers.validateOrThrow(
+        JobOperationResultSchema,
+        result,
+        'Job creation result'
+      );
     } catch (error) {
       logger.error('Error creating job:', error);
+      
+      // If it's a validation error, let it propagate
+      if (error instanceof Error && error.message.includes('Validation failed')) {
+        throw error;
+      }
+      
       return {
         success: false,
         error: 'Failed to create job',
@@ -173,7 +183,7 @@ export class JobService {
       // If changing staff role, check for conflicts
       if (updates.staffRole && updates.staffRole !== existingJob.staffRole) {
         const existingJobs = await this.jobRepository.getOpenJobsForRole(context.guildId, updates.staffRole);
-        if (existingJobs.some(job => job._id?.toHexString() !== jobId)) {
+        if (existingJobs.some(job => job._id !== jobId)) {
           return {
             success: false,
             error: `There is already an open job posting for ${updates.staffRole}`,
@@ -206,26 +216,7 @@ export class JobService {
         };
       }
 
-      // Log the action
-      await this.auditLogRepository.logAction({
-        guildId: context.guildId,
-        action: AuditAction.JOB_UPDATED,
-        actorId: context.userId,
-        details: {
-          before: {
-            staffRole: existingJob.staffRole,
-          },
-          after: {
-            staffRole: updatedJob.staffRole,
-          },
-          metadata: {
-            jobId,
-            title: updatedJob.title,
-            changes: Object.keys(updates),
-          },
-        },
-        timestamp: new Date(),
-      });
+
 
       logger.info(`Job updated: ${updatedJob.title} (${jobId}) by ${context.userId} in guild ${context.guildId}`);
 
@@ -244,9 +235,16 @@ export class JobService {
 
   public async closeJob(
     context: PermissionContext,
-    jobId: string
+    request: unknown
   ): Promise<{ success: boolean; job?: Job; error?: string }> {
     try {
+      // Validate input using Zod schema
+      const validatedRequest = ValidationHelpers.validateOrThrow(
+        JobCloseRequestSchema,
+        request,
+        'Job close request'
+      );
+
       // Check HR permission for closing jobs
       const hasPermission = await this.permissionService.hasHRPermissionWithContext(context);
       if (!hasPermission) {
@@ -255,7 +253,10 @@ export class JobService {
           error: 'You do not have permission to close job postings',
         };
       }
-      const job = await this.jobRepository.closeJob(context.guildId, jobId, context.userId);
+      
+      const { jobId, closedBy } = validatedRequest;
+      
+      const job = await this.jobRepository.closeJob(context.guildId, jobId, closedBy);
       if (!job) {
         return {
           success: false,
@@ -263,31 +264,29 @@ export class JobService {
         };
       }
 
-      // Log the action
-      await this.auditLogRepository.logAction({
-        guildId: context.guildId,
-        action: AuditAction.JOB_CLOSED,
-        actorId: context.userId,
-        details: {
-          before: { status: 'open' },
-          after: { status: 'closed' },
-          metadata: {
-            jobId,
-            title: job.title,
-            staffRole: job.staffRole,
-          },
-        },
-        timestamp: new Date(),
-      });
 
-      logger.info(`Job closed: ${job.title} (${jobId}) by ${context.userId} in guild ${context.guildId}`);
 
-      return {
+      logger.info(`Job closed: ${job.title} (${jobId}) by ${closedBy} in guild ${context.guildId}`);
+
+      // Validate output
+      const result = {
         success: true,
         job,
       };
+
+      return ValidationHelpers.validateOrThrow(
+        JobOperationResultSchema,
+        result,
+        'Job close result'
+      );
     } catch (error) {
       logger.error('Error closing job:', error);
+      
+      // If it's a validation error, let it propagate
+      if (error instanceof Error && error.message.includes('Validation failed')) {
+        throw error;
+      }
+      
       return {
         success: false,
         error: 'Failed to close job',
@@ -324,22 +323,7 @@ export class JobService {
         };
       }
 
-      // Log the action
-      await this.auditLogRepository.logAction({
-        guildId: context.guildId,
-        action: AuditAction.JOB_REMOVED,
-        actorId: context.userId,
-        details: {
-          before: { status: job.isOpen ? 'open' : 'closed' },
-          after: { status: 'removed' },
-          metadata: {
-            jobId,
-            title: job.title,
-            staffRole: job.staffRole,
-          },
-        },
-        timestamp: new Date(),
-      });
+
 
       logger.info(`Job removed: ${job.title} (${jobId}) by ${context.userId} in guild ${context.guildId}`);
 
@@ -368,20 +352,7 @@ export class JobService {
       }
       const result = await this.jobRepository.searchJobs(context.guildId, filters, page, 5);
 
-      // Log the action for audit trail
-      await this.auditLogRepository.logAction({
-        guildId: context.guildId,
-        action: AuditAction.JOB_LIST_VIEWED,
-        actorId: context.userId,
-        details: {
-          metadata: {
-            filters,
-            page,
-            resultCount: result.jobs.length,
-          },
-        },
-        timestamp: new Date(),
-      });
+
 
       return result;
     } catch (error) {
@@ -402,19 +373,7 @@ export class JobService {
         return null;
       }
 
-      // Log the action
-      await this.auditLogRepository.logAction({
-        guildId: context.guildId,
-        action: AuditAction.JOB_INFO_VIEWED,
-        actorId: context.userId,
-        details: {
-          metadata: {
-            jobId,
-            title: job.title,
-          },
-        },
-        timestamp: new Date(),
-      });
+
 
       return job;
     } catch (error) {

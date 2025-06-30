@@ -5,7 +5,6 @@ import { ApplicationRepository } from '../../infrastructure/repositories/applica
 import { CaseRepository } from '../../infrastructure/repositories/case-repository';
 import { GuildConfigRepository } from '../../infrastructure/repositories/guild-config-repository';
 import { logger } from '../../infrastructure/logger';
-import { StaffRole } from '../../domain/entities/staff-role';
 
 export interface RepairResult {
   success: boolean;
@@ -83,7 +82,14 @@ export class RepairService {
       }
 
       // Sync Discord -> Database (remove unauthorized roles)
-      const staffRoleNames = Object.values(StaffRole);
+      const staffRoleNames = [
+        'Managing Partner',
+        'Senior Partner',
+        'Junior Partner',
+        'Senior Associate',
+        'Junior Associate',
+        'Paralegal'
+      ];
       const discordStaffRoles = guild.roles.cache.filter(role => 
         staffRoleNames.some(staffRole => 
           role.name === staffRole || role.name.toLowerCase().includes(staffRole.toLowerCase())

@@ -5,7 +5,7 @@
  * @module config/anarchy-server-config
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.DEFAULT_CHANNEL_MAPPINGS = exports.DEFAULT_ROLE_PERMISSIONS = exports.ANARCHY_SERVER_CONFIG = void 0;
+exports.CATEGORY_PERMISSIONS = exports.DEFAULT_CHANNEL_MAPPINGS = exports.DEFAULT_ROLE_PERMISSIONS = exports.ANARCHY_SERVER_CONFIG = void 0;
 const discord_js_1 = require("discord.js");
 // Category and channel definitions
 const INFORMATION_CATEGORY = {
@@ -17,13 +17,13 @@ const INFORMATION_CATEGORY = {
         { name: 'announcements', type: discord_js_1.ChannelType.GuildText },
     ],
 };
-const CLIENT_SERVICES_CATEGORY = {
-    name: 'Client Services',
+const LOBBY_CATEGORY = {
+    name: 'Lobby',
     channels: [
-        { name: 'client-lobby', type: discord_js_1.ChannelType.GuildText },
+        { name: 'general-chat', type: discord_js_1.ChannelType.GuildText },
         { name: 'bot-commands', type: discord_js_1.ChannelType.GuildText },
         { name: 'feedback', type: discord_js_1.ChannelType.GuildText },
-        { name: 'client-voice', type: discord_js_1.ChannelType.GuildVoice },
+        { name: 'voice-lobby', type: discord_js_1.ChannelType.GuildVoice },
     ],
 };
 const CASE_REVIEWS_CATEGORY = {
@@ -290,7 +290,7 @@ const DEFAULT_JOBS = [
 exports.ANARCHY_SERVER_CONFIG = {
     categories: [
         INFORMATION_CATEGORY,
-        CLIENT_SERVICES_CATEGORY,
+        LOBBY_CATEGORY,
         CASE_REVIEWS_CATEGORY,
         CASE_ARCHIVES_CATEGORY,
         LEGAL_TEAM_CATEGORY,
@@ -325,5 +325,75 @@ exports.DEFAULT_CHANNEL_MAPPINGS = {
     applicationChannelId: { name: 'applications', type: 'GUILD_TEXT' },
     retainerChannelId: { name: 'signed-retainers', type: 'GUILD_TEXT' },
     caseArchiveCategoryId: { name: 'Case Archives', type: 'GUILD_CATEGORY' },
+    defaultInformationChannelId: { name: 'welcome', type: 'GUILD_TEXT' },
+    defaultRulesChannelId: { name: 'rules', type: 'GUILD_TEXT' },
+};
+/**
+ * Category permission configurations for server setup
+ * Defines how each category should be configured for different user groups
+ */
+exports.CATEGORY_PERMISSIONS = {
+    'Information': {
+        // Information channels are read-only for everyone
+        everyone: {
+            allow: [discord_js_1.PermissionFlagsBits.ViewChannel, discord_js_1.PermissionFlagsBits.ReadMessageHistory],
+            deny: [discord_js_1.PermissionFlagsBits.SendMessages, discord_js_1.PermissionFlagsBits.CreatePublicThreads, discord_js_1.PermissionFlagsBits.CreatePrivateThreads]
+        },
+        // Staff can manage messages in information channels
+        staff: {
+            allow: [discord_js_1.PermissionFlagsBits.SendMessages, discord_js_1.PermissionFlagsBits.ManageMessages, discord_js_1.PermissionFlagsBits.EmbedLinks, discord_js_1.PermissionFlagsBits.AttachFiles]
+        }
+    },
+    'Lobby': {
+        // Lobby is fully accessible to everyone
+        everyone: {
+            allow: [
+                discord_js_1.PermissionFlagsBits.ViewChannel,
+                discord_js_1.PermissionFlagsBits.SendMessages,
+                discord_js_1.PermissionFlagsBits.ReadMessageHistory,
+                discord_js_1.PermissionFlagsBits.AddReactions,
+                discord_js_1.PermissionFlagsBits.UseExternalEmojis,
+                discord_js_1.PermissionFlagsBits.AttachFiles,
+                discord_js_1.PermissionFlagsBits.EmbedLinks,
+                discord_js_1.PermissionFlagsBits.Connect, // For voice channels
+                discord_js_1.PermissionFlagsBits.Speak // For voice channels
+            ],
+            deny: []
+        }
+    },
+    'Legal Team': {
+        // Legal team channels are restricted to legal staff only
+        everyone: {
+            deny: [discord_js_1.PermissionFlagsBits.ViewChannel]
+        },
+        legalRoles: ['Managing Partner', 'Senior Partner', 'Partner', 'Senior Associate', 'Associate', 'Paralegal']
+    },
+    'Staff': {
+        // Staff channels are restricted to all staff members
+        everyone: {
+            deny: [discord_js_1.PermissionFlagsBits.ViewChannel]
+        },
+        staffRoles: ['Managing Partner', 'Senior Partner', 'Partner', 'Senior Associate', 'Associate', 'Paralegal', 'Hiring Staff']
+    },
+    'Administration': {
+        // Admin channels are restricted to senior staff only
+        everyone: {
+            deny: [discord_js_1.PermissionFlagsBits.ViewChannel]
+        },
+        adminRoles: ['Managing Partner', 'Senior Partner', 'Partner']
+    },
+    'Case Reviews': {
+        // Case channels have special permissions set per channel
+        everyone: {
+            deny: [discord_js_1.PermissionFlagsBits.ViewChannel]
+        }
+    },
+    'Case Archives': {
+        // Archived cases are view-only for authorized staff
+        everyone: {
+            deny: [discord_js_1.PermissionFlagsBits.ViewChannel]
+        },
+        archiveViewRoles: ['Managing Partner', 'Senior Partner', 'Partner']
+    }
 };
 //# sourceMappingURL=server-setup.config.js.map

@@ -20,11 +20,12 @@ class AuditLogRepository extends base_mongo_repository_1.BaseMongoRepository {
     async findByGuildId(guildId, limit = 50) {
         try {
             const collection = this.collection;
-            const logs = await collection
+            const logDocs = await collection
                 .find({ guildId })
                 .sort({ timestamp: -1 })
                 .limit(limit)
                 .toArray();
+            const logs = logDocs.map(doc => this.fromMongoDoc(doc)).filter(log => log !== null);
             return logs;
         }
         catch (error) {
@@ -62,7 +63,7 @@ class AuditLogRepository extends base_mongo_repository_1.BaseMongoRepository {
     async findByDateRange(guildId, startDate, endDate, limit = 100) {
         try {
             const collection = this.collection;
-            const logs = await collection
+            const logDocs = await collection
                 .find({
                 guildId,
                 timestamp: {
@@ -73,6 +74,7 @@ class AuditLogRepository extends base_mongo_repository_1.BaseMongoRepository {
                 .sort({ timestamp: -1 })
                 .limit(limit)
                 .toArray();
+            const logs = logDocs.map(doc => this.fromMongoDoc(doc)).filter(log => log !== null);
             return logs;
         }
         catch (error) {
@@ -239,7 +241,7 @@ class AuditLogRepository extends base_mongo_repository_1.BaseMongoRepository {
     async findGuildOwnerBypasses(guildId, limit = 50) {
         try {
             const collection = this.collection;
-            const logs = await collection
+            const logDocs = await collection
                 .find({
                 guildId,
                 isGuildOwnerBypass: true
@@ -247,6 +249,7 @@ class AuditLogRepository extends base_mongo_repository_1.BaseMongoRepository {
                 .sort({ timestamp: -1 })
                 .limit(limit)
                 .toArray();
+            const logs = logDocs.map(doc => this.fromMongoDoc(doc)).filter(log => log !== null);
             return logs;
         }
         catch (error) {
@@ -260,7 +263,7 @@ class AuditLogRepository extends base_mongo_repository_1.BaseMongoRepository {
     async findBusinessRuleViolations(guildId, limit = 50) {
         try {
             const collection = this.collection;
-            const logs = await collection
+            const logDocs = await collection
                 .find({
                 guildId,
                 action: audit_log_1.AuditAction.BUSINESS_RULE_VIOLATION
@@ -268,6 +271,7 @@ class AuditLogRepository extends base_mongo_repository_1.BaseMongoRepository {
                 .sort({ timestamp: -1 })
                 .limit(limit)
                 .toArray();
+            const logs = logDocs.map(doc => this.fromMongoDoc(doc)).filter(log => log !== null);
             return logs;
         }
         catch (error) {

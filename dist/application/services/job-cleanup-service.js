@@ -1,8 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.JobCleanupService = void 0;
-const audit_log_1 = require("../../domain/entities/audit-log");
 const logger_1 = require("../../infrastructure/logger");
+const audit_log_1 = require("../../domain/entities/audit-log");
 class JobCleanupService {
     constructor(jobRepository, auditLogRepository) {
         this.jobRepository = jobRepository;
@@ -12,7 +12,7 @@ class JobCleanupService {
         try {
             const jobs = await this.jobRepository.findJobsNeedingRoleCleanup(guildId);
             return jobs.map(job => ({
-                id: job._id?.toHexString() || 'unknown',
+                id: job._id || 'unknown',
                 title: job.title,
                 roleId: job.roleId,
                 closedAt: job.closedAt,
@@ -147,7 +147,7 @@ class JobCleanupService {
             // Check if any other open jobs are using this role
             const allJobs = await this.jobRepository.findByGuildId(guildId);
             const otherJobsUsingRole = allJobs.filter(job => job.roleId === roleId &&
-                job._id?.toHexString() !== excludeJobId &&
+                job._id !== excludeJobId &&
                 job.isOpen);
             if (otherJobsUsingRole.length > 0) {
                 logger_1.logger.info(`Role ${roleId} is still being used by ${otherJobsUsingRole.length} other open jobs`);
@@ -208,7 +208,7 @@ class JobCleanupService {
                     result.jobsProcessed++;
                     if (!dryRun) {
                         // Close the expired job
-                        const updatedJob = await this.jobRepository.closeJob(guildId, job._id?.toHexString() || '', 'system');
+                        const updatedJob = await this.jobRepository.closeJob(guildId, job._id || '', 'system');
                         if (updatedJob) {
                             await this.auditLogRepository.logAction({
                                 guildId,
@@ -218,7 +218,7 @@ class JobCleanupService {
                                     before: { status: 'open' },
                                     after: { status: 'closed' },
                                     metadata: {
-                                        jobId: job._id?.toHexString(),
+                                        jobId: job._id,
                                         title: job.title,
                                         reason: 'expired',
                                         daysOpen: Math.floor((Date.now() - job.createdAt.getTime()) / (1000 * 60 * 60 * 24)),

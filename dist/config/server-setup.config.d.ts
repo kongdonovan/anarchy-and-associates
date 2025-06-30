@@ -44,4 +44,54 @@ export declare const DEFAULT_CHANNEL_MAPPINGS: Record<string, {
     name: string;
     type: 'GUILD_TEXT' | 'GUILD_CATEGORY';
 }>;
+/**
+ * Category permission configurations for server setup
+ * Defines how each category should be configured for different user groups
+ */
+export declare const CATEGORY_PERMISSIONS: {
+    Information: {
+        everyone: {
+            allow: bigint[];
+            deny: bigint[];
+        };
+        staff: {
+            allow: bigint[];
+        };
+    };
+    Lobby: {
+        everyone: {
+            allow: bigint[];
+            deny: never[];
+        };
+    };
+    'Legal Team': {
+        everyone: {
+            deny: bigint[];
+        };
+        legalRoles: string[];
+    };
+    Staff: {
+        everyone: {
+            deny: bigint[];
+        };
+        staffRoles: string[];
+    };
+    Administration: {
+        everyone: {
+            deny: bigint[];
+        };
+        adminRoles: string[];
+    };
+    'Case Reviews': {
+        everyone: {
+            deny: bigint[];
+        };
+    };
+    'Case Archives': {
+        everyone: {
+            deny: bigint[];
+        };
+        archiveViewRoles: string[];
+    };
+};
 //# sourceMappingURL=server-setup.config.d.ts.map

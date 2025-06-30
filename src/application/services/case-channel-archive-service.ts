@@ -10,10 +10,11 @@ import { CaseRepository } from '../../infrastructure/repositories/case-repositor
 import { GuildConfigRepository } from '../../infrastructure/repositories/guild-config-repository';
 import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-repository';
 import { PermissionService, PermissionContext } from './permission-service';
-import { BusinessRuleValidationService } from './business-rule-validation-service';
-import { Case, CaseStatus } from '../../domain/entities/case';
-import { AuditAction } from '../../domain/entities/audit-log';
+import { UnifiedValidationService } from '../validation/unified-validation-service';
 import { logger } from '../../infrastructure/logger';
+import { Case } from '../../validation';
+import { CaseStatus } from '../../domain/entities/case';
+import { AuditAction } from '../../domain/entities/audit-log';
 
 export interface ChannelArchiveConfig {
   archiveCategoryId?: string;
@@ -73,7 +74,7 @@ export class CaseChannelArchiveService {
     guildConfigRepository: GuildConfigRepository,
     auditLogRepository: AuditLogRepository,
     permissionService: PermissionService,
-    _businessRuleValidationService: BusinessRuleValidationService
+    _validationService: UnifiedValidationService
   ) {
     this.caseRepository = caseRepository;
     this.guildConfigRepository = guildConfigRepository;

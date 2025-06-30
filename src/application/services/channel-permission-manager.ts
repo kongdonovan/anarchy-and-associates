@@ -9,12 +9,12 @@ import {
 import { CaseRepository } from '../../infrastructure/repositories/case-repository';
 import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
 import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-repository';
-import { BusinessRuleValidationService } from './business-rule-validation-service';
+import { UnifiedValidationService } from '../validation/unified-validation-service';
 import { PermissionContext } from './permission-service';
-import { StaffRole, RoleUtils } from '../../domain/entities/staff-role';
-import { AuditAction } from '../../domain/entities/audit-log';
+import { RoleUtils, StaffRole } from '../../domain/entities/staff-role'; // Keep utility functions and enum
 import { logger } from '../../infrastructure/logger';
 import { CaseStatus } from '../../domain/entities/case';
+import { AuditAction } from '../../domain/entities/audit-log';
 
 export interface ChannelPermissionUpdate {
   channelId: string;
@@ -44,7 +44,7 @@ export class ChannelPermissionManager {
   private caseRepository: CaseRepository;
   private staffRepository: StaffRepository;
   private auditLogRepository: AuditLogRepository;
-  private businessRuleValidationService: BusinessRuleValidationService;
+  private validationService: UnifiedValidationService;
 
   // Channel type patterns for automatic detection
   private readonly CHANNEL_PATTERNS = {
@@ -159,12 +159,12 @@ export class ChannelPermissionManager {
     caseRepository: CaseRepository,
     staffRepository: StaffRepository,
     auditLogRepository: AuditLogRepository,
-    businessRuleValidationService: BusinessRuleValidationService
+    validationService: UnifiedValidationService
   ) {
     this.caseRepository = caseRepository;
     this.staffRepository = staffRepository;
     this.auditLogRepository = auditLogRepository;
-    this.businessRuleValidationService = businessRuleValidationService;
+    this.validationService = validationService;
   }
 
   /**
@@ -173,8 +173,8 @@ export class ChannelPermissionManager {
   public async handleRoleChange(
     guild: Guild,
     member: GuildMember,
-    oldRole?: StaffRole,
-    newRole?: StaffRole,
+    oldRole?: string,
+    newRole?: string,
     changeType: 'hire' | 'fire' | 'promotion' | 'demotion' = 'promotion'
   ): Promise<ChannelPermissionUpdate[]> {
     try {
@@ -236,8 +236,8 @@ export class ChannelPermissionManager {
     guild: Guild,
     channel: TextChannel | CategoryChannel,
     member: GuildMember,
-    oldRole?: StaffRole,
-    newRole?: StaffRole,
+    oldRole?: string,
+    newRole?: string,
     changeType: string = 'promotion'
   ): Promise<ChannelPermissionUpdate | null> {
     try {
@@ -408,7 +408,7 @@ export class ChannelPermissionManager {
    */
   private calculateChannelPermissions(
     channelType: string,
-    role: StaffRole
+    role: string
   ): ChannelPermissionRule['permissions'] | null {
     const typeMatrix = this.PERMISSION_MATRIX[channelType];
     if (!typeMatrix) return null;
@@ -423,7 +423,7 @@ export class ChannelPermissionManager {
   private async validateChannelAccess(
     context: PermissionContext,
     channelType: string,
-    role: StaffRole
+    role: string
   ): Promise<boolean> {
     try {
       const typeMatrix = this.PERMISSION_MATRIX[channelType];
@@ -434,16 +434,25 @@ export class ChannelPermissionManager {
 
       // If channel requires a specific permission, validate it
       if (rolePermissions.requiredPermission) {
-        const permissionValidation = await this.businessRuleValidationService.validatePermission(
-          context,
-          rolePermissions.requiredPermission
-        );
-        return permissionValidation.valid;
+        // Use validation service to check permission with correct format
+        const validationResult = await this.validationService.validate({
+          permissionContext: context,
+          entityType: 'permission',
+          operation: 'validate',
+          data: {
+            userId: context.userId,
+            guildId: context.guildId
+          },
+          metadata: {
+            requiredPermission: rolePermissions.requiredPermission
+          }
+        });
+        return validationResult.valid;
       }
 
       // If channel requires a specific role, check role hierarchy
       if (rolePermissions.requiredRole) {
-        const currentRoleLevel = RoleUtils.getRoleLevel(role);
+        const currentRoleLevel = RoleUtils.getRoleLevel(role as StaffRole);
         const requiredRoleLevel = RoleUtils.getRoleLevel(rolePermissions.requiredRole);
         return currentRoleLevel >= requiredRoleLevel;
       }

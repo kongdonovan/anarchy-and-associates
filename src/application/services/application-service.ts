@@ -1,11 +1,16 @@
 import { randomUUID } from 'crypto';
-import { Application, ApplicationAnswer } from '../../domain/entities/application';
+import { Application, ApplicationAnswer } from '../../validation';
 import { ApplicationRepository } from '../../infrastructure/repositories/application-repository';
 import { JobRepository } from '../../infrastructure/repositories/job-repository';
 import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
 import { RobloxService } from '../../infrastructure/external/roblox-service';
 import { PermissionService, PermissionContext } from './permission-service';
 import { logger } from '../../infrastructure/logger';
+import {
+  ApplicationSubmitRequestSchema,
+  ApplicationReviewRequestSchema,
+  ValidationHelpers
+} from '../../validation';
 
 export interface ApplicationSubmissionRequest {
   guildId: string;
@@ -37,26 +42,33 @@ export class ApplicationService {
     private permissionService: PermissionService
   ) {}
 
-  public async submitApplication(request: ApplicationSubmissionRequest): Promise<Application> {
+  public async submitApplication(request: unknown): Promise<Application> {
+    // Validate input using Zod schema
+    const validatedRequest = ValidationHelpers.validateOrThrow(
+      ApplicationSubmitRequestSchema,
+      request,
+      'Application submission request'
+    );
+
     logger.info('Submitting application', { 
-      guildId: request.guildId, 
-      jobId: request.jobId, 
-      applicantId: request.applicantId 
+      guildId: validatedRequest.guildId, 
+      jobId: validatedRequest.jobId, 
+      applicantId: validatedRequest.applicantId 
     });
 
     // Validate the application
-    const validation = await this.validateApplication(request);
+    const validation = await this.validateApplication(validatedRequest as ApplicationSubmissionRequest);
     if (!validation.isValid) {
       throw new Error(`Application validation failed: ${validation.errors.join(', ')}`);
     }
 
     // Create the application
     const application: Omit<Application, '_id' | 'createdAt' | 'updatedAt'> = {
-      guildId: request.guildId,
-      jobId: request.jobId,
-      applicantId: request.applicantId,
-      robloxUsername: request.robloxUsername,
-      answers: request.answers,
+      guildId: validatedRequest.guildId,
+      jobId: validatedRequest.jobId.toString(),
+      applicantId: validatedRequest.applicantId,
+      robloxUsername: validatedRequest.robloxUsername,
+      answers: validatedRequest.answers,
       status: 'pending'
     };
 
@@ -64,14 +76,21 @@ export class ApplicationService {
     
     logger.info('Application submitted successfully', { 
       applicationId: createdApplication._id,
-      applicantId: request.applicantId,
-      jobId: request.jobId
+      applicantId: validatedRequest.applicantId,
+      jobId: validatedRequest.jobId
     });
 
     return createdApplication;
   }
 
-  public async reviewApplication(context: PermissionContext, request: ApplicationReviewRequest): Promise<Application> {
+  public async reviewApplication(context: PermissionContext, request: unknown): Promise<Application> {
+    // Validate input using Zod schema
+    const validatedRequest = ValidationHelpers.validateOrThrow(
+      ApplicationReviewRequestSchema,
+      request,
+      'Application review request'
+    );
+
     // Check HR permission for reviewing applications
     const hasPermission = await this.permissionService.hasHRPermissionWithContext(context);
     if (!hasPermission) {
@@ -79,12 +98,12 @@ export class ApplicationService {
     }
 
     logger.info('Reviewing application', { 
-      applicationId: request.applicationId, 
-      reviewerId: request.reviewerId,
-      approved: request.approved
+      applicationId: validatedRequest.applicationId, 
+      reviewerId: validatedRequest.reviewedBy,
+      decision: validatedRequest.decision
     });
 
-    const application = await this.applicationRepository.findById(request.applicationId);
+    const application = await this.applicationRepository.findById(validatedRequest.applicationId.toString());
     if (!application) {
       throw new Error('Application not found');
     }
@@ -93,11 +112,11 @@ export class ApplicationService {
       throw new Error(`Application is already ${application.status}`);
     }
 
-    const updatedApplication = await this.applicationRepository.update(request.applicationId, {
-      status: request.approved ? 'accepted' : 'rejected',
-      reviewedBy: request.reviewerId,
+    const updatedApplication = await this.applicationRepository.update(validatedRequest.applicationId.toString(), {
+      status: validatedRequest.decision,
+      reviewedBy: validatedRequest.reviewedBy,
       reviewedAt: new Date(),
-      reviewReason: request.reason
+      reviewReason: validatedRequest.reason
     });
 
     if (!updatedApplication) {
@@ -105,9 +124,9 @@ export class ApplicationService {
     }
 
     logger.info('Application reviewed successfully', { 
-      applicationId: request.applicationId,
+      applicationId: validatedRequest.applicationId,
       status: updatedApplication.status,
-      reviewerId: request.reviewerId
+      reviewerId: validatedRequest.reviewedBy
     });
 
     return updatedApplication;

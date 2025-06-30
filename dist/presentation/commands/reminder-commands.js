@@ -20,8 +20,11 @@ const reminder_repository_1 = require("../../infrastructure/repositories/reminde
 const case_repository_1 = require("../../infrastructure/repositories/case-repository");
 const staff_repository_1 = require("../../infrastructure/repositories/staff-repository");
 const embed_utils_1 = require("../../infrastructure/utils/embed-utils");
-const reminder_1 = require("../../domain/entities/reminder");
+const reminder_1 = require("../../domain/entities/reminder"); // Keep utility functions
 const logger_1 = require("../../infrastructure/logger");
+const audit_decorators_1 = require("../decorators/audit-decorators");
+const validation_1 = require("../../validation");
+const audit_log_1 = require("../../domain/entities/audit-log");
 let ReminderCommands = class ReminderCommands {
     constructor() {
         const reminderRepository = new reminder_repository_1.ReminderRepository();
@@ -31,19 +34,23 @@ let ReminderCommands = class ReminderCommands {
     }
     async setReminder(timeString, message, interaction) {
         try {
-            const guildId = interaction.guildId;
+            if (!interaction.guildId) {
+                const embed = embed_utils_1.EmbedUtils.createErrorEmbed('Server Required', 'This command can only be used in a server.');
+                await interaction.reply({ embeds: [embed], ephemeral: true });
+                return;
+            }
+            // Validate inputs
+            const validatedGuildId = validation_1.ValidationHelpers.validateOrThrow(validation_1.DiscordSnowflakeSchema, interaction.guildId, 'Guild ID');
+            const validatedTimeString = validation_1.ValidationHelpers.validateOrThrow(validation_1.z.string().regex(/^\d+[mhd]$/), timeString, 'Time string');
+            const validatedMessage = validation_1.ValidationHelpers.validateOrThrow(validation_1.z.string().min(1).max(500), message, 'Reminder message');
+            const guildId = validatedGuildId;
             const userId = interaction.user.id;
             const username = interaction.user.username;
             const channelId = interaction.channelId;
             // Validate time format
-            const timeValidation = (0, reminder_1.validateReminderTime)(timeString);
+            const timeValidation = (0, reminder_1.validateReminderTime)(validatedTimeString);
             if (!timeValidation.isValid) {
                 const embed = embed_utils_1.EmbedUtils.createErrorEmbed('Invalid Time Format', timeValidation.error);
-                await interaction.reply({ embeds: [embed], ephemeral: true });
-                return;
-            }
-            if (message.length > 500) {
-                const embed = embed_utils_1.EmbedUtils.createErrorEmbed('Message Too Long', 'Reminder messages cannot exceed 500 characters.');
                 await interaction.reply({ embeds: [embed], ephemeral: true });
                 return;
             }
@@ -52,8 +59,8 @@ let ReminderCommands = class ReminderCommands {
                 guildId,
                 userId,
                 username,
-                message,
-                timeString,
+                message: validatedMessage,
+                timeString: validatedTimeString,
                 channelId: channelId || undefined
             });
             const formattedTime = (0, reminder_1.formatReminderTime)(timeValidation.parsedTime);
@@ -81,15 +88,12 @@ let ReminderCommands = class ReminderCommands {
                 await interaction.reply({ embeds: [embed], ephemeral: true });
                 return;
             }
-            const embed = new discord_js_1.EmbedBuilder()
-                .setTitle('📋 Your Active Reminders')
-                .setColor(0x3498db)
-                .setThumbnail(interaction.user.displayAvatarURL())
-                .setTimestamp()
-                .setFooter({
-                text: `${reminders.length} active reminder${reminders.length !== 1 ? 's' : ''}`,
-                iconURL: interaction.guild?.iconURL() || undefined
-            });
+            const embed = embed_utils_1.EmbedUtils.createAALegalEmbed({
+                title: '§ Scheduled Notifications',
+                description: 'Your personal reminder schedule is displayed below.',
+                color: 'info',
+                footer: `${reminders.length} Active Notification${reminders.length !== 1 ? 's' : ''} | Anarchy & Associates Case Management System`
+            }).setThumbnail(interaction.user.displayAvatarURL());
             // Sort by scheduled time
             const sortedReminders = reminders
                 .sort((a, b) => a.scheduledFor.getTime() - b.scheduledFor.getTime())
@@ -146,14 +150,12 @@ let ReminderCommands = class ReminderCommands {
                 await interaction.reply({ embeds: [embed], ephemeral: true });
                 return;
             }
-            const embed = new discord_js_1.EmbedBuilder()
-                .setTitle('📋 Case Reminders')
-                .setColor(0x3498db)
-                .setDescription(`Active reminders for this case channel`)
-                .setTimestamp()
-                .setFooter({
-                text: `${reminders.length} active reminder${reminders.length !== 1 ? 's' : ''}`,
-                iconURL: interaction.guild?.iconURL() || undefined
+            const embed = embed_utils_1.EmbedUtils.createCaseEmbed({
+                title: 'Case Notification Schedule',
+                description: 'Active notifications and reminders for this matter are listed below.',
+                status: 'open'
+            }).setFooter({
+                text: `${reminders.length} Active Notification${reminders.length !== 1 ? 's' : ''} | Case Management System`
             });
             // Sort by scheduled time
             const sortedReminders = reminders
@@ -182,6 +184,7 @@ __decorate([
         description: 'Set a reminder',
         name: 'set'
     }),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.JOB_CREATED, 'medium'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Time until reminder (e.g., 30m, 2h, 1d - max 7 days)',
         name: 'time',
@@ -203,6 +206,7 @@ __decorate([
         description: 'List your active reminders',
         name: 'list'
     }),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.JOB_LIST_VIEWED, 'low'),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [discord_js_1.CommandInteraction]),
     __metadata("design:returntype", Promise)
@@ -212,6 +216,7 @@ __decorate([
         description: 'Cancel a reminder',
         name: 'cancel'
     }),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.JOB_UPDATED, 'medium'),
     __param(0, (0, discordx_1.SlashOption)({
         description: 'Reminder ID to cancel',
         name: 'id',
@@ -227,6 +232,7 @@ __decorate([
         description: 'View reminders for current case channel',
         name: 'case'
     }),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.JOB_LIST_VIEWED, 'low'),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [discord_js_1.CommandInteraction]),
     __metadata("design:returntype", Promise)

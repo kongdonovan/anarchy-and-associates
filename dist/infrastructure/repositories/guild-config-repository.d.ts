@@ -1,15 +1,15 @@
 import { BaseMongoRepository } from './base-mongo-repository';
-import { GuildConfig } from '../../domain/entities/guild-config';
+import { GuildConfig } from '../../validation';
 export declare class GuildConfigRepository extends BaseMongoRepository<GuildConfig> {
     constructor();
-    findByGuildId(guildId: string): Promise<GuildConfig | null>;
-    createDefaultConfig(guildId: string): Promise<GuildConfig>;
-    updateConfig(guildId: string, updates: Partial<Omit<GuildConfig, '_id' | 'guildId' | 'createdAt' | 'updatedAt'>>): Promise<GuildConfig | null>;
-    ensureGuildConfig(guildId: string): Promise<GuildConfig>;
-    addAdminUser(guildId: string, userId: string): Promise<GuildConfig | null>;
-    removeAdminUser(guildId: string, userId: string): Promise<GuildConfig | null>;
-    addAdminRole(guildId: string, roleId: string): Promise<GuildConfig | null>;
-    removeAdminRole(guildId: string, roleId: string): Promise<GuildConfig | null>;
-    setPermissionRole(guildId: string, action: keyof GuildConfig['permissions'], roleId: string): Promise<GuildConfig | null>;
+    findByGuildId(guildId: unknown): Promise<GuildConfig | null>;
+    createDefaultConfig(guildId: unknown): Promise<GuildConfig>;
+    updateConfig(guildId: unknown, updates: unknown): Promise<GuildConfig | null>;
+    ensureGuildConfig(guildId: unknown): Promise<GuildConfig>;
+    addAdminUser(guildId: unknown, userId: unknown): Promise<GuildConfig | null>;
+    removeAdminUser(guildId: unknown, userId: unknown): Promise<GuildConfig | null>;
+    addAdminRole(guildId: unknown, roleId: unknown): Promise<GuildConfig | null>;
+    removeAdminRole(guildId: unknown, roleId: unknown): Promise<GuildConfig | null>;
+    setPermissionRole(guildId: unknown, action: unknown, roleId: unknown): Promise<GuildConfig | null>;
 }
 //# sourceMappingURL=guild-config-repository.d.ts.map

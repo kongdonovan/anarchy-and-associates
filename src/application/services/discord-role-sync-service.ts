@@ -1,10 +1,10 @@
 import { Guild } from 'discord.js';
 import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
 import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-repository';
-import { Staff } from '../../domain/entities/staff';
-import { StaffRole, ROLE_HIERARCHY } from '../../domain/entities/staff-role';
-import { AuditAction } from '../../domain/entities/audit-log';
+import { ROLE_HIERARCHY } from '../../domain/entities/staff-role'; // Keep constants
 import { logger } from '../../infrastructure/logger';
+import { Staff, StaffRole } from '../../validation';
+import { AuditAction } from '../../domain/entities/audit-log';
 
 export interface RoleMapping {
   staffRole: StaffRole;
@@ -30,8 +30,18 @@ export class DiscordRoleSyncService {
       const guildId = guild.id;
       const mappings: RoleMapping[] = [];
 
+      // Define the staff roles as string literals
+      const staffRoles: string[] = [
+        'Managing Partner',
+        'Senior Partner', 
+        'Junior Partner',
+        'Senior Associate',
+        'Junior Associate',
+        'Paralegal'
+      ];
+
       // Find Discord roles that match our staff roles
-      for (const staffRole of Object.values(StaffRole)) {
+      for (const staffRole of staffRoles) {
         const discordRole = guild.roles.cache.find(
           role => role.name.toLowerCase() === staffRole.toLowerCase() ||
           role.name.toLowerCase().replace(/\s+/g, '_') === staffRole.toLowerCase().replace(/\s+/g, '_')
@@ -39,13 +49,13 @@ export class DiscordRoleSyncService {
 
         if (discordRole) {
           mappings.push({
-            staffRole,
+            staffRole: staffRole as StaffRole,
             discordRoleId: discordRole.id,
             discordRoleName: discordRole.name,
           });
 
-          // Update the role hierarchy with Discord role ID
-          ROLE_HIERARCHY[staffRole].discordRoleId = discordRole.id;
+          // Note: We can't update ROLE_HIERARCHY as it's a const from domain
+          // This mapping is stored in our local roleMappings instead
         } else {
           logger.warn(`Discord role not found for staff role: ${staffRole} in guild ${guildId}`);
         }
@@ -107,7 +117,7 @@ export class DiscordRoleSyncService {
       }
 
       // Update staff record with Discord role ID
-      await this.staffRepository.update(staff._id!.toHexString(), {
+      await this.staffRepository.update(staff._id!, {
         discordRoleId: targetRole.id,
       });
 

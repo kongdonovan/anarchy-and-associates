@@ -1,8 +1,7 @@
 import { Guild } from 'discord.js';
 import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
 import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-repository';
-import { Staff } from '../../domain/entities/staff';
-import { StaffRole } from '../../domain/entities/staff-role';
+import { Staff, StaffRole } from '../../validation';
 export interface RoleMapping {
     staffRole: StaffRole;
     discordRoleId: string;

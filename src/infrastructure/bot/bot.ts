@@ -6,6 +6,10 @@ import { RoleTrackingService } from '../../application/services/role-tracking-se
 import { ReminderRepository } from '../repositories/reminder-repository';
 import { CaseRepository } from '../repositories/case-repository';
 import { StaffRepository } from '../repositories/staff-repository';
+import { InformationChannelRepository } from '../repositories/information-channel-repository';
+import { InformationChannelService } from '../../application/services/information-channel-service';
+import { RulesChannelRepository } from '../repositories/rules-channel-repository';
+import { RulesChannelService } from '../../application/services/rules-channel-service';
 import { logger } from '../logger';
 import { importx } from '@discordx/importer';
 
@@ -14,6 +18,8 @@ export class Bot {
   private mongoClient: MongoDbClient;
   private reminderService: ReminderService | null = null;
   private roleTrackingService: RoleTrackingService | null = null;
+  private static informationChannelService: InformationChannelService | null = null;
+  private static rulesChannelService: RulesChannelService | null = null;
 
   constructor() {
     this.mongoClient = MongoDbClient.getInstance();
@@ -225,7 +231,29 @@ export class Bot {
     this.reminderService = new ReminderService(reminderRepository, caseRepository, staffRepository);
     this.roleTrackingService = new RoleTrackingService();
     
+    // Initialize information channel service
+    const informationChannelRepository = new InformationChannelRepository();
+    Bot.informationChannelService = new InformationChannelService(informationChannelRepository, this.client);
+    
+    // Initialize rules channel service
+    const rulesChannelRepository = new RulesChannelRepository();
+    Bot.rulesChannelService = new RulesChannelService(rulesChannelRepository, this.client);
+    
     logger.info('Services initialized successfully');
+  }
+
+  public static getInformationChannelService(): InformationChannelService {
+    if (!Bot.informationChannelService) {
+      throw new Error('InformationChannelService not initialized');
+    }
+    return Bot.informationChannelService;
+  }
+
+  public static getRulesChannelService(): RulesChannelService {
+    if (!Bot.rulesChannelService) {
+      throw new Error('RulesChannelService not initialized');
+    }
+    return Bot.rulesChannelService;
   }
 
   public async stop(): Promise<void> {

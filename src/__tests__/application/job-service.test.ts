@@ -5,13 +5,15 @@ import { StaffRepository } from '../../infrastructure/repositories/staff-reposit
 import { PermissionService, PermissionContext } from '../../application/services/permission-service';
 import { 
   Job, 
-  JobQuestion, 
+  JobQuestion
+} from '../../validation';
+import { 
   DEFAULT_JOB_QUESTIONS 
 } from '../../domain/entities/job';
 import { StaffRole } from '../../domain/entities/staff-role';
-import { AuditAction } from '../../domain/entities/audit-log';
+
 import { TestUtils } from '../helpers/test-utils';
-import { CaseStatus } from '../../domain/entities/case';
+
 
 /**
  * Unit tests for JobService
@@ -88,7 +90,7 @@ describe('JobService Unit Tests', () => {
     };
 
     const mockCreatedJob: Job = {
-      _id: TestUtils.generateObjectId(),
+      _id: TestUtils.generateObjectId().toString(),
       guildId: testGuildId,
       title: 'Senior Associate Position',
       description: 'Join our legal team as a Senior Associate',
@@ -125,20 +127,7 @@ describe('JobService Unit Tests', () => {
         applicationCount: 0,
         hiredCount: 0
       });
-      expect(mockAuditLogRepository.logAction).toHaveBeenCalledWith({
-        guildId: testGuildId,
-        action: AuditAction.JOB_CREATED,
-        actorId: testUserId,
-        details: {
-          after: { staffRole: StaffRole.SENIOR_ASSOCIATE },
-          metadata: {
-            jobId: mockCreatedJob._id?.toHexString(),
-            title: 'Senior Associate Position',
-            roleId: testRoleId
-          }
-        },
-        timestamp: expect.any(Date)
-      });
+
       expect(result.success).toBe(true);
       expect(result.job).toEqual(mockCreatedJob);
     });
@@ -190,7 +179,7 @@ describe('JobService Unit Tests', () => {
     it('should reject job creation when open job already exists for role', async () => {
       const existingJob: Job = {
         ...mockCreatedJob,
-        _id: TestUtils.generateObjectId()
+        _id: TestUtils.generateObjectId().toString()
       };
       mockJobRepository.getOpenJobsForRole.mockResolvedValue([existingJob]);
 
@@ -240,7 +229,7 @@ describe('JobService Unit Tests', () => {
 
   describe('updateJob', () => {
     const existingJob: Job = {
-      _id: TestUtils.generateObjectId(),
+      _id: TestUtils.generateObjectId().toString(),
       guildId: testGuildId,
       title: 'Original Title',
       description: 'Original Description',
@@ -278,21 +267,7 @@ describe('JobService Unit Tests', () => {
         ...updateRequest,
         limit: 10
       });
-      expect(mockAuditLogRepository.logAction).toHaveBeenCalledWith({
-        guildId: testGuildId,
-        action: AuditAction.JOB_UPDATED,
-        actorId: testUserId,
-        details: {
-          before: { staffRole: StaffRole.JUNIOR_ASSOCIATE },
-          after: { staffRole: StaffRole.SENIOR_ASSOCIATE },
-          metadata: {
-            jobId: testJobId,
-            title: updatedJob.title,
-            changes: Object.keys(updateRequest)
-          }
-        },
-        timestamp: expect.any(Date)
-      });
+
       expect(result.success).toBe(true);
       expect(result.job).toEqual(updatedJob);
     });
@@ -336,7 +311,7 @@ describe('JobService Unit Tests', () => {
     it('should reject role change when another open job exists for target role', async () => {
       const conflictingJob: Job = {
         ...existingJob,
-        _id: TestUtils.generateObjectId(),
+        _id: TestUtils.generateObjectId().toString(),
         staffRole: StaffRole.SENIOR_ASSOCIATE
       };
 
@@ -411,7 +386,7 @@ describe('JobService Unit Tests', () => {
 
   describe('closeJob', () => {
     const existingJob: Job = {
-      _id: TestUtils.generateObjectId(),
+      _id: TestUtils.generateObjectId().toString(),
       guildId: testGuildId,
       title: 'Test Job',
       description: 'Test Description',
@@ -435,21 +410,7 @@ describe('JobService Unit Tests', () => {
       const result = await jobService.closeJob(mockPermissionContext, testJobId);
 
       expect(mockJobRepository.closeJob).toHaveBeenCalledWith(testGuildId, testJobId, testUserId);
-      expect(mockAuditLogRepository.logAction).toHaveBeenCalledWith({
-        guildId: testGuildId,
-        action: AuditAction.JOB_CLOSED,
-        actorId: testUserId,
-        details: {
-          before: { status: 'open' },
-          after: { status: CaseStatus.CLOSED },
-          metadata: {
-            jobId: testJobId,
-            title: closedJob.title,
-            staffRole: closedJob.staffRole
-          }
-        },
-        timestamp: expect.any(Date)
-      });
+
       expect(result.success).toBe(true);
       expect(result.job).toEqual(closedJob);
     });
@@ -477,7 +438,7 @@ describe('JobService Unit Tests', () => {
 
   describe('removeJob', () => {
     const existingJob: Job = {
-      _id: TestUtils.generateObjectId(),
+      _id: TestUtils.generateObjectId().toString(),
       guildId: testGuildId,
       title: 'Test Job',
       description: 'Test Description',
@@ -502,21 +463,7 @@ describe('JobService Unit Tests', () => {
 
       expect(mockJobRepository.findById).toHaveBeenCalledWith(testJobId);
       expect(mockJobRepository.removeJob).toHaveBeenCalledWith(testGuildId, testJobId, testUserId);
-      expect(mockAuditLogRepository.logAction).toHaveBeenCalledWith({
-        guildId: testGuildId,
-        action: AuditAction.JOB_REMOVED,
-        actorId: testUserId,
-        details: {
-          before: { status: 'open' },
-          after: { status: 'removed' },
-          metadata: {
-            jobId: testJobId,
-            title: existingJob.title,
-            staffRole: existingJob.staffRole
-          }
-        },
-        timestamp: expect.any(Date)
-      });
+
       expect(result.success).toBe(true);
     });
 
@@ -559,7 +506,7 @@ describe('JobService Unit Tests', () => {
     const mockJobListResult: JobListResult = {
       jobs: [
         {
-          _id: TestUtils.generateObjectId(),
+          _id: TestUtils.generateObjectId().toString(),
           guildId: testGuildId,
           title: 'Test Job 1',
           description: 'Description 1',
@@ -588,19 +535,7 @@ describe('JobService Unit Tests', () => {
       const result = await jobService.listJobs(mockPermissionContext, filters, 1);
 
       expect(mockJobRepository.searchJobs).toHaveBeenCalledWith(testGuildId, filters, 1, 5);
-      expect(mockAuditLogRepository.logAction).toHaveBeenCalledWith({
-        guildId: testGuildId,
-        action: AuditAction.JOB_LIST_VIEWED,
-        actorId: testUserId,
-        details: {
-          metadata: {
-            filters,
-            page: 1,
-            resultCount: 1
-          }
-        },
-        timestamp: expect.any(Date)
-      });
+
       expect(result).toEqual(mockJobListResult);
     });
 
@@ -629,7 +564,7 @@ describe('JobService Unit Tests', () => {
 
   describe('getJobDetails', () => {
     const mockJob: Job = {
-      _id: TestUtils.generateObjectId(),
+      _id: TestUtils.generateObjectId().toString(),
       guildId: testGuildId,
       title: 'Test Job',
       description: 'Test Description',
@@ -652,18 +587,7 @@ describe('JobService Unit Tests', () => {
       const result = await jobService.getJobDetails(mockPermissionContext, testJobId);
 
       expect(mockJobRepository.findById).toHaveBeenCalledWith(testJobId);
-      expect(mockAuditLogRepository.logAction).toHaveBeenCalledWith({
-        guildId: testGuildId,
-        action: AuditAction.JOB_INFO_VIEWED,
-        actorId: testUserId,
-        details: {
-          metadata: {
-            jobId: testJobId,
-            title: mockJob.title
-          }
-        },
-        timestamp: expect.any(Date)
-      });
+
       expect(result).toEqual(mockJob);
     });
 
@@ -978,42 +902,6 @@ describe('JobService Unit Tests', () => {
       await expect(jobService.getJobStatistics(mockPermissionContext)).rejects.toThrow();
     });
 
-    it('should handle audit log failures gracefully during successful operations', async () => {
-      const mockJob: Job = {
-        _id: TestUtils.generateObjectId(),
-        guildId: testGuildId,
-        title: 'Test Job',
-        description: 'Description',
-        staffRole: StaffRole.JUNIOR_ASSOCIATE,
-        roleId: testRoleId,
-        limit: 10,
-        isOpen: true,
-        questions: DEFAULT_JOB_QUESTIONS,
-        postedBy: testUserId,
-        applicationCount: 0,
-        hiredCount: 0,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
 
-      mockJobRepository.getOpenJobsForRole.mockResolvedValue([]);
-      mockJobRepository.createJob.mockResolvedValue(mockJob);
-      mockAuditLogRepository.logAction.mockRejectedValue(new Error('Audit log failed'));
-
-      const request = {
-        guildId: testGuildId,
-        title: 'Test Job',
-        description: 'Description',
-        staffRole: StaffRole.JUNIOR_ASSOCIATE,
-        roleId: testRoleId,
-        postedBy: testUserId
-      };
-
-      // Should fail because audit log failure causes the whole operation to fail
-      mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
-      const result = await jobService.createJob(mockPermissionContext, request);
-      expect(result.success).toBe(false);
-      expect(result.error).toBe('Failed to create job');
-    });
   });
 });

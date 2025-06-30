@@ -9,10 +9,10 @@ import { GuildConfigRepository } from '../../infrastructure/repositories/guild-c
 import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-repository';
 import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
 import { PermissionService, PermissionContext } from './permission-service';
-import { BusinessRuleValidationService } from './business-rule-validation-service';
+import { UnifiedValidationService } from '../validation/unified-validation-service';
 import { CaseChannelArchiveService } from './case-channel-archive-service';
-import { AuditAction } from '../../domain/entities/audit-log';
 import { logger } from '../../infrastructure/logger';
+import { AuditAction } from '../../domain/entities/audit-log';
 
 export interface ChannelCleanupConfig {
   scanInterval: number; // Minutes between scans
@@ -125,7 +125,7 @@ export class OrphanedChannelCleanupService {
     auditLogRepository: AuditLogRepository,
     staffRepository: StaffRepository,
     permissionService: PermissionService,
-    _businessRuleValidationService: BusinessRuleValidationService,
+    _validationService: UnifiedValidationService,
     caseChannelArchiveService: CaseChannelArchiveService
   ) {
     this.caseRepository = caseRepository;

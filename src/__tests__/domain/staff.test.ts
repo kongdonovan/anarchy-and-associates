@@ -172,8 +172,8 @@ describe('Staff Entity', () => {
 
       expect(staff.promotionHistory[0]?.actionType).toBe('demotion');
       expect(staff.promotionHistory[0]?.reason).toBe('Performance issues');
-      expect(RoleUtils.getRoleLevel(staff.promotionHistory[0]?.fromRole ?? StaffRole.PARALEGAL))
-        .toBeGreaterThan(RoleUtils.getRoleLevel(staff.promotionHistory[0]?.toRole ?? StaffRole.PARALEGAL));
+      expect(RoleUtils.getRoleLevel(staff.promotionHistory[0]?.fromRole as StaffRole ?? StaffRole.PARALEGAL))
+        .toBeGreaterThan(RoleUtils.getRoleLevel(staff.promotionHistory[0]?.toRole as StaffRole ?? StaffRole.PARALEGAL));
     });
 
     it('should track hiring and firing events', () => {

@@ -1,4 +1,5 @@
-import { Feedback, FeedbackSubmissionRequest, FeedbackSearchFilters, FeedbackSortOptions, FeedbackPaginationOptions, StaffPerformanceMetrics, FirmPerformanceMetrics, FeedbackRating } from '../../domain/entities/feedback';
+import { Feedback, FeedbackSearchFilters, FeedbackSortOptions, FeedbackRating } from '../../validation';
+import { FeedbackPaginationOptions, StaffPerformanceMetrics, FirmPerformanceMetrics } from '../../domain/entities/feedback';
 import { FeedbackRepository } from '../../infrastructure/repositories/feedback-repository';
 import { GuildConfigRepository } from '../../infrastructure/repositories/guild-config-repository';
 import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
@@ -7,7 +8,7 @@ export declare class FeedbackService {
     private guildConfigRepository;
     private staffRepository;
     constructor(feedbackRepository: FeedbackRepository, guildConfigRepository: GuildConfigRepository, staffRepository: StaffRepository);
-    submitFeedback(request: FeedbackSubmissionRequest): Promise<Feedback>;
+    submitFeedback(request: unknown): Promise<Feedback>;
     searchFeedback(filters: FeedbackSearchFilters, sort?: FeedbackSortOptions, pagination?: FeedbackPaginationOptions): Promise<{
         feedback: Feedback[];
         total: number;

@@ -1,8 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.FeedbackService = void 0;
-const feedback_1 = require("../../domain/entities/feedback");
 const logger_1 = require("../../infrastructure/logger");
+const validation_1 = require("../../validation");
 class FeedbackService {
     constructor(feedbackRepository, guildConfigRepository, staffRepository) {
         this.feedbackRepository = feedbackRepository;
@@ -10,46 +10,43 @@ class FeedbackService {
         this.staffRepository = staffRepository;
     }
     async submitFeedback(request) {
+        // Validate input using Zod schema
+        const validatedRequest = validation_1.ValidationHelpers.validateOrThrow(validation_1.FeedbackSubmissionSchema, request, 'Feedback submission request');
         logger_1.logger.info('Submitting feedback', {
-            guildId: request.guildId,
-            submitterId: request.submitterId,
-            targetStaffId: request.targetStaffId,
-            rating: request.rating
+            guildId: validatedRequest.guildId,
+            submitterId: validatedRequest.submitterId,
+            targetStaffId: validatedRequest.targetStaffId,
+            rating: validatedRequest.rating
         });
-        // Validate the request
-        const validationErrors = (0, feedback_1.validateFeedbackSubmission)(request);
-        if (validationErrors.length > 0) {
-            throw new Error(`Validation failed: ${validationErrors.join(', ')}`);
-        }
         // Check if submitter is a staff member (they shouldn't be able to submit feedback)
-        const submitterStaffList = await this.staffRepository.findByFilters({ userId: request.submitterId });
-        if (submitterStaffList.length > 0) {
+        const submitterStaff = await this.staffRepository.findByUserId(validatedRequest.guildId, validatedRequest.submitterId);
+        if (submitterStaff && submitterStaff.status === 'active') {
             throw new Error('Staff members cannot submit feedback. Only clients can provide feedback.');
         }
         // If targeting a specific staff member, verify they exist
-        if (request.targetStaffId) {
-            const targetStaffList = await this.staffRepository.findByFilters({ userId: request.targetStaffId });
-            if (targetStaffList.length === 0) {
+        if (validatedRequest.targetStaffId) {
+            const targetStaff = await this.staffRepository.findByUserId(validatedRequest.guildId, validatedRequest.targetStaffId);
+            if (!targetStaff || targetStaff.status !== 'active') {
                 throw new Error('Target staff member not found');
             }
         }
         // Create feedback data
         const feedbackData = {
-            guildId: request.guildId,
-            submitterId: request.submitterId,
-            submitterUsername: request.submitterUsername,
-            targetStaffId: request.targetStaffId,
-            targetStaffUsername: request.targetStaffUsername,
-            rating: request.rating,
-            comment: request.comment.trim(),
-            isForFirm: !request.targetStaffId // If no specific staff, it's for the firm
+            guildId: validatedRequest.guildId,
+            submitterId: validatedRequest.submitterId,
+            submitterUsername: validatedRequest.submitterUsername,
+            targetStaffId: validatedRequest.targetStaffId,
+            targetStaffUsername: validatedRequest.targetStaffUsername,
+            rating: validatedRequest.rating,
+            comment: validatedRequest.comment,
+            isForFirm: !validatedRequest.targetStaffId // If no specific staff, it's for the firm
         };
         const createdFeedback = await this.feedbackRepository.add(feedbackData);
         logger_1.logger.info('Feedback submitted successfully', {
             feedbackId: createdFeedback._id,
-            submitterId: request.submitterId,
-            targetStaffId: request.targetStaffId,
-            rating: request.rating
+            submitterId: validatedRequest.submitterId,
+            targetStaffId: validatedRequest.targetStaffId,
+            rating: validatedRequest.rating
         });
         return createdFeedback;
     }

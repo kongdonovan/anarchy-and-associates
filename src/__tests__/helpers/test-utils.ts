@@ -1,13 +1,17 @@
 import { ObjectId } from 'mongodb';
-import { Staff } from '../../domain/entities/staff';
-import { StaffRole } from '../../domain/entities/staff-role';
-import { Case, CaseStatus, CasePriority } from '../../domain/entities/case';
-import { Job } from '../../domain/entities/job';
-import { Application } from '../../domain/entities/application';
-import { Retainer, RetainerStatus } from '../../domain/entities/retainer';
-import { Reminder } from '../../domain/entities/reminder';
+import { 
+  Staff,
+  Case,
+  Job,
+  Application,
+  Retainer,
+  Reminder,
+  Feedback,
+  StaffRole,
+  CaseStatus,
+  CasePriority
+} from '../../validation';
 import { MongoDbClient } from '../../infrastructure/database/mongo-client';
-import { Feedback, FeedbackRating } from '../../domain/entities/feedback';
 
 export class TestUtils {
   static generateObjectId(): ObjectId {
@@ -17,14 +21,14 @@ export class TestUtils {
   static generateMockStaff(overrides: Partial<Staff> = {}): Staff {
     const now = new Date();
     return {
-      _id: this.generateObjectId(),
-      guildId: 'test-guild-123',
-      userId: `user-${Date.now()}`,
+      _id: this.generateObjectId().toString(),
+      guildId: '123456789012345678', // Valid Discord snowflake
+      userId: '234567890123456789', // Valid Discord snowflake
       robloxUsername: `roblox${Date.now()}`,
-      role: StaffRole.PARALEGAL,
+      role: 'Paralegal' as StaffRole, // Use string literal that matches Zod enum
       status: 'active',
       hiredAt: now,
-      hiredBy: 'test-admin',
+      hiredBy: '123456789012345679', // Valid Discord snowflake
       promotionHistory: [],
       createdAt: now,
       updatedAt: now,
@@ -34,18 +38,18 @@ export class TestUtils {
 
   static generateMockCase(overrides: Partial<Case> = {}): Case {
     const now = new Date();
-    const caseNumber = `${now.getFullYear()}-${String(Math.floor(Math.random() * 9999)).padStart(4, '0')}-testclient`;
+    const caseNumber = `AA-${now.getFullYear()}-${String(Math.floor(Math.random() * 9999)).padStart(4, '0')}-testclient`;
     
     return {
-      _id: this.generateObjectId(),
-      guildId: 'test-guild-123',
+      _id: this.generateObjectId().toString(),
+      guildId: '123456789012345678', // Valid Discord snowflake
       caseNumber,
-      clientId: `client-${Date.now()}`,
+      clientId: `${Date.now()}123456789`, // Valid Discord snowflake
       clientUsername: `testclient${Date.now()}`,
       title: 'Test Case Title',
-      description: 'Test case description',
-      status: CaseStatus.PENDING,
-      priority: CasePriority.MEDIUM,
+      description: 'Test case description that is at least twenty characters long',
+      status: 'pending' as CaseStatus, // Use string literal that matches Zod enum
+      priority: 'medium' as CasePriority, // Use string literal that matches Zod enum
       assignedLawyerIds: [],
       documents: [],
       notes: [],
@@ -59,15 +63,15 @@ export class TestUtils {
     const now = new Date();
     
     return {
-      _id: this.generateObjectId(),
-      guildId: 'test-guild-123',
+      _id: this.generateObjectId().toString(),
+      guildId: '123456789012345678', // Valid Discord snowflake
       title: 'Test Job Position',
       description: 'Test job description',
-      staffRole: StaffRole.PARALEGAL,
-      roleId: 'test-role-id',
+      staffRole: 'Paralegal', // Use string literal that matches Zod enum
+      roleId: '123456789012345680', // Valid Discord snowflake
       isOpen: true,
       questions: [],
-      postedBy: `user-${Date.now()}`,
+      postedBy: `${Date.now()}123456789`, // Valid Discord snowflake
       applicationCount: 0,
       hiredCount: 0,
       createdAt: now,
@@ -80,10 +84,10 @@ export class TestUtils {
     const now = new Date();
     
     return {
-      _id: this.generateObjectId(),
-      guildId: 'test-guild-123',
+      _id: this.generateObjectId().toString(),
+      guildId: '123456789012345678', // Valid Discord snowflake
       jobId: this.generateObjectId().toString(),
-      applicantId: `applicant-${Date.now()}`,
+      applicantId: `${Date.now()}123456789`, // Valid Discord snowflake
       robloxUsername: `roblox${Date.now()}`,
       answers: [],
       status: 'pending',
@@ -97,11 +101,11 @@ export class TestUtils {
     const now = new Date();
     
     return {
-      _id: this.generateObjectId(),
-      guildId: 'test-guild-123',
-      clientId: `client-${Date.now()}`,
-      lawyerId: `lawyer-${Date.now()}`,
-      status: RetainerStatus.PENDING,
+      _id: this.generateObjectId().toString(),
+      guildId: '123456789012345678', // Valid Discord snowflake
+      clientId: `${Date.now()}123456789`, // Valid Discord snowflake
+      lawyerId: `${Date.now()}123456790`, // Valid Discord snowflake
+      status: 'pending', // Use string literal that matches Zod enum
       agreementTemplate: 'RETAINER AGREEMENT\n\nThis is a test agreement for [CLIENT_NAME].\n\nSignature: [SIGNATURE]\nDate: [DATE]\nLawyer: [LAWYER_NAME]',
       createdAt: now,
       updatedAt: now,
@@ -114,10 +118,12 @@ export class TestUtils {
     const futureTime = new Date(now.getTime() + 2 * 60 * 60 * 1000); // 2 hours from now
     
     return {
-      _id: this.generateObjectId(),
-      guildId: 'test-guild-123',
-      userId: `user-${Date.now()}`,
+      _id: this.generateObjectId().toString(),
+      guildId: '123456789012345678', // Valid Discord snowflake
+      userId: '234567890123456789', // Valid Discord snowflake
       username: `testuser${Date.now()}`,
+      channelId: '345678901234567890', // Valid Discord snowflake - required field
+      type: 'custom' as const, // Required field with default
       message: 'Test reminder message',
       scheduledFor: futureTime,
       isActive: true,
@@ -131,13 +137,13 @@ export class TestUtils {
     const now = new Date();
     
     return {
-      _id: this.generateObjectId(),
-      guildId: 'test-guild-123',
-      submitterId: `client-${Date.now()}`,
+      _id: this.generateObjectId().toString(),
+      guildId: '123456789012345678', // Valid Discord snowflake
+      submitterId: `${Date.now()}123456789`, // Valid Discord snowflake
       submitterUsername: `testclient${Date.now()}`,
-      targetStaffId: `staff-${Date.now()}`,
+      targetStaffId: `${Date.now()}123456790`, // Valid Discord snowflake
       targetStaffUsername: `teststaff${Date.now()}`,
-      rating: FeedbackRating.FOUR_STAR,
+      rating: 4, // Use numeric value instead of enum
       comment: 'Great service and very professional!',
       isForFirm: false,
       createdAt: now,
@@ -175,15 +181,15 @@ export class TestUtils {
 
   static mockDiscordInteraction(overrides: any = {}) {
     return {
-      guildId: 'test-guild-123',
+      guildId: '123456789012345678', // Valid Discord snowflake
       user: {
-        id: 'test-user-123',
+        id: '123456789012345679', // Valid Discord snowflake
         displayName: 'Test User'
       },
       member: {
         roles: {
           cache: new Map([
-            ['role-id-1', { id: 'role-id-1', name: 'Test Role' }]
+            ['123456789012345680', { id: '123456789012345680', name: 'Test Role' }] // Valid Discord snowflake
           ])
         }
       },
@@ -191,9 +197,9 @@ export class TestUtils {
       followUp: jest.fn().mockResolvedValue(undefined),
       update: jest.fn().mockResolvedValue(undefined),
       deferReply: jest.fn().mockResolvedValue(undefined),
-      channelId: 'test-channel-123',
+      channelId: '123456789012345681', // Valid Discord snowflake
       guild: {
-        ownerId: 'guild-owner-123',
+        ownerId: '123456789012345682', // Valid Discord snowflake
         channels: {
           fetch: jest.fn()
         },
@@ -202,7 +208,7 @@ export class TestUtils {
         }
       },
       client: {
-        user: { id: 'mock-bot-id' },
+        user: { id: '123456789012345683' }, // Valid Discord snowflake
         guilds: {
           fetch: jest.fn()
         }
@@ -217,9 +223,9 @@ export class TestUtils {
 
   static createMockPermissionContext(overrides: any = {}) {
     return {
-      guildId: 'test-guild-123',
-      userId: 'test-user-123',
-      userRoles: ['role-id-1'],
+      guildId: '123456789012345678', // Valid Discord snowflake
+      userId: '123456789012345679', // Valid Discord snowflake
+      userRoles: ['123456789012345680'], // Valid Discord snowflake
       isGuildOwner: false,
       ...overrides
     };
@@ -253,5 +259,30 @@ export class TestUtils {
     count: number
   ): T[] {
     return Array.from({ length: count }, (_, index) => generator(index));
+  }
+
+  // Helper functions to ensure valid Discord snowflake IDs
+  static generateSnowflake(): string {
+    // Generate a valid Discord snowflake (17-21 digits)
+    const timestamp = Date.now() - 1420070400000; // Discord epoch
+    const workerId = Math.floor(Math.random() * 31);
+    const processId = Math.floor(Math.random() * 31);
+    const increment = Math.floor(Math.random() * 4095);
+    
+    const snowflake = (BigInt(timestamp) << 22n) | (BigInt(workerId) << 17n) | (BigInt(processId) << 12n) | BigInt(increment);
+    return snowflake.toString();
+  }
+
+  static ensureValidSnowflake(id: string | undefined): string {
+    if (!id || id.length < 17 || id.length > 21 || !/^\d+$/.test(id)) {
+      return this.generateSnowflake();
+    }
+    return id;
+  }
+
+  // Convert ObjectId to string for Zod compatibility
+  static toZodId(id: ObjectId | string | undefined): string | undefined {
+    if (!id) return undefined;
+    return typeof id === 'string' ? id : id.toString();
   }
 }

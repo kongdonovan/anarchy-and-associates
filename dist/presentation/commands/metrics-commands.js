@@ -18,6 +18,8 @@ const discord_js_1 = require("discord.js");
 const metrics_service_1 = require("../../application/services/metrics-service");
 const embed_utils_1 = require("../../infrastructure/utils/embed-utils");
 const logger_1 = require("../../infrastructure/logger");
+const audit_decorators_1 = require("../decorators/audit-decorators");
+const audit_log_1 = require("../../domain/entities/audit-log");
 let MetricsCommands = class MetricsCommands {
     constructor() {
         this.metricsService = new metrics_service_1.MetricsService();
@@ -247,12 +249,14 @@ let MetricsCommands = class MetricsCommands {
 exports.MetricsCommands = MetricsCommands;
 __decorate([
     (0, discordx_1.Slash)({ name: 'overview', description: 'Display bot and server statistics' }),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.STAFF_LIST_VIEWED, 'low'),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [discord_js_1.CommandInteraction]),
     __metadata("design:returntype", Promise)
 ], MetricsCommands.prototype, "metrics", null);
 __decorate([
     (0, discordx_1.Slash)({ name: 'lawyer-stats', description: 'View win/loss statistics for lawyers' }),
+    audit_decorators_1.AuditDecorators.AdminAction(audit_log_1.AuditAction.STAFF_INFO_VIEWED, 'low'),
     __param(0, (0, discordx_1.SlashOption)({
         name: 'user',
         description: 'Lawyer to view stats for (leave empty for all lawyers)',

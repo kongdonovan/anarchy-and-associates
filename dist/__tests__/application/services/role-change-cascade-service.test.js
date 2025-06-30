@@ -6,9 +6,6 @@ const case_service_1 = require("../../../application/services/case-service");
 const channel_permission_manager_1 = require("../../../application/services/channel-permission-manager");
 const audit_log_repository_1 = require("../../../infrastructure/repositories/audit-log-repository");
 const staff_repository_1 = require("../../../infrastructure/repositories/staff-repository");
-const case_1 = require("../../../domain/entities/case");
-const staff_role_1 = require("../../../domain/entities/staff-role");
-const audit_log_1 = require("../../../domain/entities/audit-log");
 const logger_1 = require("../../../infrastructure/logger");
 const mongodb_1 = require("mongodb");
 jest.mock('../../../infrastructure/repositories/case-repository');
@@ -19,7 +16,7 @@ jest.mock('../../../infrastructure/repositories/case-counter-repository');
 jest.mock('../../../application/services/case-service');
 jest.mock('../../../application/services/channel-permission-manager');
 jest.mock('../../../application/services/permission-service');
-jest.mock('../../../application/services/business-rule-validation-service');
+jest.mock('../../../application/validation/unified-validation-service');
 jest.mock('../../../infrastructure/logger', () => ({
     logger: {
         info: jest.fn(),
@@ -61,33 +58,33 @@ describe('RoleChangeCascadeService', () => {
     let mockGuild;
     let mockTextChannel;
     let mockUser;
-    const mockCaseId = new mongodb_1.ObjectId();
+    const mockCaseId = new mongodb_1.ObjectId().toString();
     const mockCase = {
         _id: mockCaseId,
-        guildId: 'guild-123',
-        caseNumber: '2024-0001-testuser',
-        clientId: 'client-123',
+        guildId: '123456789012345678',
+        caseNumber: 'AA-2024-0001-testuser',
+        clientId: '123456789012345679',
         clientUsername: 'testclient',
         title: 'Test Case',
         description: 'Test case description',
-        status: case_1.CaseStatus.IN_PROGRESS,
-        priority: case_1.CasePriority.HIGH,
-        leadAttorneyId: 'user-123',
-        assignedLawyerIds: ['user-123', 'user-456'],
-        channelId: 'channel-123',
+        status: 'in-progress',
+        priority: 'high',
+        leadAttorneyId: '123456789012345680',
+        assignedLawyerIds: ['123456789012345680', '123456789012345681'],
+        channelId: '123456789012345682',
         documents: [],
         notes: [],
         createdAt: new Date(),
         updatedAt: new Date()
     };
     const mockStaff = {
-        _id: new mongodb_1.ObjectId(),
-        userId: 'senior-partner-123',
-        guildId: 'guild-123',
+        _id: new mongodb_1.ObjectId().toString(),
+        userId: '123456789012345683',
+        guildId: '123456789012345678',
         robloxUsername: 'SeniorPartner',
-        role: staff_role_1.StaffRole.SENIOR_PARTNER,
+        role: 'Senior Partner',
         hiredAt: new Date(),
-        hiredBy: 'admin',
+        hiredBy: '123456789012345684',
         promotionHistory: [],
         status: 'active',
         createdAt: new Date(),
@@ -123,17 +120,17 @@ describe('RoleChangeCascadeService', () => {
         };
         // Mock Discord objects
         mockUser = {
-            id: 'user-123',
+            id: '123456789012345680',
             username: 'TestUser',
             send: jest.fn().mockResolvedValue(undefined)
         };
         mockTextChannel = {
-            id: 'channel-123',
+            id: '123456789012345682',
             send: jest.fn().mockResolvedValue(undefined)
         };
         const mockChannels = {
             fetch: jest.fn().mockImplementation((id) => {
-                if (id === 'channel-123') {
+                if (id === '123456789012345682') {
                     return Promise.resolve(mockTextChannel);
                 }
                 return Promise.resolve(null);
@@ -141,9 +138,9 @@ describe('RoleChangeCascadeService', () => {
         };
         const mockMembers = {
             fetch: jest.fn().mockImplementation((id) => {
-                if (id === 'senior-partner-123') {
+                if (id === '123456789012345683') {
                     return Promise.resolve({
-                        user: { id: 'senior-partner-123' },
+                        user: { id: '123456789012345683' },
                         send: jest.fn().mockResolvedValue(undefined)
                     });
                 }
@@ -151,7 +148,7 @@ describe('RoleChangeCascadeService', () => {
             })
         };
         mockGuild = {
-            id: 'guild-123',
+            id: '123456789012345678',
             channels: mockChannels,
             members: mockMembers
         };
@@ -181,11 +178,11 @@ describe('RoleChangeCascadeService', () => {
         const { CaseCounterRepository } = require('../../../infrastructure/repositories/case-counter-repository');
         const { GuildConfigRepository } = require('../../../infrastructure/repositories/guild-config-repository');
         const { PermissionService } = require('../../../application/services/permission-service');
-        const { BusinessRuleValidationService } = require('../../../application/services/business-rule-validation-service');
+        const { UnifiedValidationService } = require('../../../application/validation/unified-validation-service');
         jest.mocked(CaseCounterRepository).mockImplementation(() => ({}));
         jest.mocked(GuildConfigRepository).mockImplementation(() => ({}));
         jest.mocked(PermissionService).mockImplementation(() => ({}));
-        jest.mocked(BusinessRuleValidationService).mockImplementation(() => ({}));
+        jest.mocked(UnifiedValidationService).mockImplementation(() => ({}));
         // Create service instance
         service = new role_change_cascade_service_1.RoleChangeCascadeService();
         // Spy on the private methods we want to test
@@ -209,25 +206,25 @@ describe('RoleChangeCascadeService', () => {
             it('should unassign lawyer from all cases', async () => {
                 const event = {
                     member: mockGuildMember,
-                    oldRole: staff_role_1.StaffRole.JUNIOR_ASSOCIATE,
+                    oldRole: 'Junior Associate',
                     newRole: undefined,
                     changeType: 'fire'
                 };
                 mockCaseRepository.findByLawyer.mockResolvedValue([mockCase]);
-                mockCaseRepository.findById.mockResolvedValue({ ...mockCase, assignedLawyerIds: ['user-456'] });
+                mockCaseRepository.findById.mockResolvedValue({ ...mockCase, assignedLawyerIds: ['123456789012345681'] });
                 mockCaseService.unassignLawyer.mockResolvedValue(mockCase);
                 mockStaffRepository.findByFilters.mockResolvedValue([]);
                 await service.handleRoleChange(event);
-                expect(mockCaseRepository.findByLawyer).toHaveBeenCalledWith('user-123');
+                expect(mockCaseRepository.findByLawyer).toHaveBeenCalledWith('123456789012345680');
                 expect(mockCaseService.unassignLawyer).toHaveBeenCalledWith(expect.objectContaining({
-                    guildId: 'guild-123',
+                    guildId: '123456789012345678',
                     userId: 'system'
-                }), mockCaseId.toString(), 'user-123');
+                }), mockCaseId.toString(), '123456789012345680');
             });
             it('should notify user via DM about case removal', async () => {
                 const event = {
                     member: mockGuildMember,
-                    oldRole: staff_role_1.StaffRole.JUNIOR_ASSOCIATE,
+                    oldRole: 'Junior Associate',
                     newRole: undefined,
                     changeType: 'fire'
                 };
@@ -249,7 +246,7 @@ describe('RoleChangeCascadeService', () => {
             it('should notify case channel about staffing changes', async () => {
                 const event = {
                     member: mockGuildMember,
-                    oldRole: staff_role_1.StaffRole.JUNIOR_ASSOCIATE,
+                    oldRole: 'Junior Associate',
                     newRole: undefined,
                     changeType: 'fire'
                 };
@@ -271,7 +268,7 @@ describe('RoleChangeCascadeService', () => {
             it('should notify senior staff when case has no lawyers left', async () => {
                 const event = {
                     member: mockGuildMember,
-                    oldRole: staff_role_1.StaffRole.JUNIOR_ASSOCIATE,
+                    oldRole: 'Junior Associate',
                     newRole: undefined,
                     changeType: 'fire'
                 };
@@ -289,18 +286,18 @@ describe('RoleChangeCascadeService', () => {
             it('should update channel permissions', async () => {
                 const event = {
                     member: mockGuildMember,
-                    oldRole: staff_role_1.StaffRole.JUNIOR_ASSOCIATE,
+                    oldRole: 'Junior Associate',
                     newRole: undefined,
                     changeType: 'fire'
                 };
                 mockCaseRepository.findByLawyer.mockResolvedValue([]);
                 await service.handleRoleChange(event);
-                expect(mockChannelPermissionManager.handleRoleChange).toHaveBeenCalledWith(mockGuild, mockGuildMember, staff_role_1.StaffRole.JUNIOR_ASSOCIATE, undefined, 'fire');
+                expect(mockChannelPermissionManager.handleRoleChange).toHaveBeenCalledWith(mockGuild, mockGuildMember, 'Junior Associate', undefined, 'fire');
             });
             it('should log audit event', async () => {
                 const event = {
                     member: mockGuildMember,
-                    oldRole: staff_role_1.StaffRole.JUNIOR_ASSOCIATE,
+                    oldRole: 'Junior Associate',
                     newRole: undefined,
                     changeType: 'fire'
                 };
@@ -310,9 +307,9 @@ describe('RoleChangeCascadeService', () => {
                 mockStaffRepository.findByFilters.mockResolvedValue([]);
                 await service.handleRoleChange(event);
                 expect(mockAuditLogRepository.add).toHaveBeenCalledWith(expect.objectContaining({
-                    action: audit_log_1.AuditAction.STAFF_FIRED,
+                    action: 'staff_fired',
                     actorId: 'system-cascade',
-                    targetId: 'user-123',
+                    targetId: '123456789012345680',
                     details: expect.objectContaining({
                         metadata: expect.objectContaining({
                             casesAffected: 1,
@@ -324,7 +321,7 @@ describe('RoleChangeCascadeService', () => {
             it('should handle errors gracefully when DM fails', async () => {
                 const event = {
                     member: mockGuildMember,
-                    oldRole: staff_role_1.StaffRole.JUNIOR_ASSOCIATE,
+                    oldRole: 'Junior Associate',
                     newRole: undefined,
                     changeType: 'fire'
                 };
@@ -341,8 +338,8 @@ describe('RoleChangeCascadeService', () => {
             it('should unassign from all cases when demoted to paralegal', async () => {
                 const event = {
                     member: mockGuildMember,
-                    oldRole: staff_role_1.StaffRole.SENIOR_ASSOCIATE,
-                    newRole: staff_role_1.StaffRole.PARALEGAL,
+                    oldRole: 'Senior Associate',
+                    newRole: 'Paralegal',
                     changeType: 'demotion'
                 };
                 mockCaseRepository.findByLawyer.mockResolvedValue([mockCase]);
@@ -366,26 +363,26 @@ describe('RoleChangeCascadeService', () => {
             it('should remove lead attorney status but keep as assigned lawyer', async () => {
                 const event = {
                     member: mockGuildMember,
-                    oldRole: staff_role_1.StaffRole.SENIOR_ASSOCIATE,
-                    newRole: staff_role_1.StaffRole.JUNIOR_ASSOCIATE,
+                    oldRole: 'Senior Associate',
+                    newRole: 'Junior Associate',
                     changeType: 'demotion'
                 };
-                const leadCase = { ...mockCase, leadAttorneyId: 'user-123' };
+                const leadCase = { ...mockCase, leadAttorneyId: '123456789012345680' };
                 mockCaseRepository.findByLeadAttorney.mockResolvedValue([leadCase]);
                 mockCaseRepository.update.mockResolvedValue({ ...leadCase, leadAttorneyId: undefined });
                 await service.handleRoleChange(event);
-                expect(mockCaseRepository.findByLeadAttorney).toHaveBeenCalledWith('user-123');
+                expect(mockCaseRepository.findByLeadAttorney).toHaveBeenCalledWith('123456789012345680');
                 expect(mockCaseRepository.update).toHaveBeenCalledWith(mockCaseId.toString(), { leadAttorneyId: undefined });
                 expect(mockCaseService.unassignLawyer).not.toHaveBeenCalled();
             });
             it('should notify user about lead attorney removal', async () => {
                 const event = {
                     member: mockGuildMember,
-                    oldRole: staff_role_1.StaffRole.SENIOR_ASSOCIATE,
-                    newRole: staff_role_1.StaffRole.JUNIOR_ASSOCIATE,
+                    oldRole: 'Senior Associate',
+                    newRole: 'Junior Associate',
                     changeType: 'demotion'
                 };
-                const leadCase = { ...mockCase, leadAttorneyId: 'user-123' };
+                const leadCase = { ...mockCase, leadAttorneyId: '123456789012345680' };
                 mockCaseRepository.findByLeadAttorney.mockResolvedValue([leadCase]);
                 mockCaseRepository.update.mockResolvedValue({ ...leadCase, leadAttorneyId: undefined });
                 await service.handleRoleChange(event);
@@ -403,11 +400,11 @@ describe('RoleChangeCascadeService', () => {
             it('should notify case channel about lead attorney removal', async () => {
                 const event = {
                     member: mockGuildMember,
-                    oldRole: staff_role_1.StaffRole.SENIOR_ASSOCIATE,
-                    newRole: staff_role_1.StaffRole.JUNIOR_ASSOCIATE,
+                    oldRole: 'Senior Associate',
+                    newRole: 'Junior Associate',
                     changeType: 'demotion'
                 };
-                const leadCase = { ...mockCase, leadAttorneyId: 'user-123' };
+                const leadCase = { ...mockCase, leadAttorneyId: '123456789012345680' };
                 mockCaseRepository.findByLeadAttorney.mockResolvedValue([leadCase]);
                 mockCaseRepository.update.mockResolvedValue({ ...leadCase, leadAttorneyId: undefined });
                 await service.handleRoleChange(event);
@@ -430,18 +427,18 @@ describe('RoleChangeCascadeService', () => {
             it('should log lead attorney removal audit event', async () => {
                 const event = {
                     member: mockGuildMember,
-                    oldRole: staff_role_1.StaffRole.SENIOR_ASSOCIATE,
-                    newRole: staff_role_1.StaffRole.JUNIOR_ASSOCIATE,
+                    oldRole: 'Senior Associate',
+                    newRole: 'Junior Associate',
                     changeType: 'demotion'
                 };
-                const leadCase = { ...mockCase, leadAttorneyId: 'user-123' };
+                const leadCase = { ...mockCase, leadAttorneyId: '123456789012345680' };
                 mockCaseRepository.findByLeadAttorney.mockResolvedValue([leadCase]);
                 mockCaseRepository.update.mockResolvedValue({ ...leadCase, leadAttorneyId: undefined });
                 await service.handleRoleChange(event);
                 expect(mockAuditLogRepository.add).toHaveBeenCalledWith(expect.objectContaining({
-                    action: audit_log_1.AuditAction.STAFF_DEMOTED,
+                    action: 'staff_demoted',
                     actorId: 'system-cascade',
-                    targetId: 'user-123',
+                    targetId: '123456789012345680',
                     details: expect.objectContaining({
                         metadata: expect.objectContaining({
                             leadCasesAffected: 1,
@@ -455,8 +452,8 @@ describe('RoleChangeCascadeService', () => {
             it('should not trigger cascade effects for promotions', async () => {
                 const event = {
                     member: mockGuildMember,
-                    oldRole: staff_role_1.StaffRole.JUNIOR_ASSOCIATE,
-                    newRole: staff_role_1.StaffRole.SENIOR_ASSOCIATE,
+                    oldRole: 'Junior Associate',
+                    newRole: 'Senior Associate',
                     changeType: 'promotion'
                 };
                 await service.handleRoleChange(event);
@@ -464,7 +461,7 @@ describe('RoleChangeCascadeService', () => {
                 expect(mockCaseRepository.findByLeadAttorney).not.toHaveBeenCalled();
                 expect(mockCaseService.unassignLawyer).not.toHaveBeenCalled();
                 // Should still update channel permissions
-                expect(mockChannelPermissionManager.handleRoleChange).toHaveBeenCalledWith(mockGuild, mockGuildMember, staff_role_1.StaffRole.JUNIOR_ASSOCIATE, staff_role_1.StaffRole.SENIOR_ASSOCIATE, 'promotion');
+                expect(mockChannelPermissionManager.handleRoleChange).toHaveBeenCalledWith(mockGuild, mockGuildMember, 'Junior Associate', 'Senior Associate', 'promotion');
             });
         });
         describe('when staff member is hired', () => {
@@ -472,14 +469,14 @@ describe('RoleChangeCascadeService', () => {
                 const event = {
                     member: mockGuildMember,
                     oldRole: undefined,
-                    newRole: staff_role_1.StaffRole.JUNIOR_ASSOCIATE,
+                    newRole: 'Junior Associate',
                     changeType: 'hire'
                 };
                 await service.handleRoleChange(event);
                 expect(mockCaseRepository.findByLawyer).not.toHaveBeenCalled();
                 expect(mockCaseService.unassignLawyer).not.toHaveBeenCalled();
                 // Should still update channel permissions
-                expect(mockChannelPermissionManager.handleRoleChange).toHaveBeenCalledWith(mockGuild, mockGuildMember, undefined, staff_role_1.StaffRole.JUNIOR_ASSOCIATE, 'hire');
+                expect(mockChannelPermissionManager.handleRoleChange).toHaveBeenCalledWith(mockGuild, mockGuildMember, undefined, 'Junior Associate', 'hire');
             });
         });
         describe('edge cases', () => {
@@ -491,7 +488,7 @@ describe('RoleChangeCascadeService', () => {
                 mockStaffRepository.findByFilters.mockResolvedValue([]);
                 const event = {
                     member: mockGuildMember,
-                    oldRole: staff_role_1.StaffRole.JUNIOR_ASSOCIATE,
+                    oldRole: 'Junior Associate',
                     newRole: undefined,
                     changeType: 'fire'
                 };
@@ -508,7 +505,7 @@ describe('RoleChangeCascadeService', () => {
                 mockGuild.channels.fetch.mockRejectedValue(new Error('Channel not found'));
                 const event = {
                     member: mockGuildMember,
-                    oldRole: staff_role_1.StaffRole.JUNIOR_ASSOCIATE,
+                    oldRole: 'Junior Associate',
                     newRole: undefined,
                     changeType: 'fire'
                 };
@@ -524,7 +521,7 @@ describe('RoleChangeCascadeService', () => {
                 mockGuild.members.fetch.mockRejectedValue(new Error('Member not found'));
                 const event = {
                     member: mockGuildMember,
-                    oldRole: staff_role_1.StaffRole.JUNIOR_ASSOCIATE,
+                    oldRole: 'Junior Associate',
                     newRole: undefined,
                     changeType: 'fire'
                 };
@@ -532,8 +529,8 @@ describe('RoleChangeCascadeService', () => {
                 expect(logger_1.logger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to DM senior staff'), expect.any(Error));
             });
             it('should handle case processing errors without stopping other cases', async () => {
-                const case1 = { ...mockCase, _id: new mongodb_1.ObjectId() };
-                const case2 = { ...mockCase, _id: new mongodb_1.ObjectId(), caseNumber: '2024-0002-testuser' };
+                const case1 = { ...mockCase, _id: new mongodb_1.ObjectId().toString() };
+                const case2 = { ...mockCase, _id: new mongodb_1.ObjectId().toString(), caseNumber: 'AA-2024-0002-testuser' };
                 mockCaseRepository.findByLawyer.mockResolvedValue([case1, case2]);
                 mockCaseRepository.findById.mockResolvedValue({ ...mockCase, assignedLawyerIds: [] });
                 mockCaseService.unassignLawyer
@@ -542,7 +539,7 @@ describe('RoleChangeCascadeService', () => {
                 mockStaffRepository.findByFilters.mockResolvedValue([]);
                 const event = {
                     member: mockGuildMember,
-                    oldRole: staff_role_1.StaffRole.JUNIOR_ASSOCIATE,
+                    oldRole: 'Junior Associate',
                     newRole: undefined,
                     changeType: 'fire'
                 };

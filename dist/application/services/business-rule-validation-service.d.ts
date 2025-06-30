@@ -2,7 +2,7 @@ import { GuildConfigRepository } from '../../infrastructure/repositories/guild-c
 import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
 import { CaseRepository } from '../../infrastructure/repositories/case-repository';
 import { PermissionService, PermissionContext } from './permission-service';
-import { StaffRole } from '../../domain/entities/staff-role';
+import { StaffRole } from '../../validation';
 export interface ValidationResult {
     valid: boolean;
     errors: string[];

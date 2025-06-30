@@ -1,4 +1,4 @@
-import { ApplicationService, ApplicationSubmissionRequest, ApplicationReviewRequest } from '../../application/services/application-service';
+import { ApplicationService, ApplicationSubmissionRequest } from '../../application/services/application-service';
 import { ApplicationRepository } from '../../infrastructure/repositories/application-repository';
 import { JobRepository } from '../../infrastructure/repositories/job-repository';
 import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
@@ -6,13 +6,11 @@ import { RobloxService } from '../../infrastructure/external/roblox-service';
 import { PermissionService, PermissionContext } from '../../application/services/permission-service';
 import { 
   Application, 
-  ApplicationAnswer 
-} from '../../domain/entities/application';
-import { Job } from '../../domain/entities/job';
-import { Staff } from '../../domain/entities/staff';
-import { StaffRole } from '../../domain/entities/staff-role';
+  ApplicationAnswer,
+  Job,
+  ApplicationStatus
+} from '../../validation';
 import { TestUtils } from '../helpers/test-utils';
-import { CaseStatus } from '../../domain/entities/case';
 
 /**
  * Unit tests for ApplicationService
@@ -33,6 +31,8 @@ describe('ApplicationService Unit Tests', () => {
   const testJobId = TestUtils.generateObjectId().toString();
   const testApplicationId = TestUtils.generateObjectId().toString();
   const testReviewerId = '345678901234567890';
+
+
 
   beforeEach(() => {
     // Create mock permission context
@@ -96,34 +96,34 @@ describe('ApplicationService Unit Tests', () => {
       ]
     };
 
-    const mockJob: Job = TestUtils.generateMockJob({
-      _id: TestUtils.generateObjectId(),
+    const mockJob = TestUtils.generateMockJob({
+      _id: TestUtils.generateObjectId().toString(),
       guildId: testGuildId,
       title: 'Test Job',
       description: 'Test job description',
-      staffRole: StaffRole.JUNIOR_ASSOCIATE,
+      staffRole: 'Junior Associate' as const,
       isOpen: true,
         createdAt: new Date(),
         updatedAt: new Date()
     });
 
-    const mockCreatedApplication: Application = TestUtils.generateMockApplication({
-      _id: TestUtils.generateObjectId(),
+    const mockCreatedApplication = TestUtils.generateMockApplication({
+      _id: TestUtils.generateObjectId().toString(),
       guildId: testGuildId,
       jobId: testJobId,
       applicantId: testApplicantId,
       robloxUsername: 'testuser123',
       answers: mockSubmissionRequest.answers,
-      status: CaseStatus.PENDING,
+      status: 'pending' as const,
         createdAt: new Date(),
         updatedAt: new Date()
     });
 
     it('should submit application successfully with valid data', async () => {
-      mockJobRepository.findById.mockResolvedValue(mockJob);
+      mockJobRepository.findById.mockResolvedValue((mockJob));
       mockStaffRepository.findByUserId.mockResolvedValue(null);
       mockRobloxService.validateUsername.mockResolvedValue({ isValid: true });
-      mockApplicationRepository.add.mockResolvedValue(mockCreatedApplication);
+      mockApplicationRepository.add.mockResolvedValue((mockCreatedApplication));
 
       const result = await applicationService.submitApplication(mockSubmissionRequest);
 
@@ -136,19 +136,19 @@ describe('ApplicationService Unit Tests', () => {
         applicantId: testApplicantId,
         robloxUsername: 'testuser123',
         answers: mockSubmissionRequest.answers,
-        status: CaseStatus.PENDING
+        status: 'pending' as const
       });
       expect(result).toEqual(mockCreatedApplication);
     });
 
     it('should submit application with Roblox validation warning', async () => {
-      mockJobRepository.findById.mockResolvedValue(mockJob);
+      mockJobRepository.findById.mockResolvedValue((mockJob));
       mockStaffRepository.findByUserId.mockResolvedValue(null);
       mockRobloxService.validateUsername.mockResolvedValue({ 
         isValid: false, 
         error: 'User not found' 
       });
-      mockApplicationRepository.add.mockResolvedValue(mockCreatedApplication);
+      mockApplicationRepository.add.mockResolvedValue((mockCreatedApplication));
 
       const result = await applicationService.submitApplication(mockSubmissionRequest);
 
@@ -157,10 +157,10 @@ describe('ApplicationService Unit Tests', () => {
     });
 
     it('should submit application when Roblox validation throws error', async () => {
-      mockJobRepository.findById.mockResolvedValue(mockJob);
+      mockJobRepository.findById.mockResolvedValue((mockJob));
       mockStaffRepository.findByUserId.mockResolvedValue(null);
       mockRobloxService.validateUsername.mockRejectedValue(new Error('Roblox API error'));
-      mockApplicationRepository.add.mockResolvedValue(mockCreatedApplication);
+      mockApplicationRepository.add.mockResolvedValue((mockCreatedApplication));
 
       const result = await applicationService.submitApplication(mockSubmissionRequest);
 
@@ -179,7 +179,7 @@ describe('ApplicationService Unit Tests', () => {
 
     it('should throw error when job is not open', async () => {
       const closedJob = { ...mockJob, isOpen: false };
-      mockJobRepository.findById.mockResolvedValue(closedJob);
+      mockJobRepository.findById.mockResolvedValue((closedJob));
 
       await expect(applicationService.submitApplication(mockSubmissionRequest))
         .rejects.toThrow('Application validation failed: Job is not open for applications');
@@ -188,14 +188,14 @@ describe('ApplicationService Unit Tests', () => {
     });
 
     it('should throw error when active staff member tries to apply', async () => {
-      const activeStaff: Staff = TestUtils.generateMockStaff({
+      const activeStaff = TestUtils.generateMockStaff({
         guildId: testGuildId,
         userId: testApplicantId,
-        status: 'active'
+        status: 'active' as const
       });
 
-      mockJobRepository.findById.mockResolvedValue(mockJob);
-      mockStaffRepository.findByUserId.mockResolvedValue(activeStaff);
+      mockJobRepository.findById.mockResolvedValue((mockJob));
+      mockStaffRepository.findByUserId.mockResolvedValue((activeStaff));
 
       await expect(applicationService.submitApplication(mockSubmissionRequest))
         .rejects.toThrow('Application validation failed: Active staff members cannot apply for positions');
@@ -204,16 +204,16 @@ describe('ApplicationService Unit Tests', () => {
     });
 
     it('should allow inactive staff member to apply', async () => {
-      const inactiveStaff: Staff = TestUtils.generateMockStaff({
+      const inactiveStaff = TestUtils.generateMockStaff({
         guildId: testGuildId,
         userId: testApplicantId,
         status: 'inactive'
       });
 
-      mockJobRepository.findById.mockResolvedValue(mockJob);
-      mockStaffRepository.findByUserId.mockResolvedValue(inactiveStaff);
+      mockJobRepository.findById.mockResolvedValue((mockJob));
+      mockStaffRepository.findByUserId.mockResolvedValue((inactiveStaff));
       mockRobloxService.validateUsername.mockResolvedValue({ isValid: true });
-      mockApplicationRepository.add.mockResolvedValue(mockCreatedApplication);
+      mockApplicationRepository.add.mockResolvedValue((mockCreatedApplication));
 
       const result = await applicationService.submitApplication(mockSubmissionRequest);
 
@@ -227,7 +227,7 @@ describe('ApplicationService Unit Tests', () => {
         answers: []
       };
 
-      mockJobRepository.findById.mockResolvedValue(mockJob);
+      mockJobRepository.findById.mockResolvedValue((mockJob));
       mockStaffRepository.findByUserId.mockResolvedValue(null);
 
       await expect(applicationService.submitApplication(requestWithoutAnswers))
@@ -242,17 +242,17 @@ describe('ApplicationService Unit Tests', () => {
         answers: undefined as any
       };
 
-      mockJobRepository.findById.mockResolvedValue(mockJob);
+      mockJobRepository.findById.mockResolvedValue((mockJob));
       mockStaffRepository.findByUserId.mockResolvedValue(null);
 
       await expect(applicationService.submitApplication(requestWithoutAnswers))
-        .rejects.toThrow('Application validation failed: Application answers are required');
+        .rejects.toThrow('Application submission request: Validation failed - answers: Required');
 
       expect(mockApplicationRepository.add).not.toHaveBeenCalled();
     });
 
     it('should handle repository add failure', async () => {
-      mockJobRepository.findById.mockResolvedValue(mockJob);
+      mockJobRepository.findById.mockResolvedValue((mockJob));
       mockStaffRepository.findByUserId.mockResolvedValue(null);
       mockRobloxService.validateUsername.mockResolvedValue({ isValid: true });
       mockApplicationRepository.add.mockRejectedValue(new Error('Database error'));
@@ -269,7 +269,7 @@ describe('ApplicationService Unit Tests', () => {
     });
 
     it('should handle staff repository failure', async () => {
-      mockJobRepository.findById.mockResolvedValue(mockJob);
+      mockJobRepository.findById.mockResolvedValue((mockJob));
       mockStaffRepository.findByUserId.mockRejectedValue(new Error('Staff repository error'));
 
       await expect(applicationService.submitApplication(mockSubmissionRequest))
@@ -289,13 +289,13 @@ describe('ApplicationService Unit Tests', () => {
         answers: complexAnswers
       };
 
-      mockJobRepository.findById.mockResolvedValue(mockJob);
+      mockJobRepository.findById.mockResolvedValue((mockJob));
       mockStaffRepository.findByUserId.mockResolvedValue(null);
       mockRobloxService.validateUsername.mockResolvedValue({ isValid: true });
-      mockApplicationRepository.add.mockResolvedValue({
+      mockApplicationRepository.add.mockResolvedValue(({
         ...mockCreatedApplication,
         answers: complexAnswers
-      });
+      }));
 
       const result = await applicationService.submitApplication(requestWithComplexAnswers);
 
@@ -309,33 +309,33 @@ describe('ApplicationService Unit Tests', () => {
   });
 
   describe('reviewApplication', () => {
-    const mockReviewRequest: ApplicationReviewRequest = {
+    const mockReviewRequest = {
       applicationId: testApplicationId,
-      reviewerId: testReviewerId,
-      approved: true,
+      decision: 'accepted' as const,
+      reviewedBy: testReviewerId,
       reason: 'Strong qualifications and experience'
     };
 
-    const mockPendingApplication: Application = TestUtils.generateMockApplication({
-      _id: TestUtils.generateObjectId(),
+    const mockPendingApplication = TestUtils.generateMockApplication({
+      _id: TestUtils.generateObjectId().toString(),
       guildId: testGuildId,
       jobId: testJobId,
       applicantId: testApplicantId,
-      status: CaseStatus.PENDING,
+      status: 'pending' as const,
         createdAt: new Date(),
         updatedAt: new Date()
     });
 
     const mockReviewedApplication: Application = {
       ...mockPendingApplication,
-      status: 'accepted',
+      status: 'accepted' as ApplicationStatus,
       reviewedBy: testReviewerId,
       reviewedAt: new Date(),
       reviewReason: 'Strong qualifications and experience'
     };
 
     it('should approve application successfully', async () => {
-      mockApplicationRepository.findById.mockResolvedValue(mockPendingApplication);
+      mockApplicationRepository.findById.mockResolvedValue((mockPendingApplication));
       mockApplicationRepository.update.mockResolvedValue(mockReviewedApplication);
 
       mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
@@ -343,7 +343,7 @@ describe('ApplicationService Unit Tests', () => {
 
       expect(mockApplicationRepository.findById).toHaveBeenCalledWith(testApplicationId);
       expect(mockApplicationRepository.update).toHaveBeenCalledWith(testApplicationId, {
-        status: 'accepted',
+        status: 'accepted' as const,
         reviewedBy: testReviewerId,
         reviewedAt: expect.any(Date),
         reviewReason: 'Strong qualifications and experience'
@@ -354,7 +354,7 @@ describe('ApplicationService Unit Tests', () => {
     it('should reject application successfully', async () => {
       const rejectRequest = {
         ...mockReviewRequest,
-        approved: false,
+        decision: 'rejected' as const,
         reason: 'Insufficient experience'
       };
 
@@ -366,14 +366,14 @@ describe('ApplicationService Unit Tests', () => {
         reviewReason: 'Insufficient experience'
       };
 
-      mockApplicationRepository.findById.mockResolvedValue(mockPendingApplication);
+      mockApplicationRepository.findById.mockResolvedValue((mockPendingApplication));
       mockApplicationRepository.update.mockResolvedValue(rejectedApplication);
 
       mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
       const result = await applicationService.reviewApplication(mockPermissionContext, rejectRequest);
 
       expect(mockApplicationRepository.update).toHaveBeenCalledWith(testApplicationId, {
-        status: 'rejected',
+        status: 'rejected' as const,
         reviewedBy: testReviewerId,
         reviewedAt: expect.any(Date),
         reviewReason: 'Insufficient experience'
@@ -384,11 +384,11 @@ describe('ApplicationService Unit Tests', () => {
     it('should review application without reason', async () => {
       const requestWithoutReason = {
         applicationId: testApplicationId,
-        reviewerId: testReviewerId,
-        approved: true
+        decision: 'accepted' as const,
+        reviewedBy: testReviewerId
       };
 
-      mockApplicationRepository.findById.mockResolvedValue(mockPendingApplication);
+      mockApplicationRepository.findById.mockResolvedValue((mockPendingApplication));
       mockApplicationRepository.update.mockResolvedValue({
         ...mockReviewedApplication,
         reviewReason: undefined
@@ -398,7 +398,7 @@ describe('ApplicationService Unit Tests', () => {
       const result = await applicationService.reviewApplication(mockPermissionContext, requestWithoutReason);
 
       expect(mockApplicationRepository.update).toHaveBeenCalledWith(testApplicationId, {
-        status: 'accepted',
+        status: 'accepted' as const,
         reviewedBy: testReviewerId,
         reviewedAt: expect.any(Date),
         reviewReason: undefined
@@ -422,7 +422,7 @@ describe('ApplicationService Unit Tests', () => {
         status: 'accepted' as const
       };
 
-      mockApplicationRepository.findById.mockResolvedValue(alreadyReviewedApplication);
+      mockApplicationRepository.findById.mockResolvedValue((alreadyReviewedApplication));
 
       mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
       await expect(applicationService.reviewApplication(mockPermissionContext, mockReviewRequest))
@@ -437,7 +437,7 @@ describe('ApplicationService Unit Tests', () => {
         status: 'rejected' as const
       };
 
-      mockApplicationRepository.findById.mockResolvedValue(rejectedApplication);
+      mockApplicationRepository.findById.mockResolvedValue((rejectedApplication));
 
       mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
       await expect(applicationService.reviewApplication(mockPermissionContext, mockReviewRequest))
@@ -447,7 +447,7 @@ describe('ApplicationService Unit Tests', () => {
     });
 
     it('should throw error when update fails', async () => {
-      mockApplicationRepository.findById.mockResolvedValue(mockPendingApplication);
+      mockApplicationRepository.findById.mockResolvedValue((mockPendingApplication));
       mockApplicationRepository.update.mockResolvedValue(null);
 
       mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
@@ -464,7 +464,7 @@ describe('ApplicationService Unit Tests', () => {
     });
 
     it('should handle repository update failure', async () => {
-      mockApplicationRepository.findById.mockResolvedValue(mockPendingApplication);
+      mockApplicationRepository.findById.mockResolvedValue((mockPendingApplication));
       mockApplicationRepository.update.mockRejectedValue(new Error('Update failed'));
 
       mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
@@ -485,7 +485,7 @@ describe('ApplicationService Unit Tests', () => {
     };
 
     const mockOpenJob: Job = TestUtils.generateMockJob({
-      _id: TestUtils.generateObjectId(),
+      _id: TestUtils.generateObjectId().toString(),
       guildId: testGuildId,
       isOpen: true,
         createdAt: new Date(),
@@ -493,7 +493,7 @@ describe('ApplicationService Unit Tests', () => {
     });
 
     it('should return valid result for valid application', async () => {
-      mockJobRepository.findById.mockResolvedValue(mockOpenJob);
+      mockJobRepository.findById.mockResolvedValue((mockOpenJob));
       mockStaffRepository.findByUserId.mockResolvedValue(null);
       mockRobloxService.validateUsername.mockResolvedValue({ isValid: true });
 
@@ -515,7 +515,7 @@ describe('ApplicationService Unit Tests', () => {
 
     it('should return errors for closed job', async () => {
       const closedJob = { ...mockOpenJob, isOpen: false };
-      mockJobRepository.findById.mockResolvedValue(closedJob);
+      mockJobRepository.findById.mockResolvedValue((closedJob));
 
       const result = await applicationService.validateApplication(mockValidationRequest);
 
@@ -524,14 +524,14 @@ describe('ApplicationService Unit Tests', () => {
     });
 
     it('should return errors for active staff applicant', async () => {
-      const activeStaff: Staff = TestUtils.generateMockStaff({
+      const activeStaff = TestUtils.generateMockStaff({
         guildId: testGuildId,
         userId: testApplicantId,
-        status: 'active'
+        status: 'active' as const
       });
 
-      mockJobRepository.findById.mockResolvedValue(mockOpenJob);
-      mockStaffRepository.findByUserId.mockResolvedValue(activeStaff);
+      mockJobRepository.findById.mockResolvedValue((mockOpenJob));
+      mockStaffRepository.findByUserId.mockResolvedValue((activeStaff));
 
       const result = await applicationService.validateApplication(mockValidationRequest);
 
@@ -540,7 +540,7 @@ describe('ApplicationService Unit Tests', () => {
     });
 
     it('should return warnings for invalid Roblox username', async () => {
-      mockJobRepository.findById.mockResolvedValue(mockOpenJob);
+      mockJobRepository.findById.mockResolvedValue((mockOpenJob));
       mockStaffRepository.findByUserId.mockResolvedValue(null);
       mockRobloxService.validateUsername.mockResolvedValue({
         isValid: false,
@@ -555,7 +555,7 @@ describe('ApplicationService Unit Tests', () => {
     });
 
     it('should return warnings when Roblox validation throws error', async () => {
-      mockJobRepository.findById.mockResolvedValue(mockOpenJob);
+      mockJobRepository.findById.mockResolvedValue((mockOpenJob));
       mockStaffRepository.findByUserId.mockResolvedValue(null);
       mockRobloxService.validateUsername.mockRejectedValue(new Error('API timeout'));
 
@@ -572,7 +572,7 @@ describe('ApplicationService Unit Tests', () => {
         answers: []
       };
 
-      mockJobRepository.findById.mockResolvedValue(mockOpenJob);
+      mockJobRepository.findById.mockResolvedValue((mockOpenJob));
       mockStaffRepository.findByUserId.mockResolvedValue(null);
 
       const result = await applicationService.validateApplication(requestWithoutAnswers);
@@ -587,14 +587,14 @@ describe('ApplicationService Unit Tests', () => {
         answers: []
       };
 
-      const activeStaff: Staff = TestUtils.generateMockStaff({
+      const activeStaff = TestUtils.generateMockStaff({
         guildId: testGuildId,
         userId: testApplicantId,
-        status: 'active'
+        status: 'active' as const
       });
 
       mockJobRepository.findById.mockResolvedValue(null);
-      mockStaffRepository.findByUserId.mockResolvedValue(activeStaff);
+      mockStaffRepository.findByUserId.mockResolvedValue((activeStaff));
 
       const result = await applicationService.validateApplication(requestWithoutAnswers);
 
@@ -606,8 +606,8 @@ describe('ApplicationService Unit Tests', () => {
   });
 
   describe('getApplicationById', () => {
-    const mockApplication: Application = TestUtils.generateMockApplication({
-      _id: TestUtils.generateObjectId(),
+    const mockApplication = TestUtils.generateMockApplication({
+      _id: TestUtils.generateObjectId().toString(),
       guildId: testGuildId,
       jobId: testJobId,
       applicantId: testApplicantId,
@@ -616,7 +616,7 @@ describe('ApplicationService Unit Tests', () => {
     });
 
     it('should return application when found', async () => {
-      mockApplicationRepository.findById.mockResolvedValue(mockApplication);
+      mockApplicationRepository.findById.mockResolvedValue((mockApplication));
 
       mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
       const result = await applicationService.getApplicationById(mockPermissionContext, testApplicationId);
@@ -629,7 +629,7 @@ describe('ApplicationService Unit Tests', () => {
       mockApplicationRepository.findById.mockResolvedValue(null);
 
       mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
-      const result = await applicationService.getApplicationById(mockPermissionContext, 'non-existent-id');
+      const result = await applicationService.getApplicationById(mockPermissionContext, TestUtils.generateObjectId().toString());
 
       expect(result).toBeNull();
     });
@@ -644,22 +644,22 @@ describe('ApplicationService Unit Tests', () => {
   });
 
   describe('getApplicationsByJob', () => {
-    const mockApplications: Application[] = [
+    const mockApplications = [
       TestUtils.generateMockApplication({
-        _id: TestUtils.generateObjectId(),
+        _id: TestUtils.generateObjectId().toString(),
         guildId: testGuildId,
         jobId: testJobId,
         applicantId: testApplicantId,
-        status: CaseStatus.PENDING,
+        status: 'pending' as const,
         createdAt: new Date(),
         updatedAt: new Date()
       }),
       TestUtils.generateMockApplication({
-        _id: TestUtils.generateObjectId(),
+        _id: TestUtils.generateObjectId().toString(),
         guildId: testGuildId,
         jobId: testJobId,
-        applicantId: 'another-applicant',
-        status: 'accepted',
+        applicantId: '345678901234567890',
+        status: 'accepted' as const,
         createdAt: new Date(),
         updatedAt: new Date()
       })
@@ -679,7 +679,7 @@ describe('ApplicationService Unit Tests', () => {
       mockApplicationRepository.findByJob.mockResolvedValue([]);
 
       mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
-      const result = await applicationService.getApplicationsByJob(mockPermissionContext, 'non-existent-job');
+      const result = await applicationService.getApplicationsByJob(mockPermissionContext, TestUtils.generateObjectId().toString());
 
       expect(result).toEqual([]);
     });
@@ -694,22 +694,22 @@ describe('ApplicationService Unit Tests', () => {
   });
 
   describe('getApplicationsByApplicant', () => {
-    const mockApplications: Application[] = [
+    const mockApplications = [
       TestUtils.generateMockApplication({
-        _id: TestUtils.generateObjectId(),
+        _id: TestUtils.generateObjectId().toString(),
         guildId: testGuildId,
         jobId: testJobId,
         applicantId: testApplicantId,
-        status: CaseStatus.PENDING,
+        status: 'pending' as const,
         createdAt: new Date(),
         updatedAt: new Date()
       }),
       TestUtils.generateMockApplication({
-        _id: TestUtils.generateObjectId(),
+        _id: TestUtils.generateObjectId().toString(),
         guildId: testGuildId,
-        jobId: 'another-job-id',
+        jobId: TestUtils.generateObjectId().toString(),
         applicantId: testApplicantId,
-        status: 'rejected',
+        status: 'rejected' as const,
         createdAt: new Date(),
         updatedAt: new Date()
       })
@@ -729,7 +729,7 @@ describe('ApplicationService Unit Tests', () => {
       mockApplicationRepository.findByApplicant.mockResolvedValue([]);
 
       mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
-      const result = await applicationService.getApplicationsByApplicant(mockPermissionContext, 'non-existent-applicant');
+      const result = await applicationService.getApplicationsByApplicant(mockPermissionContext, TestUtils.generateSnowflake());
 
       expect(result).toEqual([]);
     });
@@ -744,22 +744,22 @@ describe('ApplicationService Unit Tests', () => {
   });
 
   describe('getPendingApplications', () => {
-    const mockPendingApplications: Application[] = [
+    const mockPendingApplications = [
       TestUtils.generateMockApplication({
-        _id: TestUtils.generateObjectId(),
+        _id: TestUtils.generateObjectId().toString(),
         guildId: testGuildId,
         jobId: testJobId,
         applicantId: testApplicantId,
-        status: CaseStatus.PENDING,
+        status: 'pending' as const,
         createdAt: new Date(),
         updatedAt: new Date()
       }),
       TestUtils.generateMockApplication({
-        _id: TestUtils.generateObjectId(),
+        _id: TestUtils.generateObjectId().toString(),
         guildId: testGuildId,
-        jobId: 'another-job-id',
-        applicantId: 'another-applicant',
-        status: CaseStatus.PENDING,
+        jobId: TestUtils.generateObjectId().toString(),
+        applicantId: '345678901234567890',
+        status: 'pending' as const,
         createdAt: new Date(),
         updatedAt: new Date()
       })
@@ -794,53 +794,53 @@ describe('ApplicationService Unit Tests', () => {
   });
 
   describe('getApplicationStats', () => {
-    const mockAllApplications: Application[] = [
+    const mockAllApplications = [
       TestUtils.generateMockApplication({
-        _id: TestUtils.generateObjectId(),
+        _id: TestUtils.generateObjectId().toString(),
         guildId: testGuildId,
-        status: CaseStatus.PENDING,
+        status: 'pending' as const,
         createdAt: new Date(),
         updatedAt: new Date()
       }),
       TestUtils.generateMockApplication({
-        _id: TestUtils.generateObjectId(),
+        _id: TestUtils.generateObjectId().toString(),
         guildId: testGuildId,
-        status: CaseStatus.PENDING,
+        status: 'pending' as const,
         createdAt: new Date(),
         updatedAt: new Date()
       }),
       TestUtils.generateMockApplication({
-        _id: TestUtils.generateObjectId(),
+        _id: TestUtils.generateObjectId().toString(),
         guildId: testGuildId,
-        status: 'accepted',
+        status: 'accepted' as const,
         createdAt: new Date(),
         updatedAt: new Date()
       }),
       TestUtils.generateMockApplication({
-        _id: TestUtils.generateObjectId(),
+        _id: TestUtils.generateObjectId().toString(),
         guildId: testGuildId,
-        status: 'accepted',
+        status: 'accepted' as const,
         createdAt: new Date(),
         updatedAt: new Date()
       }),
       TestUtils.generateMockApplication({
-        _id: TestUtils.generateObjectId(),
+        _id: TestUtils.generateObjectId().toString(),
         guildId: testGuildId,
-        status: 'accepted',
+        status: 'accepted' as const,
         createdAt: new Date(),
         updatedAt: new Date()
       }),
       TestUtils.generateMockApplication({
-        _id: TestUtils.generateObjectId(),
+        _id: TestUtils.generateObjectId().toString(),
         guildId: testGuildId,
-        status: 'rejected',
+        status: 'rejected' as const,
         createdAt: new Date(),
         updatedAt: new Date()
       }),
       TestUtils.generateMockApplication({
-        _id: TestUtils.generateObjectId(),
+        _id: TestUtils.generateObjectId().toString(),
         guildId: testGuildId,
-        status: 'rejected',
+        status: 'rejected' as const,
         createdAt: new Date(),
         updatedAt: new Date()
       })
@@ -885,9 +885,9 @@ describe('ApplicationService Unit Tests', () => {
 
     it('should handle edge case with only one status', async () => {
       const onlyPendingApplications = [
-        TestUtils.generateMockApplication({ guildId: testGuildId, status: CaseStatus.PENDING }),
-        TestUtils.generateMockApplication({ guildId: testGuildId, status: CaseStatus.PENDING }),
-        TestUtils.generateMockApplication({ guildId: testGuildId, status: CaseStatus.PENDING })
+        TestUtils.generateMockApplication({ guildId: testGuildId, status: 'pending' as const }),
+        TestUtils.generateMockApplication({ guildId: testGuildId, status: 'pending' as const }),
+        TestUtils.generateMockApplication({ guildId: testGuildId, status: 'pending' as const })
       ];
 
       mockApplicationRepository.findByGuild.mockResolvedValue(onlyPendingApplications);
@@ -943,11 +943,11 @@ describe('ApplicationService Unit Tests', () => {
       mockJobRepository.findById.mockResolvedValue(null);
 
       await expect(applicationService.submitApplication(malformedRequest))
-        .rejects.toThrow('Application validation failed');
+        .rejects.toThrow('Application submission request: Validation failed');
     });
 
     it('should handle concurrent application submissions', async () => {
-      const mockJob: Job = TestUtils.generateMockJob({
+      const mockJob = TestUtils.generateMockJob({
         guildId: testGuildId,
         isOpen: true
       });
@@ -960,10 +960,10 @@ describe('ApplicationService Unit Tests', () => {
         answers: [{ questionId: 'q1', answer: 'Test answer' }]
       };
 
-      mockJobRepository.findById.mockResolvedValue(mockJob);
+      mockJobRepository.findById.mockResolvedValue((mockJob));
       mockStaffRepository.findByUserId.mockResolvedValue(null);
       mockRobloxService.validateUsername.mockResolvedValue({ isValid: true });
-      mockApplicationRepository.add.mockResolvedValue(TestUtils.generateMockApplication());
+      mockApplicationRepository.add.mockResolvedValue((TestUtils.generateMockApplication()));
 
       // Simulate concurrent submissions
       const submissions = Array.from({ length: 5 }, () =>
@@ -976,7 +976,7 @@ describe('ApplicationService Unit Tests', () => {
     });
 
     it('should handle very large application answers', async () => {
-      const largeAnswer = 'A'.repeat(50000); // 50KB answer
+      const largeAnswer = 'A'.repeat(1500); // Within 2000 char limit
       const requestWithLargeAnswer: ApplicationSubmissionRequest = {
         guildId: testGuildId,
         jobId: testJobId,
@@ -985,21 +985,21 @@ describe('ApplicationService Unit Tests', () => {
         answers: [{ questionId: 'essay', answer: largeAnswer }]
       };
 
-      const mockJob: Job = TestUtils.generateMockJob({
+      const mockJob = TestUtils.generateMockJob({
         guildId: testGuildId,
         isOpen: true
       });
 
-      mockJobRepository.findById.mockResolvedValue(mockJob);
+      mockJobRepository.findById.mockResolvedValue((mockJob));
       mockStaffRepository.findByUserId.mockResolvedValue(null);
       mockRobloxService.validateUsername.mockResolvedValue({ isValid: true });
-      mockApplicationRepository.add.mockResolvedValue(TestUtils.generateMockApplication({
+      mockApplicationRepository.add.mockResolvedValue((TestUtils.generateMockApplication({
         answers: [{ questionId: 'essay', answer: largeAnswer }]
-      }));
+      })));
 
       const result = await applicationService.submitApplication(requestWithLargeAnswer);
 
-      expect(result.answers?.[0]?.answer).toHaveLength(50000);
+      expect(result.answers?.[0]?.answer).toHaveLength(1500);
       expect(mockApplicationRepository.add).toHaveBeenCalledWith(
         expect.objectContaining({
           answers: [{ questionId: 'essay', answer: largeAnswer }]
@@ -1016,17 +1016,17 @@ describe('ApplicationService Unit Tests', () => {
         answers: [{ questionId: 'q1', answer: 'Test answer' }]
       };
 
-      const mockJob: Job = TestUtils.generateMockJob({
+      const mockJob = TestUtils.generateMockJob({
         guildId: testGuildId,
         isOpen: true
       });
 
-      mockJobRepository.findById.mockResolvedValue(mockJob);
+      mockJobRepository.findById.mockResolvedValue((mockJob));
       mockStaffRepository.findByUserId.mockResolvedValue(null);
       mockRobloxService.validateUsername.mockResolvedValue({ isValid: true });
-      mockApplicationRepository.add.mockResolvedValue(TestUtils.generateMockApplication({
+      mockApplicationRepository.add.mockResolvedValue((TestUtils.generateMockApplication({
         robloxUsername: 'test_user_123'
-      }));
+      })));
 
       const result = await applicationService.submitApplication(specialUsernameRequest);
 
@@ -1053,17 +1053,17 @@ describe('ApplicationService Unit Tests', () => {
       mockApplicationRepository.findById.mockResolvedValue(null);
 
       mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
-      const result = await applicationService.getApplicationById(mockPermissionContext, 'non-existent');
+      const result = await applicationService.getApplicationById(mockPermissionContext, TestUtils.generateObjectId().toString());
       expect(result).toBeNull();
 
       mockApplicationRepository.findByJob.mockResolvedValue([]);
       mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
-      const jobResults = await applicationService.getApplicationsByJob(mockPermissionContext, 'non-existent');
+      const jobResults = await applicationService.getApplicationsByJob(mockPermissionContext, TestUtils.generateObjectId().toString());
       expect(jobResults).toEqual([]);
 
       mockApplicationRepository.findByApplicant.mockResolvedValue([]);
       mockPermissionService.hasHRPermissionWithContext.mockResolvedValue(true);
-      const applicantResults = await applicationService.getApplicationsByApplicant(mockPermissionContext, 'non-existent');
+      const applicantResults = await applicationService.getApplicationsByApplicant(mockPermissionContext, TestUtils.generateSnowflake());
       expect(applicantResults).toEqual([]);
     });
   });

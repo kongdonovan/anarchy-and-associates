@@ -17,8 +17,10 @@ import { CaseChannelArchiveService } from '../../application/services/case-chann
 import { CaseRepository } from '../../infrastructure/repositories/case-repository';
 import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-repository';
 import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
-import { BusinessRuleValidationService } from '../../application/services/business-rule-validation-service';
-import { CrossEntityValidationService, IntegrityReport, RepairResult as ValidationRepairResult } from '../../application/services/cross-entity-validation-service';
+// import { UnifiedValidationService } from '../../application/validation/unified-validation-service';
+import { ValidationServiceFactory } from '../../application/validation/validation-service-factory';
+import { IntegrityReport } from '../../application/services/cross-entity-validation-service';
+import { CrossEntityValidationService } from '../../application/services/cross-entity-validation-service';
 import { JobRepository } from '../../infrastructure/repositories/job-repository';
 import { ApplicationRepository } from '../../infrastructure/repositories/application-repository';
 import { RetainerRepository } from '../../infrastructure/repositories/retainer-repository';
@@ -26,6 +28,8 @@ import { FeedbackRepository } from '../../infrastructure/repositories/feedback-r
 import { ReminderRepository } from '../../infrastructure/repositories/reminder-repository';
 import { EmbedUtils } from '../../infrastructure/utils/embed-utils';
 import { logger } from '../../infrastructure/logger';
+import { AuditDecorators } from '../decorators/audit-decorators';
+import { AuditAction } from '../../domain/entities/audit-log';
 
 @Discord()
 @SlashGroup({ name: 'repair', description: 'System repair and maintenance commands' })
@@ -46,18 +50,32 @@ export class RepairCommands {
     const caseRepository = new CaseRepository();
     const auditLogRepository = new AuditLogRepository();
     const staffRepository = new StaffRepository();
-    const businessRuleValidationService = new BusinessRuleValidationService(
-      this.guildConfigRepository,
-      staffRepository,
-      caseRepository,
-      this.permissionService
+    const jobRepository = new JobRepository();
+    const applicationRepository = new ApplicationRepository();
+    const retainerRepository = new RetainerRepository();
+    const feedbackRepository = new FeedbackRepository();
+    const reminderRepository = new ReminderRepository();
+    
+    // Create unified validation service
+    const validationService = ValidationServiceFactory.createValidationService(
+      {
+        staffRepository,
+        caseRepository,
+        guildConfigRepository: this.guildConfigRepository,
+        jobRepository,
+        applicationRepository
+      },
+      {
+        permissionService: this.permissionService
+      }
     );
+    
     const caseChannelArchiveService = new CaseChannelArchiveService(
       caseRepository,
       this.guildConfigRepository,
       auditLogRepository,
       this.permissionService,
-      businessRuleValidationService
+      validationService
     );
     
     this.orphanedChannelCleanupService = new OrphanedChannelCleanupService(
@@ -66,16 +84,9 @@ export class RepairCommands {
       auditLogRepository,
       staffRepository,
       this.permissionService,
-      businessRuleValidationService,
+      validationService,
       caseChannelArchiveService
     );
-
-    // Initialize repositories for cross-entity validation
-    const jobRepository = new JobRepository();
-    const applicationRepository = new ApplicationRepository();
-    const retainerRepository = new RetainerRepository();
-    const feedbackRepository = new FeedbackRepository();
-    const reminderRepository = new ReminderRepository();
 
     this.crossEntityValidationService = new CrossEntityValidationService(
       staffRepository,
@@ -175,6 +186,7 @@ export class RepairCommands {
   }
 
   @Slash({ name: 'staff-roles', description: 'Synchronize staff roles between Discord and database' })
+  @AuditDecorators.AdminAction(AuditAction.SYSTEM_REPAIR, 'high')
   async repairStaffRoles(
     @SlashOption({
       name: 'dry-run',
@@ -226,6 +238,7 @@ export class RepairCommands {
   }
 
   @Slash({ name: 'job-roles', description: 'Synchronize job roles between Discord and database' })
+  @AuditDecorators.AdminAction(AuditAction.SYSTEM_REPAIR, 'medium')
   async repairJobRoles(
     @SlashOption({
       name: 'dry-run',
@@ -481,6 +494,7 @@ export class RepairCommands {
   }
 
   @Slash({ name: 'all', description: 'Execute all repair routines' })
+  @AuditDecorators.AdminAction(AuditAction.SYSTEM_REPAIR, 'critical')
   async repairAll(
     @SlashOption({
       name: 'dry-run',
@@ -532,6 +546,7 @@ export class RepairCommands {
   }
 
   @Slash({ name: 'health', description: 'Comprehensive system health check' })
+  @AuditDecorators.AdminAction(AuditAction.SYSTEM_REPAIR, 'low')
   async repairHealth(
     interaction: CommandInteraction
   ): Promise<void> {
@@ -877,13 +892,13 @@ export class RepairCommands {
     description: 'Scan for data integrity issues across all entities'
   })
   async integrityCheck(
-    interaction: CommandInteraction,
     @SlashOption({ 
       name: 'auto-repair',
       description: 'Automatically repair issues that can be fixed',
       type: ApplicationCommandOptionType.Boolean,
       required: false
-    }) autoRepair: boolean = false
+    }) autoRepair: boolean = false,
+    interaction: CommandInteraction
   ): Promise<void> {
     try {
       // Check admin permission
@@ -920,15 +935,14 @@ export class RepairCommands {
 
       // If auto-repair is requested and there are repairable issues
       if (autoRepair && report.repairableIssues > 0) {
-        const repairEmbed = new EmbedBuilder()
-          .setTitle('Auto-Repair Confirmation')
-          .setDescription(`Found **${report.repairableIssues}** issues that can be automatically repaired.\n\nDo you want to proceed with auto-repair?`)
-          .setColor(0xFFA500)
-          .addFields(
-            { name: 'Critical Issues', value: `${report.issuesBySeverity.critical} (${report.issues.filter(i => i.severity === 'critical' && i.canAutoRepair).length} repairable)`, inline: true },
-            { name: 'Warnings', value: `${report.issuesBySeverity.warning} (${report.issues.filter(i => i.severity === 'warning' && i.canAutoRepair).length} repairable)`, inline: true },
-            { name: 'Info', value: `${report.issuesBySeverity.info} (${report.issues.filter(i => i.severity === 'info' && i.canAutoRepair).length} repairable)`, inline: true }
-          );
+        const repairEmbed = EmbedUtils.createWarningEmbed(
+          'System Repair Authorization Required',
+          `The diagnostic scan has identified **${report.repairableIssues}** issues that can be automatically remediated.\n\n**Proceed with automated repair procedures?**`
+        ).addFields(
+          { name: '§ Critical Issues', value: `${report.issuesBySeverity.critical} total (${report.issues.filter((i: any) => i.severity === 'critical' && i.canAutoRepair).length} repairable)`, inline: true },
+          { name: '§ Warning Level', value: `${report.issuesBySeverity.warning} total (${report.issues.filter((i: any) => i.severity === 'warning' && i.canAutoRepair).length} repairable)`, inline: true },
+          { name: '§ Informational', value: `${report.issuesBySeverity.info} total (${report.issues.filter((i: any) => i.severity === 'info' && i.canAutoRepair).length} repairable)`, inline: true }
+        );
 
         await interaction.editReply({
           embeds: [reportEmbed, repairEmbed],
@@ -942,31 +956,48 @@ export class RepairCommands {
         collector?.on('collect', async (message: any) => {
           try {
             await message.delete();
-
-            // Run repairs
-            const repairResult = await this.crossEntityValidationService.repairIntegrityIssues(report.issues);
             
-            // Create repair result embed
-            const repairResultEmbed = this.createValidationRepairResultEmbed(repairResult);
+            // Perform auto-repair
+            const repairResult = await this.crossEntityValidationService.repairIntegrityIssues(
+              report.issues.filter((i: any) => i.canAutoRepair),
+              { dryRun: false }
+            );
 
-            await interaction.editReply({
-              embeds: [reportEmbed, repairResultEmbed],
-              content: null
+            // Create repair result embed
+            const resultEmbed = EmbedUtils.createAALegalEmbed({
+              title: '🔧 Automated Repair Complete',
+              description: `Successfully repaired **${repairResult.issuesRepaired}** of **${repairResult.totalIssuesFound}** issues.`
+            });
+
+            if (repairResult.failedRepairs.length > 0) {
+              resultEmbed.addFields({
+                name: '⚠️ Failed Repairs',
+                value: repairResult.failedRepairs
+                  .slice(0, 5)
+                  .map((f: any) => `• ${f.issue.message}: ${f.error}`)
+                  .join('\n') + (repairResult.failedRepairs.length > 5 ? `\n...and ${repairResult.failedRepairs.length - 5} more` : ''),
+                inline: false
+              });
+            }
+
+            await interaction.followUp({
+              embeds: [resultEmbed],
+              ephemeral: true
             });
           } catch (error) {
-            logger.error('Error during auto-repair:', error);
-            await interaction.editReply({
-              embeds: [EmbedUtils.createErrorEmbed('Repair Failed', 'An error occurred during auto-repair.')],
-              content: null
+            logger.error('Error in auto-repair process:', error);
+            await interaction.followUp({
+              embeds: [EmbedUtils.createErrorEmbed('Repair Failed', 'An error occurred during the auto-repair process.')],
+              ephemeral: true
             });
           }
         });
 
         collector?.on('end', (collected: any) => {
           if (collected.size === 0) {
-            interaction.editReply({
-              embeds: [reportEmbed],
-              content: 'Auto-repair cancelled (timed out).'
+            interaction.followUp({
+              embeds: [EmbedUtils.createInfoEmbed('Repair Cancelled', 'Auto-repair was not confirmed within the time limit.')],
+              ephemeral: true
             });
           }
         });
@@ -979,20 +1010,30 @@ export class RepairCommands {
 
     } catch (error) {
       logger.error('Error in integrity check command:', error);
-      await interaction.editReply({
-        embeds: [EmbedUtils.createErrorEmbed('Check Failed', 'An unexpected error occurred during the integrity check.')]
-      });
+      const errorEmbed = EmbedUtils.createErrorEmbed(
+        'Integrity Check Failed',
+        'An unexpected error occurred during the integrity check.'
+      );
+      
+      if (interaction.deferred) {
+        await interaction.editReply({ embeds: [errorEmbed] });
+      } else {
+        await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+      }
     }
   }
 
   private createIntegrityReportEmbed(report: IntegrityReport): EmbedBuilder {
     const scanDuration = (report.scanCompletedAt.getTime() - report.scanStartedAt.getTime()) / 1000;
     
-    const embed = new EmbedBuilder()
-      .setTitle('Data Integrity Report')
-      .setColor(report.issues.length === 0 ? 0x00FF00 : report.issuesBySeverity.critical > 0 ? 0xFF0000 : 0xFFA500)
-      .setDescription(`Scanned **${report.totalEntitiesScanned}** entities in ${scanDuration.toFixed(2)}s`)
-      .setTimestamp();
+    const embedColor = report.issues.length === 0 ? 'success' : 
+                      report.issuesBySeverity.critical > 0 ? 'error' : 'warning';
+    
+    const embed = EmbedUtils.createAALegalEmbed({
+      title: '⚖️ System Integrity Diagnostic Report',
+      description: `Comprehensive system scan completed. Analyzed **${report.totalEntitiesScanned}** database entities in ${scanDuration.toFixed(2)} seconds.`,
+      color: embedColor as any
+    });
 
     if (report.issues.length > 0) {
       embed.addFields(
@@ -1033,41 +1074,5 @@ export class RepairCommands {
     return embed;
   }
 
-  private createValidationRepairResultEmbed(result: ValidationRepairResult): EmbedBuilder {
-    const embed = new EmbedBuilder()
-      .setTitle('Auto-Repair Results')
-      .setColor(result.issuesFailed === 0 ? 0x00FF00 : 0xFFA500)
-      .addFields(
-        { name: 'Issues Found', value: result.totalIssuesFound.toString(), inline: true },
-        { name: 'Successfully Repaired', value: result.issuesRepaired.toString(), inline: true },
-        { name: 'Failed Repairs', value: result.issuesFailed.toString(), inline: true }
-      )
-      .setTimestamp();
-
-    if (result.issuesRepaired > 0) {
-      const repairedSample = result.repairedIssues.slice(0, 5);
-      const repairedDescriptions = repairedSample.map(issue => 
-        `✅ ${issue.entityType} - ${issue.message}`
-      ).join('\n');
-      
-      embed.addFields({ 
-        name: `Repaired Issues ${result.repairedIssues.length > 5 ? `(showing 5 of ${result.repairedIssues.length})` : ''}`, 
-        value: repairedDescriptions 
-      });
-    }
-
-    if (result.failedRepairs.length > 0) {
-      const failedSample = result.failedRepairs.slice(0, 3);
-      const failedDescriptions = failedSample.map(({ issue, error }) => 
-        `❌ ${issue.entityType} - ${issue.message}\n   Error: ${error}`
-      ).join('\n');
-      
-      embed.addFields({ 
-        name: `Failed Repairs ${result.failedRepairs.length > 3 ? `(showing 3 of ${result.failedRepairs.length})` : ''}`, 
-        value: failedDescriptions 
-      });
-    }
-
-    return embed;
-  }
+  
 }

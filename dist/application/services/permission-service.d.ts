@@ -1,5 +1,5 @@
 import { GuildConfigRepository } from '../../infrastructure/repositories/guild-config-repository';
-import { GuildConfig } from '../../domain/entities/guild-config';
+import { GuildConfig } from '../../validation';
 export type PermissionAction = keyof GuildConfig['permissions'];
 export interface PermissionContext {
     guildId: string;

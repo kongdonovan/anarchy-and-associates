@@ -2,8 +2,8 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CrossEntityValidationService = void 0;
 const logger_1 = require("../../infrastructure/logger");
-const audit_log_1 = require("../../domain/entities/audit-log");
 const case_1 = require("../../domain/entities/case");
+const audit_log_1 = require("../../domain/entities/audit-log");
 class CrossEntityValidationService {
     constructor(staffRepository, caseRepository, applicationRepository, jobRepository, retainerRepository, feedbackRepository, reminderRepository, auditLogRepository) {
         this.staffRepository = staffRepository;
@@ -61,7 +61,7 @@ class CrossEntityValidationService {
                 const issues = [];
                 // Check lead attorney
                 if (caseEntity.leadAttorneyId) {
-                    const leadAttorney = await this.staffRepository.findByUserId(caseEntity.leadAttorneyId, caseEntity.guildId);
+                    const leadAttorney = await this.staffRepository.findByUserId(caseEntity.guildId, caseEntity.leadAttorneyId);
                     if (!leadAttorney) {
                         issues.push({
                             severity: 'critical',
@@ -88,7 +88,7 @@ class CrossEntityValidationService {
                 }
                 // Check assigned lawyers
                 for (const lawyerId of caseEntity.assignedLawyerIds) {
-                    const lawyer = await this.staffRepository.findByUserId(lawyerId, caseEntity.guildId);
+                    const lawyer = await this.staffRepository.findByUserId(caseEntity.guildId, lawyerId);
                     if (!lawyer) {
                         issues.push({
                             severity: 'critical',
@@ -195,7 +195,7 @@ class CrossEntityValidationService {
             validate: async (application) => {
                 const issues = [];
                 if (application.reviewedBy) {
-                    const reviewer = await this.staffRepository.findByUserId(application.reviewedBy, application.guildId);
+                    const reviewer = await this.staffRepository.findByUserId(application.guildId, application.reviewedBy);
                     if (!reviewer) {
                         issues.push({
                             severity: 'warning',
@@ -218,7 +218,7 @@ class CrossEntityValidationService {
             priority: 70,
             validate: async (retainer) => {
                 const issues = [];
-                const lawyer = await this.staffRepository.findByUserId(retainer.lawyerId, retainer.guildId);
+                const lawyer = await this.staffRepository.findByUserId(retainer.guildId, retainer.lawyerId);
                 if (!lawyer) {
                     issues.push({
                         severity: 'critical',
@@ -251,7 +251,7 @@ class CrossEntityValidationService {
             validate: async (feedback) => {
                 const issues = [];
                 if (feedback.targetStaffId && !feedback.isForFirm) {
-                    const staff = await this.staffRepository.findByUserId(feedback.targetStaffId, feedback.guildId);
+                    const staff = await this.staffRepository.findByUserId(feedback.guildId, feedback.targetStaffId);
                     if (!staff) {
                         issues.push({
                             severity: 'warning',
@@ -489,7 +489,7 @@ class CrossEntityValidationService {
                 const issues = [];
                 // Check if case was created before assigned lawyers were hired
                 for (const lawyerId of caseEntity.assignedLawyerIds) {
-                    const lawyer = await this.staffRepository.findByUserId(lawyerId, caseEntity.guildId);
+                    const lawyer = await this.staffRepository.findByUserId(caseEntity.guildId, lawyerId);
                     if (lawyer && lawyer.hiredAt > caseEntity.createdAt) {
                         issues.push({
                             severity: 'critical',
@@ -803,7 +803,7 @@ class CrossEntityValidationService {
                             // Log the repair
                             await this.auditLogRepository.add({
                                 guildId: issue.entityType,
-                                action: audit_log_1.AuditAction.SystemRepair,
+                                action: audit_log_1.AuditAction.SYSTEM_REPAIR,
                                 actorId: 'SYSTEM',
                                 targetId: issue.entityId,
                                 timestamp: new Date(),
@@ -1001,7 +1001,7 @@ class CrossEntityValidationService {
                     // Log the repair
                     await this.auditLogRepository.add({
                         guildId: issue.entityType,
-                        action: audit_log_1.AuditAction.SystemRepair,
+                        action: audit_log_1.AuditAction.SYSTEM_REPAIR,
                         actorId: 'SYSTEM',
                         targetId: issue.entityId,
                         timestamp: new Date(),
@@ -1050,7 +1050,7 @@ class CrossEntityValidationService {
             await Promise.all(batch.map(async ({ entity, type }) => {
                 const issues = await this.validateBeforeOperation(entity, type, 'update', context);
                 if (issues.length > 0) {
-                    results.set(entity._id, issues);
+                    results.set(entity._id?.toString() || entity.id || JSON.stringify(entity), issues);
                 }
             }));
         }

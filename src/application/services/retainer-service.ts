@@ -1,16 +1,21 @@
 import { 
-  Retainer, 
-  RetainerStatus, 
-  RetainerCreationRequest, 
-  RetainerSignatureRequest,
   FormattedRetainerAgreement,
-  STANDARD_RETAINER_TEMPLATE 
-} from '../../domain/entities/retainer';
+  STANDARD_RETAINER_TEMPLATE,
+  RetainerStatus
+} from '../../domain/entities/retainer'; // Keep interfaces, constants and enum
+import { 
+  Retainer
+} from '../../validation';
 import { RetainerRepository } from '../../infrastructure/repositories/retainer-repository';
 import { GuildConfigRepository } from '../../infrastructure/repositories/guild-config-repository';
 import { RobloxService } from '../../infrastructure/external/roblox-service';
 import { PermissionService, PermissionContext } from './permission-service';
 import { logger } from '../../infrastructure/logger';
+import {
+  RetainerCreationRequestSchema,
+  RetainerSignatureRequestSchema,
+  ValidationHelpers
+} from '../../validation';
 
 export class RetainerService {
   constructor(
@@ -20,7 +25,14 @@ export class RetainerService {
     private permissionService: PermissionService
   ) {}
 
-  public async createRetainer(context: PermissionContext, request: RetainerCreationRequest): Promise<Retainer> {
+  public async createRetainer(context: PermissionContext, request: unknown): Promise<Retainer> {
+    // Validate input using Zod schema
+    const validatedRequest = ValidationHelpers.validateOrThrow(
+      RetainerCreationRequestSchema,
+      request,
+      'Retainer creation request'
+    );
+
     // Check lawyer permission (updated from retainer permission)
     const hasPermission = await this.permissionService.hasLawyerPermissionWithContext(context);
     if (!hasPermission) {
@@ -28,27 +40,27 @@ export class RetainerService {
     }
 
     logger.info('Creating retainer agreement', {
-      guildId: request.guildId,
-      clientId: request.clientId,
-      lawyerId: request.lawyerId
+      guildId: validatedRequest.guildId,
+      clientId: validatedRequest.clientId,
+      lawyerId: validatedRequest.lawyerId
     });
 
     // Check if client already has a pending retainer
-    const hasPending = await this.retainerRepository.hasPendingRetainer(request.clientId);
+    const hasPending = await this.retainerRepository.hasPendingRetainer(validatedRequest.clientId);
     if (hasPending) {
       throw new Error('Client already has a pending retainer agreement');
     }
 
     // Check if client already has an active retainer
-    const hasActive = await this.retainerRepository.hasActiveRetainer(request.clientId);
+    const hasActive = await this.retainerRepository.hasActiveRetainer(validatedRequest.clientId);
     if (hasActive) {
       throw new Error('Client already has an active retainer agreement');
     }
 
     const retainer: Omit<Retainer, '_id' | 'createdAt' | 'updatedAt'> = {
-      guildId: request.guildId,
-      clientId: request.clientId,
-      lawyerId: request.lawyerId,
+      guildId: validatedRequest.guildId,
+      clientId: validatedRequest.clientId,
+      lawyerId: validatedRequest.lawyerId,
       status: RetainerStatus.PENDING,
       agreementTemplate: STANDARD_RETAINER_TEMPLATE
     };
@@ -57,20 +69,27 @@ export class RetainerService {
     
     logger.info('Retainer agreement created', {
       retainerId: createdRetainer._id,
-      clientId: request.clientId,
-      lawyerId: request.lawyerId
+      clientId: validatedRequest.clientId,
+      lawyerId: validatedRequest.lawyerId
     });
 
     return createdRetainer;
   }
 
-  public async signRetainer(request: RetainerSignatureRequest): Promise<Retainer> {
+  public async signRetainer(request: unknown): Promise<Retainer> {
+    // Validate input using Zod schema
+    const validatedRequest = ValidationHelpers.validateOrThrow(
+      RetainerSignatureRequestSchema,
+      request,
+      'Retainer signature request'
+    );
+
     logger.info('Processing retainer signature', {
-      retainerId: request.retainerId,
-      clientRobloxUsername: request.clientRobloxUsername
+      retainerId: validatedRequest.retainerId,
+      clientRobloxUsername: validatedRequest.clientRobloxUsername
     });
 
-    const retainer = await this.retainerRepository.findById(request.retainerId);
+    const retainer = await this.retainerRepository.findById(validatedRequest.retainerId);
     if (!retainer) {
       throw new Error('Retainer agreement not found');
     }
@@ -81,24 +100,24 @@ export class RetainerService {
 
     // Validate Roblox username (optional - continues if fails)
     try {
-      const robloxValidation = await this.robloxService.validateUsername(request.clientRobloxUsername);
+      const robloxValidation = await this.robloxService.validateUsername(validatedRequest.clientRobloxUsername);
       if (!robloxValidation.isValid) {
         logger.warn('Roblox username validation failed, but continuing with signature', {
-          username: request.clientRobloxUsername,
+          username: validatedRequest.clientRobloxUsername,
           error: robloxValidation.error
         });
       }
     } catch (error) {
       logger.warn('Roblox validation service failed, continuing without validation', {
-        username: request.clientRobloxUsername,
+        username: validatedRequest.clientRobloxUsername,
         error: error instanceof Error ? error.message : 'Unknown error'
       });
     }
 
-    const signedRetainer = await this.retainerRepository.update(request.retainerId, {
+    const signedRetainer = await this.retainerRepository.update(validatedRequest.retainerId, {
       status: RetainerStatus.SIGNED,
-      clientRobloxUsername: request.clientRobloxUsername,
-      digitalSignature: request.clientRobloxUsername,
+      clientRobloxUsername: validatedRequest.clientRobloxUsername,
+      digitalSignature: validatedRequest.clientRobloxUsername,
       signedAt: new Date()
     });
 
@@ -107,8 +126,8 @@ export class RetainerService {
     }
 
     logger.info('Retainer agreement signed successfully', {
-      retainerId: request.retainerId,
-      clientRobloxUsername: request.clientRobloxUsername
+      retainerId: validatedRequest.retainerId,
+      clientRobloxUsername: validatedRequest.clientRobloxUsername
     });
 
     return signedRetainer;

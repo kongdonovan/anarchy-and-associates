@@ -35,7 +35,7 @@ class MetricsService {
                 this.caseRepository.findByFilters({ guildId: guild.id }),
                 this.caseRepository.findByFilters({ guildId: guild.id, status: case_1.CaseStatus.IN_PROGRESS }),
                 this.applicationRepository.findByFilters({ guildId: guild.id }),
-                this.applicationRepository.findByFilters({ guildId: guild.id, status: case_1.CaseStatus.PENDING }),
+                this.applicationRepository.findByFilters({ guildId: guild.id, status: 'pending' }),
                 this.jobRepository.findByFilters({ guildId: guild.id }),
                 this.jobRepository.findByFilters({ guildId: guild.id, isOpen: true }),
                 this.retainerRepository.findByFilters({ guildId: guild.id }),

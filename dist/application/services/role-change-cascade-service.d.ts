@@ -1,5 +1,5 @@
 import { Client, GuildMember } from 'discord.js';
-import { StaffRole } from '../../domain/entities/staff-role';
+import { StaffRole } from '../../validation';
 export type RoleChangeType = 'hire' | 'fire' | 'promotion' | 'demotion';
 export interface RoleChangeEvent {
     member: GuildMember;

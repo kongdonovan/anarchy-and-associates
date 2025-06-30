@@ -2,14 +2,15 @@ import { ChannelPermissionManager } from '../../application/services/channel-per
 import { CaseRepository } from '../../infrastructure/repositories/case-repository';
 import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
 import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-repository';
-import { GuildConfigRepository } from '../../infrastructure/repositories/guild-config-repository';
-import { PermissionService } from '../../application/services/permission-service';
-import { BusinessRuleValidationService } from '../../application/services/business-rule-validation-service';
+// import { GuildConfigRepository } from '../../infrastructure/repositories/guild-config-repository';
+
+import { UnifiedValidationService } from '../../application/validation/unified-validation-service';
+import { ValidationSeverity } from '../../application/validation/types';
 import { StaffRole } from '../../domain/entities/staff-role';
 import { CaseStatus } from '../../domain/entities/case';
 import { RetainerStatus } from '../../domain/entities/retainer';
 import { ChannelType, PermissionFlagsBits } from 'discord.js';
-import { ObjectId } from 'mongodb';
+import { TestUtils } from '../helpers/test-utils';
 
 // Mock all dependencies
 jest.mock('../../infrastructure/repositories/case-repository');
@@ -17,7 +18,7 @@ jest.mock('../../infrastructure/repositories/staff-repository');
 jest.mock('../../infrastructure/repositories/audit-log-repository');
 jest.mock('../../infrastructure/repositories/guild-config-repository');
 jest.mock('../../application/services/permission-service');
-jest.mock('../../application/services/business-rule-validation-service');
+jest.mock('../../application/validation/unified-validation-service');
 
 // Helper function to create a mock role cache
 function createMockRoleCache(roles: Array<{ id: string; name: string }>) {
@@ -37,9 +38,9 @@ describe('ChannelPermissionManager', () => {
   let mockCaseRepo: jest.Mocked<CaseRepository>;
   let mockStaffRepo: jest.Mocked<StaffRepository>;
   let mockAuditLogRepo: jest.Mocked<AuditLogRepository>;
-  let mockGuildConfigRepo: jest.Mocked<GuildConfigRepository>;
-  let mockPermissionService: jest.Mocked<PermissionService>;
-  let mockBusinessRuleValidationService: jest.Mocked<BusinessRuleValidationService>;
+  // let mockGuildConfigRepo: jest.Mocked<GuildConfigRepository>;
+
+  let mockUnifiedValidationService: jest.Mocked<UnifiedValidationService>;
 
   // Mock Discord objects
   let mockGuild: any;
@@ -56,20 +57,15 @@ describe('ChannelPermissionManager', () => {
     mockCaseRepo = new CaseRepository() as jest.Mocked<CaseRepository>;
     mockStaffRepo = new StaffRepository() as jest.Mocked<StaffRepository>;
     mockAuditLogRepo = new AuditLogRepository() as jest.Mocked<AuditLogRepository>;
-    mockGuildConfigRepo = new GuildConfigRepository() as jest.Mocked<GuildConfigRepository>;
-    mockPermissionService = new PermissionService(mockGuildConfigRepo) as jest.Mocked<PermissionService>;
-    mockBusinessRuleValidationService = new BusinessRuleValidationService(
-      mockGuildConfigRepo,
-      mockStaffRepo,
-      mockCaseRepo,
-      mockPermissionService
-    ) as jest.Mocked<BusinessRuleValidationService>;
+    // mockGuildConfigRepo = new GuildConfigRepository() as jest.Mocked<GuildConfigRepository>;
+
+    mockUnifiedValidationService = new UnifiedValidationService() as jest.Mocked<UnifiedValidationService>;
 
     channelPermissionManager = new ChannelPermissionManager(
       mockCaseRepo,
       mockStaffRepo,
       mockAuditLogRepo,
-      mockBusinessRuleValidationService
+      mockUnifiedValidationService
     );
 
     // Setup mock Discord objects
@@ -140,14 +136,15 @@ describe('ChannelPermissionManager', () => {
     };
 
     // Setup default mocks
-    mockBusinessRuleValidationService.validatePermission.mockResolvedValue({
+    mockUnifiedValidationService.validate = jest.fn().mockResolvedValue({
       valid: true,
-      errors: [],
-      warnings: [],
-      bypassAvailable: false,
-      hasPermission: true,
-      requiredPermission: 'lawyer',
-      grantedPermissions: ['lawyer']
+      issues: [],
+      metadata: {
+        hasPermission: true,
+        requiredPermission: 'lawyer',
+        grantedPermissions: ['lawyer']
+      },
+      strategyResults: new Map()
     });
 
     mockCaseRepo.findCasesByUserId.mockResolvedValue([]);
@@ -172,7 +169,7 @@ describe('ChannelPermissionManager', () => {
       );
 
       // Permission updates handled successfully
-      expect(mockBusinessRuleValidationService.validatePermission).toHaveBeenCalled();
+      expect(mockUnifiedValidationService.validate).toHaveBeenCalled();
       expect(mockAuditLogRepo.add).toHaveBeenCalled();
     });
 
@@ -188,7 +185,7 @@ describe('ChannelPermissionManager', () => {
       );
 
       // Permission updates handled successfully
-      expect(mockBusinessRuleValidationService.validatePermission).toHaveBeenCalled();
+      expect(mockUnifiedValidationService.validate).toHaveBeenCalled();
     });
 
     it('should handle firing and revoke all permissions', async () => {
@@ -219,14 +216,14 @@ describe('ChannelPermissionManager', () => {
       );
 
       // Permission updates handled successfully
-      expect(mockBusinessRuleValidationService.validatePermission).toHaveBeenCalled();
+      expect(mockUnifiedValidationService.validate).toHaveBeenCalled();
     });
 
     it('should update permissions for case channels where user is involved', async () => {
       // Mock user cases
       mockCaseRepo.findCasesByUserId.mockResolvedValue([
         {
-          _id: new ObjectId(),
+          _id: TestUtils.generateObjectId().toString(),
           channelId: testChannelId,
           status: CaseStatus.IN_PROGRESS,
           guildId: testGuildId,
@@ -359,14 +356,15 @@ describe('ChannelPermissionManager', () => {
 
   describe('permission validation', () => {
     it('should validate permissions through business rules', async () => {
-      mockBusinessRuleValidationService.validatePermission.mockResolvedValue({
+      mockUnifiedValidationService.validate.mockResolvedValue({
         valid: true,
-        errors: [],
-        warnings: [],
-        bypassAvailable: false,
-        hasPermission: true,
-        requiredPermission: 'senior-staff',
-        grantedPermissions: ['senior-staff', 'lawyer']
+        issues: [],
+        metadata: {
+          hasPermission: true,
+          requiredPermission: 'senior-staff',
+          grantedPermissions: ['senior-staff', 'lawyer']
+        },
+        strategyResults: new Map()
       });
 
       await channelPermissionManager.handleRoleChange(
@@ -377,19 +375,26 @@ describe('ChannelPermissionManager', () => {
         'hire'
       );
 
-      expect(mockBusinessRuleValidationService.validatePermission).toHaveBeenCalled();
+      expect(mockUnifiedValidationService.validate).toHaveBeenCalled();
       // Permission updates handled successfully
     });
 
     it('should deny access when business rules fail', async () => {
-      mockBusinessRuleValidationService.validatePermission.mockResolvedValue({
+      mockUnifiedValidationService.validate.mockResolvedValue({
         valid: false,
-        errors: ['Insufficient permissions'],
-        warnings: [],
-        bypassAvailable: false,
-        hasPermission: false,
-        requiredPermission: 'admin',
-        grantedPermissions: []
+        issues: [{
+          severity: ValidationSeverity.ERROR,
+          code: 'INSUFFICIENT_PERMISSIONS',
+          message: 'Insufficient permissions',
+          field: 'permission',
+          context: {}
+        }],
+        metadata: {
+          hasPermission: false,
+          requiredPermission: 'admin',
+          grantedPermissions: []
+        },
+        strategyResults: new Map()
       });
 
       // Update the admin channel in the cache
@@ -419,7 +424,7 @@ describe('ChannelPermissionManager', () => {
     });
 
     it('should handle permission service errors gracefully', async () => {
-      mockBusinessRuleValidationService.validatePermission.mockRejectedValue(
+      mockUnifiedValidationService.validate.mockRejectedValue(
         new Error('Permission service error')
       );
 
@@ -487,12 +492,19 @@ describe('ChannelPermissionManager', () => {
       );
 
       // Senior Partner should have senior-staff permissions
-      expect(mockBusinessRuleValidationService.validatePermission).toHaveBeenCalledWith(
+      expect(mockUnifiedValidationService.validate).toHaveBeenCalledWith(
         expect.objectContaining({
-          userId: testUserId,
-          guildId: testGuildId
+          entityType: 'permission',
+          operation: 'validate',
+          data: expect.objectContaining({
+            userId: testUserId,
+            guildId: testGuildId
+          }),
+          metadata: expect.objectContaining({
+            requiredPermission: 'senior-staff'
+          })
         }),
-        'senior-staff'
+        expect.any(Object)
       );
     });
 
@@ -510,7 +522,7 @@ describe('ChannelPermissionManager', () => {
       );
 
       // Permission updates handled successfully
-      expect(mockBusinessRuleValidationService.validatePermission).toHaveBeenCalled();
+      expect(mockUnifiedValidationService.validate).toHaveBeenCalled();
     });
   });
 

@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AnarchyServerSetupService = void 0;
 const discord_js_1 = require("discord.js");
@@ -12,9 +45,10 @@ const retainer_repository_1 = require("../../infrastructure/repositories/retaine
 const reminder_repository_1 = require("../../infrastructure/repositories/reminder-repository");
 const audit_log_repository_1 = require("../../infrastructure/repositories/audit-log-repository");
 const case_counter_repository_1 = require("../../infrastructure/repositories/case-counter-repository");
+const bot_1 = require("../../infrastructure/bot/bot");
 const logger_1 = require("../../infrastructure/logger");
 const server_setup_config_1 = require("../../config/server-setup.config");
-const job_1 = require("../../domain/entities/job");
+const job_1 = require("../../domain/entities/job"); // Keep constants
 class AnarchyServerSetupService {
     constructor() {
         this.guildConfigRepository = new guild_config_repository_1.GuildConfigRepository();
@@ -103,7 +137,59 @@ class AnarchyServerSetupService {
             await this.setupGuildConfig(guild, channelMap, categoryMap, roleMap);
             // 4. Setup role permissions
             await this.setupRolePermissions(guild, roleMap);
-            // 5. Create jobs
+            // 5. Create default information message in welcome channel
+            const welcomeChannelId = channelMap.get('welcome');
+            logger_1.logger.info(`Welcome channel ID: ${welcomeChannelId}, All channels: ${Array.from(channelMap.entries()).map(([k, v]) => `${k}:${v}`).join(', ')}`);
+            if (welcomeChannelId) {
+                try {
+                    // Import first to ensure the static method is available
+                    const { InformationChannelService } = await Promise.resolve().then(() => __importStar(require('./information-channel-service')));
+                    const informationChannelService = bot_1.Bot.getInformationChannelService();
+                    const template = InformationChannelService.generateDefaultTemplate(guild.name, 'welcome');
+                    // Enhance the content with channel links
+                    const enhancedContent = template.content.replace('1. Review our Terms of Service and Community Guidelines', `1. Review our <#${channelMap.get('rules')}> Terms of Service and Community Guidelines`).replace('2. Submit inquiries through designated channels', `2. Submit inquiries through our <#${channelMap.get('bot-commands')}> designated channels`).replace('3. Consult with our legal professionals via appointment', `3. Join our <#${channelMap.get('general-chat')}> community lobby for initial consultations`);
+                    await informationChannelService.updateInformationChannel({
+                        guildId: guild.id,
+                        channelId: welcomeChannelId,
+                        title: template.title || 'Welcome to Anarchy & Associates',
+                        content: enhancedContent,
+                        color: template.color,
+                        footer: template.footer,
+                        updatedBy: guild.ownerId
+                    });
+                    logger_1.logger.info(`Created default information message in welcome channel for guild ${guild.id}`);
+                }
+                catch (error) {
+                    logger_1.logger.error(`Failed to create default information message in welcome channel for guild ${guild.id}:`, error);
+                    errors.push(`Failed to create default information message: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                }
+            }
+            // 6. Create default rules message in rules channel
+            const rulesChannelId = channelMap.get('rules');
+            if (rulesChannelId) {
+                try {
+                    const rulesChannelService = bot_1.Bot.getRulesChannelService();
+                    const { RulesChannelService } = await Promise.resolve().then(() => __importStar(require('./rules-channel-service')));
+                    const template = RulesChannelService.generateDefaultRules('anarchy');
+                    await rulesChannelService.updateRulesChannel({
+                        guildId: guild.id,
+                        channelId: rulesChannelId,
+                        title: template.title || '📜 Anarchy & Associates Server Rules',
+                        content: template.content || 'Please follow these rules.',
+                        rules: template.rules || [],
+                        color: template.color,
+                        footer: template.footer,
+                        showNumbers: template.showNumbers,
+                        additionalFields: template.additionalFields,
+                        updatedBy: guild.ownerId
+                    });
+                    logger_1.logger.info(`Created default rules message in rules channel for guild ${guild.id}`);
+                }
+                catch (error) {
+                    errors.push(`Failed to create default rules message: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                }
+            }
+            // 7. Create jobs (renumbered from 6)
             let jobsCreated = 0;
             for (const jobConfig of config.defaultJobs) {
                 if (!jobConfig.autoCreateOnSetup)
@@ -305,70 +391,84 @@ class AnarchyServerSetupService {
     }
     getCategoryPermissions(categoryName, guild, roleMap) {
         const permissions = [];
-        // Default: Hide from @everyone
-        permissions.push({
-            id: guild.id,
-            deny: [discord_js_1.PermissionFlagsBits.ViewChannel]
-        });
-        // Category-specific permissions
-        switch (categoryName) {
-            case 'Information':
-                // Everyone can view information channels
-                permissions[0] = {
-                    id: guild.id,
-                    allow: [discord_js_1.PermissionFlagsBits.ViewChannel, discord_js_1.PermissionFlagsBits.ReadMessageHistory],
-                    deny: []
-                };
-                break;
-            case 'Client Services':
-                // Clients and staff can access
-                const clientRoleId = roleMap.get('Client');
-                if (clientRoleId) {
+        const categoryConfig = server_setup_config_1.CATEGORY_PERMISSIONS[categoryName];
+        if (!categoryConfig) {
+            // Default: Hide from @everyone if no config found
+            permissions.push({
+                id: guild.id,
+                deny: [discord_js_1.PermissionFlagsBits.ViewChannel]
+            });
+            return permissions;
+        }
+        // Apply @everyone permissions
+        if (categoryConfig.everyone) {
+            const everyoneConfig = categoryConfig.everyone;
+            permissions.push({
+                id: guild.id,
+                allow: everyoneConfig.allow || [],
+                deny: everyoneConfig.deny || []
+            });
+        }
+        // Apply staff permissions for Information category
+        if (categoryName === 'Information' && 'staff' in categoryConfig) {
+            // Give senior staff permission to manage information channels
+            const staffConfig = categoryConfig.staff;
+            const staffRoles = ['Managing Partner', 'Senior Partner', 'Partner'];
+            for (const roleName of staffRoles) {
+                const roleId = roleMap.get(roleName);
+                if (roleId) {
                     permissions.push({
-                        id: clientRoleId,
-                        allow: [discord_js_1.PermissionFlagsBits.ViewChannel, discord_js_1.PermissionFlagsBits.ReadMessageHistory]
+                        id: roleId,
+                        allow: staffConfig.allow || []
                     });
                 }
-                break;
-            case 'Legal Team':
-                // Only legal staff (not clients/hiring staff)
-                const legalRoles = ['Managing Partner', 'Senior Partner', 'Partner', 'Senior Associate', 'Associate', 'Paralegal'];
-                for (const roleName of legalRoles) {
-                    const roleId = roleMap.get(roleName);
-                    if (roleId) {
-                        permissions.push({
-                            id: roleId,
-                            allow: [discord_js_1.PermissionFlagsBits.ViewChannel, discord_js_1.PermissionFlagsBits.SendMessages, discord_js_1.PermissionFlagsBits.ReadMessageHistory]
-                        });
-                    }
+            }
+        }
+        // Apply role-specific permissions based on category config
+        if ('legalRoles' in categoryConfig && categoryConfig.legalRoles) {
+            for (const roleName of categoryConfig.legalRoles) {
+                const roleId = roleMap.get(roleName);
+                if (roleId) {
+                    permissions.push({
+                        id: roleId,
+                        allow: [discord_js_1.PermissionFlagsBits.ViewChannel, discord_js_1.PermissionFlagsBits.SendMessages, discord_js_1.PermissionFlagsBits.ReadMessageHistory]
+                    });
                 }
-                break;
-            case 'Staff':
-                // All staff roles
-                const staffRoles = ['Managing Partner', 'Senior Partner', 'Partner', 'Senior Associate', 'Associate', 'Paralegal', 'Hiring Staff'];
-                for (const roleName of staffRoles) {
-                    const roleId = roleMap.get(roleName);
-                    if (roleId) {
-                        permissions.push({
-                            id: roleId,
-                            allow: [discord_js_1.PermissionFlagsBits.ViewChannel, discord_js_1.PermissionFlagsBits.SendMessages, discord_js_1.PermissionFlagsBits.ReadMessageHistory]
-                        });
-                    }
+            }
+        }
+        if ('staffRoles' in categoryConfig && categoryConfig.staffRoles) {
+            for (const roleName of categoryConfig.staffRoles) {
+                const roleId = roleMap.get(roleName);
+                if (roleId) {
+                    permissions.push({
+                        id: roleId,
+                        allow: [discord_js_1.PermissionFlagsBits.ViewChannel, discord_js_1.PermissionFlagsBits.SendMessages, discord_js_1.PermissionFlagsBits.ReadMessageHistory]
+                    });
                 }
-                break;
-            case 'Administration':
-                // Only management roles
-                const adminRoles = ['Managing Partner', 'Senior Partner', 'Partner'];
-                for (const roleName of adminRoles) {
-                    const roleId = roleMap.get(roleName);
-                    if (roleId) {
-                        permissions.push({
-                            id: roleId,
-                            allow: [discord_js_1.PermissionFlagsBits.ViewChannel, discord_js_1.PermissionFlagsBits.SendMessages, discord_js_1.PermissionFlagsBits.ReadMessageHistory, discord_js_1.PermissionFlagsBits.ManageMessages]
-                        });
-                    }
+            }
+        }
+        if ('adminRoles' in categoryConfig && categoryConfig.adminRoles) {
+            for (const roleName of categoryConfig.adminRoles) {
+                const roleId = roleMap.get(roleName);
+                if (roleId) {
+                    permissions.push({
+                        id: roleId,
+                        allow: [discord_js_1.PermissionFlagsBits.ViewChannel, discord_js_1.PermissionFlagsBits.SendMessages, discord_js_1.PermissionFlagsBits.ReadMessageHistory, discord_js_1.PermissionFlagsBits.ManageMessages]
+                    });
                 }
-                break;
+            }
+        }
+        if ('archiveViewRoles' in categoryConfig && categoryConfig.archiveViewRoles) {
+            for (const roleName of categoryConfig.archiveViewRoles) {
+                const roleId = roleMap.get(roleName);
+                if (roleId) {
+                    permissions.push({
+                        id: roleId,
+                        allow: [discord_js_1.PermissionFlagsBits.ViewChannel, discord_js_1.PermissionFlagsBits.ReadMessageHistory],
+                        deny: [discord_js_1.PermissionFlagsBits.SendMessages] // View-only for archives
+                    });
+                }
+            }
         }
         return permissions;
     }
@@ -415,9 +515,9 @@ class AnarchyServerSetupService {
                 break;
             case 'modlog':
                 // View only, no sending
-                permissions.forEach(perm => {
+                permissions.forEach((perm) => {
                     if (perm.allow && Array.isArray(perm.allow)) {
-                        perm.allow = perm.allow.filter(p => p !== discord_js_1.PermissionFlagsBits.SendMessages);
+                        perm.allow = perm.allow.filter((p) => p !== discord_js_1.PermissionFlagsBits.SendMessages);
                     }
                 });
                 break;
@@ -429,6 +529,8 @@ class AnarchyServerSetupService {
         if (config._id) {
             await this.guildConfigRepository.update(config._id.toString(), {
                 feedbackChannelId: channelMap.get('feedback'),
+                defaultInformationChannelId: channelMap.get('welcome'),
+                defaultRulesChannelId: channelMap.get('rules'),
                 retainerChannelId: channelMap.get('signed-retainers'),
                 modlogChannelId: channelMap.get('modlog'),
                 applicationChannelId: channelMap.get('applications'),

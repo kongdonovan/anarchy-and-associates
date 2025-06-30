@@ -1,4 +1,4 @@
-import { Application, ApplicationAnswer } from '../../domain/entities/application';
+import { Application, ApplicationAnswer } from '../../validation';
 import { ApplicationRepository } from '../../infrastructure/repositories/application-repository';
 import { JobRepository } from '../../infrastructure/repositories/job-repository';
 import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
@@ -29,8 +29,8 @@ export declare class ApplicationService {
     private robloxService;
     private permissionService;
     constructor(applicationRepository: ApplicationRepository, jobRepository: JobRepository, staffRepository: StaffRepository, robloxService: RobloxService, permissionService: PermissionService);
-    submitApplication(request: ApplicationSubmissionRequest): Promise<Application>;
-    reviewApplication(context: PermissionContext, request: ApplicationReviewRequest): Promise<Application>;
+    submitApplication(request: unknown): Promise<Application>;
+    reviewApplication(context: PermissionContext, request: unknown): Promise<Application>;
     validateApplication(request: ApplicationSubmissionRequest): Promise<ApplicationValidationResult>;
     getApplicationById(context: PermissionContext, id: string): Promise<Application | null>;
     getApplicationsByJob(context: PermissionContext, jobId: string): Promise<Application[]>;

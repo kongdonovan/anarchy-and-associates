@@ -15,7 +15,7 @@ describe('ReminderService Unit Tests', () => {
     let mockDiscordClient;
     let mockUser;
     let mockChannel;
-    // Test data constants
+    // Test data constants - Valid Discord snowflakes (17-21 digits)
     const testGuildId = '123456789012345678';
     const testUserId = '234567890123456789';
     const testChannelId = '345678901234567890';
@@ -84,10 +84,11 @@ describe('ReminderService Unit Tests', () => {
             timeString: '2h'
         };
         const mockCreatedReminder = test_utils_1.TestUtils.generateMockReminder({
-            _id: test_utils_1.TestUtils.generateObjectId(),
+            _id: test_utils_1.TestUtils.generateObjectId().toString(),
             guildId: testGuildId,
             userId: testUserId,
             username: testUsername,
+            channelId: testChannelId,
             message: 'Test reminder message',
             scheduledFor: new Date(Date.now() + 2 * 60 * 60 * 1000), // 2 hours from now
             isActive: true,
@@ -124,7 +125,7 @@ describe('ReminderService Unit Tests', () => {
         });
         it('should associate reminder with case when channel has associated case', async () => {
             const mockCase = test_utils_1.TestUtils.generateMockCase({
-                _id: test_utils_1.TestUtils.generateObjectId(),
+                _id: test_utils_1.TestUtils.generateObjectId().toString(),
                 guildId: testGuildId,
                 channelId: testChannelId,
                 createdAt: new Date(),
@@ -256,7 +257,7 @@ describe('ReminderService Unit Tests', () => {
     });
     describe('cancelReminder', () => {
         const mockReminder = test_utils_1.TestUtils.generateMockReminder({
-            _id: test_utils_1.TestUtils.generateObjectId(),
+            _id: test_utils_1.TestUtils.generateObjectId().toString(),
             userId: testUserId,
             guildId: testGuildId,
             isActive: true,
@@ -284,7 +285,7 @@ describe('ReminderService Unit Tests', () => {
         it('should throw error when user tries to cancel another user\'s reminder', async () => {
             const otherUserReminder = {
                 ...mockReminder,
-                userId: 'other-user-id'
+                userId: '456789012345678901'
             };
             mockReminderRepository.findById.mockResolvedValue(otherUserReminder);
             await expect(reminderService.cancelReminder(testReminderId, testUserId))
@@ -396,7 +397,7 @@ describe('ReminderService Unit Tests', () => {
         it('should schedule future reminders correctly', async () => {
             const futureTime = new Date(Date.now() + 300000); // 5 minutes from now
             const futureReminder = test_utils_1.TestUtils.generateMockReminder({
-                _id: test_utils_1.TestUtils.generateObjectId(),
+                _id: test_utils_1.TestUtils.generateObjectId().toString(),
                 scheduledFor: futureTime,
                 isActive: true,
                 createdAt: new Date(),
@@ -646,7 +647,7 @@ describe('ReminderService Unit Tests', () => {
             // Mock successful creation for all requests
             mockReminderRepository.add.mockImplementation((data) => Promise.resolve(test_utils_1.TestUtils.generateMockReminder({
                 ...data,
-                _id: test_utils_1.TestUtils.generateObjectId()
+                _id: test_utils_1.TestUtils.generateObjectId().toString()
             })));
             // Create all reminders concurrently
             const results = await Promise.all(requests.map(request => reminderService.createReminder(request)));

@@ -31,6 +31,9 @@ import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-
 import { CaseCounterRepository } from '../../infrastructure/repositories/case-counter-repository';
 import { EmbedUtils } from '../../infrastructure/utils/embed-utils';
 import { logger } from '../../infrastructure/logger';
+import { AuditDecorators } from '../decorators/audit-decorators';
+import { Bot } from '../../infrastructure/bot/bot';
+import { AuditAction } from '../../domain/entities/audit-log';
 
 @Discord()
 @SlashGroup({ name: 'admin', description: 'Administrative commands for managing the bot' })
@@ -91,6 +94,7 @@ export class AdminCommands {
   }
 
   @Slash({ name: 'add', description: 'Grant admin privileges to a user' })
+  @AuditDecorators.AdminAction(AuditAction.PERMISSION_OVERRIDE, 'high')
   async addAdmin(
     @SlashOption({
       name: 'user',
@@ -146,6 +150,7 @@ export class AdminCommands {
   }
 
   @Slash({ name: 'remove', description: 'Revoke admin privileges from a user' })
+  @AuditDecorators.AdminAction(AuditAction.PERMISSION_OVERRIDE, 'high')
   async removeAdmin(
     @SlashOption({
       name: 'user',
@@ -210,6 +215,7 @@ export class AdminCommands {
   }
 
   @Slash({ name: 'grantrole', description: 'Grant admin privileges to a role' })
+  @AuditDecorators.AdminAction(AuditAction.PERMISSION_OVERRIDE, 'high')
   async grantRole(
     @SlashOption({
       name: 'role',
@@ -265,6 +271,7 @@ export class AdminCommands {
   }
 
   @Slash({ name: 'revokerole', description: 'Revoke admin privileges from a role' })
+  @AuditDecorators.AdminAction(AuditAction.PERMISSION_OVERRIDE, 'high')
   async revokeRole(
     @SlashOption({
       name: 'role',
@@ -320,6 +327,7 @@ export class AdminCommands {
   }
 
   @Slash({ name: 'admins', description: 'Display all current admins and admin roles' })
+  @AuditDecorators.AdminAction(AuditAction.STAFF_LIST_VIEWED, 'low')
   async listAdmins(interaction: CommandInteraction): Promise<void> {
     try {
       if (!interaction.guildId) {
@@ -351,32 +359,36 @@ export class AdminCommands {
         return;
       }
 
-      const embed = new EmbedBuilder()
-        .setColor('#0099FF')
-        .setTitle('🛡️ Administrator Information')
-        .setTimestamp();
-
+      const fields = [];
+      
       // Add admin users
       if (config.adminUsers.length > 0) {
         const userList = config.adminUsers.map(userId => `<@${userId}>`).join('\n');
-        embed.addFields({ name: 'Admin Users', value: userList, inline: false });
+        fields.push({ name: '§ Authorized Administrative Users', value: userList, inline: false });
       } else {
-        embed.addFields({ name: 'Admin Users', value: 'None configured', inline: false });
+        fields.push({ name: '§ Authorized Administrative Users', value: '*No administrative users configured*', inline: false });
       }
 
       // Add admin roles
       if (config.adminRoles.length > 0) {
         const roleList = config.adminRoles.map(roleId => `<@&${roleId}>`).join('\n');
-        embed.addFields({ name: 'Admin Roles', value: roleList, inline: false });
+        fields.push({ name: '§ Administrative Roles', value: roleList, inline: false });
       } else {
-        embed.addFields({ name: 'Admin Roles', value: 'None configured', inline: false });
+        fields.push({ name: '§ Administrative Roles', value: '*No administrative roles configured*', inline: false });
       }
 
       // Add guild owner
-      embed.addFields({ 
-        name: 'Guild Owner', 
-        value: `<@${interaction.guild?.ownerId}>`, 
+      fields.push({ 
+        name: '§ Server Proprietor', 
+        value: `<@${interaction.guild?.ownerId}> *(Full administrative privileges)*`, 
         inline: false 
+      });
+      
+      const embed = EmbedUtils.createAALegalEmbed({
+        title: '⚖️ Administrative Authority Registry',
+        description: 'The following individuals and roles possess administrative privileges within this legal establishment.',
+        color: 'secondary',
+        fields
       });
 
       await interaction.reply({ embeds: [embed] });
@@ -390,6 +402,7 @@ export class AdminCommands {
   }
 
   @Slash({ name: 'configure-permissions', description: 'Configure action permissions for roles' })
+  @AuditDecorators.AdminAction(AuditAction.PERMISSION_OVERRIDE, 'high')
   async setPermissionRole(
     @SlashOption({
       name: 'action',
@@ -459,7 +472,226 @@ export class AdminCommands {
     }
   }
 
+  @Slash({ name: 'setdefaultinfo', description: 'Set the default information channel for the server' })
+  @AuditDecorators.AdminAction(AuditAction.PERMISSION_OVERRIDE, 'medium')
+  async setDefaultInfoChannel(
+    @SlashOption({
+      name: 'channel',
+      description: 'The channel to set as default information channel',
+      type: ApplicationCommandOptionType.Channel,
+      required: true,
+    })
+    channel: any,
+    interaction: CommandInteraction
+  ): Promise<void> {
+    try {
+      if (!interaction.guildId) {
+        await interaction.reply({
+          embeds: [this.createErrorEmbed('This command can only be used in a server.')],
+          ephemeral: true,
+        });
+        return;
+      }
+
+      const hasPermission = await this.checkAdminPermission(interaction);
+      if (!hasPermission) {
+        await interaction.reply({
+          embeds: [this.createErrorEmbed('You need admin permissions to set the default information channel.')],
+          ephemeral: true,
+        });
+        return;
+      }
+
+      // Verify it's a text channel
+      if (channel.type !== 0) { // 0 is GuildText
+        await interaction.reply({
+          embeds: [this.createErrorEmbed('Please select a text channel.')],
+          ephemeral: true,
+        });
+        return;
+      }
+
+      await interaction.deferReply({ ephemeral: true });
+
+      // Update guild config
+      const config = await this.guildConfigRepository.ensureGuildConfig(interaction.guildId);
+      if (config._id) {
+        await this.guildConfigRepository.update(config._id.toString(), {
+          defaultInformationChannelId: channel.id
+        });
+
+        // Check if there's already an information message in this channel
+        const informationChannelService = Bot.getInformationChannelService();
+        const existingInfo = await informationChannelService.getInformationChannel(interaction.guildId, channel.id);
+
+        let message = `Successfully set <#${channel.id}> as the default information channel.`;
+        
+        if (!existingInfo) {
+          // Create a default information message
+          try {
+            await informationChannelService.updateInformationChannel({
+              guildId: interaction.guildId,
+              channelId: channel.id,
+              title: 'Server Information',
+              content: `Welcome to **${interaction.guild?.name}**!
+
+This channel contains important information about our server.
+
+**Quick Links**
+• Use the bot commands to interact with our services
+• Check out other channels for specific topics
+• Contact staff if you need assistance
+
+**Getting Started**
+Feel free to explore the server and get involved in our community!
+
+*This is an automatically generated information message. Server administrators can customize it using \`/info set\`.*`,
+              color: 0x0099FF, // Nice blue color
+              footer: `Last updated by ${interaction.user.tag}`,
+              updatedBy: interaction.user.id
+            });
+            
+            message += '\n\n✅ A default information message has been created. You can customize it using `/info set`.';
+            logger.info(`Default information message created in channel ${channel.id} for guild ${interaction.guildId}`);
+          } catch (error) {
+            logger.error('Failed to create default information message:', error);
+            message += '\n\n⚠️ Failed to create default information message. Please use `/info set` to create one manually.';
+          }
+        } else {
+          message += '\n\n✅ An information message already exists in this channel.';
+        }
+
+        await interaction.editReply({
+          embeds: [this.createSuccessEmbed(message)]
+        });
+
+        logger.info(`Default information channel set to ${channel.id} by ${interaction.user.id} in guild ${interaction.guildId}`);
+      } else {
+        await interaction.editReply({
+          embeds: [this.createErrorEmbed('Failed to update guild configuration.')]
+        });
+      }
+    } catch (error) {
+      logger.error('Error in set default info channel command:', error);
+      const errorEmbed = this.createErrorEmbed('An error occurred while setting the default information channel.');
+      
+      if (interaction.deferred) {
+        await interaction.editReply({ embeds: [errorEmbed] });
+      } else {
+        await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+      }
+    }
+  }
+
+  @Slash({ name: 'setdefaultrules', description: 'Set the default rules channel for the server' })
+  @AuditDecorators.AdminAction(AuditAction.PERMISSION_OVERRIDE, 'medium')
+  async setDefaultRulesChannel(
+    @SlashOption({
+      name: 'channel',
+      description: 'The channel to set as default rules channel',
+      type: ApplicationCommandOptionType.Channel,
+      required: true,
+    })
+    channel: any,
+    interaction: CommandInteraction
+  ): Promise<void> {
+    try {
+      if (!interaction.guildId) {
+        await interaction.reply({
+          embeds: [this.createErrorEmbed('This command can only be used in a server.')],
+          ephemeral: true,
+        });
+        return;
+      }
+
+      const hasPermission = await this.checkAdminPermission(interaction);
+      if (!hasPermission) {
+        await interaction.reply({
+          embeds: [this.createErrorEmbed('You need admin permissions to set the default rules channel.')],
+          ephemeral: true,
+        });
+        return;
+      }
+
+      // Verify it's a text channel
+      if (channel.type !== 0) { // 0 is GuildText
+        await interaction.reply({
+          embeds: [this.createErrorEmbed('Please select a text channel.')],
+          ephemeral: true,
+        });
+        return;
+      }
+
+      await interaction.deferReply({ ephemeral: true });
+
+      // Update guild config
+      const config = await this.guildConfigRepository.ensureGuildConfig(interaction.guildId);
+      if (config._id) {
+        await this.guildConfigRepository.update(config._id.toString(), {
+          defaultRulesChannelId: channel.id
+        });
+
+        // Check if there's already a rules message in this channel
+        const rulesChannelService = Bot.getRulesChannelService();
+        const existingRules = await rulesChannelService.getRulesChannel(interaction.guildId, channel.id);
+
+        let message = `Successfully set <#${channel.id}> as the default rules channel.`;
+        
+        if (!existingRules) {
+          // Create default rules
+          try {
+            const { RulesChannelService } = await import('../../application/services/rules-channel-service');
+            const template = RulesChannelService.generateDefaultRules(
+              interaction.guild?.name === 'Anarchy & Associates' ? 'anarchy' : 'general'
+            );
+
+            await rulesChannelService.updateRulesChannel({
+              guildId: interaction.guildId,
+              channelId: channel.id,
+              title: template.title || '📋 Server Rules',
+              content: template.content || 'Please follow these rules.',
+              rules: template.rules || [],
+              color: template.color,
+              footer: template.footer,
+              showNumbers: template.showNumbers,
+              additionalFields: template.additionalFields,
+              updatedBy: interaction.user.id
+            });
+            
+            message += '\n\n✅ Default rules have been created. You can customize them using `/rules set` and `/rules addrule`.';
+            logger.info(`Default rules created in channel ${channel.id} for guild ${interaction.guildId}`);
+          } catch (error) {
+            logger.error('Failed to create default rules:', error);
+            message += '\n\n⚠️ Failed to create default rules. Please use `/rules set` to create them manually.';
+          }
+        } else {
+          message += '\n\n✅ Rules already exist in this channel.';
+        }
+
+        await interaction.editReply({
+          embeds: [this.createSuccessEmbed(message)]
+        });
+
+        logger.info(`Default rules channel set to ${channel.id} by ${interaction.user.id} in guild ${interaction.guildId}`);
+      } else {
+        await interaction.editReply({
+          embeds: [this.createErrorEmbed('Failed to update guild configuration.')]
+        });
+      }
+    } catch (error) {
+      logger.error('Error in set default rules channel command:', error);
+      const errorEmbed = this.createErrorEmbed('An error occurred while setting the default rules channel.');
+      
+      if (interaction.deferred) {
+        await interaction.editReply({ embeds: [errorEmbed] });
+      } else {
+        await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+      }
+    }
+  }
+
   @Slash({ name: 'debug_collection', description: 'View database collection contents' })
+  @AuditDecorators.AdminAction(AuditAction.SYSTEM_REPAIR, 'medium')
   async debugCollection(
     @SlashOption({
       name: 'collection',
@@ -585,6 +817,7 @@ export class AdminCommands {
   }
 
   @Slash({ name: 'debug_wipe_collections', description: 'Emergency database wipe (DANGEROUS)' })
+  @AuditDecorators.AdminAction(AuditAction.SYSTEM_REPAIR, 'critical')
   async debugWipeCollections(interaction: CommandInteraction): Promise<void> {
     try {
       if (!interaction.guildId) {
@@ -729,6 +962,7 @@ export class AdminCommands {
   }
 
   @Slash({ name: 'setupserver', description: 'COMPLETE SERVER WIPE + SETUP (DESTROYS ALL CHANNELS/ROLES)' })
+  @AuditDecorators.AdminAction(AuditAction.SYSTEM_REPAIR, 'critical')
   async setupServer(interaction: CommandInteraction): Promise<void> {
     try {
       if (!interaction.guildId) {

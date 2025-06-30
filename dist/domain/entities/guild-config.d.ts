@@ -7,6 +7,8 @@ export interface GuildConfig extends BaseEntity {
     caseArchiveCategoryId?: string;
     modlogChannelId?: string;
     applicationChannelId?: string;
+    defaultInformationChannelId?: string;
+    defaultRulesChannelId?: string;
     clientRoleId?: string;
     permissions: {
         admin: string[];

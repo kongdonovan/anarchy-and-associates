@@ -1,93 +1,93 @@
 {
 	"meta": {
-		"generatedAt": "2025-06-23T20:28:00.721Z",
+		"generatedAt": "2025-06-27T22:44:22.985Z",
 		"tasksAnalyzed": 10,
 		"totalTasks": 10,
 		"analysisCount": 10,
 		"thresholdScore": 5,
 		"projectName": "Task Master",
-		"usedResearch": false
+		"usedResearch": true
 	},
 	"complexityAnalysis": [
 		{
 			"taskId": 1,
-			"taskTitle": "Setup Project Foundation & Architecture",
-			"complexityScore": 4,
+			"taskTitle": "Create Comprehensive Backup and Setup Feature Branch",
+			"complexityScore": 3,
 			"recommendedSubtasks": 4,
-			"expansionPrompt": "Break down project initialization into: 1) Node.js/TypeScript setup with dependencies, 2) Clean Architecture directory structure creation, 3) Development tooling configuration (ESLint, Prettier, TypeScript), 4) Docker and environment configuration setup",
-			"reasoning": "Foundation setup is moderately complex due to multiple moving parts but follows established patterns. Each component (package setup, architecture, tooling, containerization) represents a distinct area of work."
+			"expansionPrompt": "Break down the backup and feature branch creation process into: 1) Create and verify git archive backup, 2) Create feature branch with proper naming convention, 3) Document current state and dependencies, 4) Establish baseline metrics and rollback plan",
+			"reasoning": "Straightforward git operations with documentation requirements. Low technical complexity but important for project safety."
 		},
 		{
 			"taskId": 2,
-			"taskTitle": "Implement Core Infrastructure Components",
-			"complexityScore": 6,
-			"recommendedSubtasks": 5,
-			"expansionPrompt": "Divide infrastructure into: 1) MongoDB connection client with error handling, 2) BaseMongoRepository with generic CRUD operations, 3) Winston logger configuration and setup, 4) Core type definitions and interfaces, 5) Integration testing for all components",
-			"reasoning": "Moderate-high complexity due to database abstraction layer design, generic repository pattern implementation, and ensuring proper error handling across multiple infrastructure components."
+			"taskTitle": "Define Custom Error Type Hierarchy",
+			"complexityScore": 5,
+			"recommendedSubtasks": 6,
+			"expansionPrompt": "Expand into: 1) Create base custom error class with context preservation, 2) Implement BusinessRuleError and ValidationError classes, 3) Implement PermissionError and NotFoundError classes, 4) Implement DatabaseError class, 5) Create error utility functions and factories, 6) Implement error serialization for logging",
+			"reasoning": "Requires careful design of error hierarchy, context preservation, and integration with existing infrastructure. Multiple error types with consistent patterns."
 		},
 		{
 			"taskId": 3,
-			"taskTitle": "Implement Configuration & Permissions System",
-			"complexityScore": 7,
-			"recommendedSubtasks": 6,
-			"expansionPrompt": "Split into: 1) GuildConfig model and database schema, 2) GuildConfigRepository implementation, 3) Permission validation service logic, 4) Admin management commands (/admin add, remove, etc.), 5) Configuration commands (/config set, view, etc.), 6) Role-based access control integration",
-			"reasoning": "High complexity due to permission system design requiring careful security considerations, role hierarchy management, and integration with Discord's permission model."
+			"taskTitle": "Optimize Test Suite - Remove Non-Business Logic Tests",
+			"complexityScore": 4,
+			"recommendedSubtasks": 5,
+			"expansionPrompt": "Break down into: 1) Categorize and document all 31 test files, 2) Remove infrastructure and performance tests, 3) Remove security, concurrency, and E2E tests, 4) Update jest configuration and test scripts, 5) Verify remaining tests and measure performance improvement",
+			"reasoning": "Requires careful identification of test types and safe removal without breaking remaining tests. Configuration updates needed across multiple files."
 		},
 		{
 			"taskId": 4,
-			"taskTitle": "Implement Staff Management System",
-			"complexityScore": 8,
-			"recommendedSubtasks": 7,
-			"expansionPrompt": "Break into: 1) Staff model with role hierarchy definition, 2) StaffRepository with custom queries, 3) StaffService business logic layer, 4) Discord role synchronization logic, 5) Staff management commands implementation, 6) Audit logging system, 7) Permission enforcement and validation",
-			"reasoning": "High complexity due to role hierarchy management, Discord API integration for role sync, audit logging requirements, and complex business logic for staff operations."
+			"taskTitle": "Remove Redundant Files and Clean Codebase",
+			"complexityScore": 4,
+			"recommendedSubtasks": 5,
+			"expansionPrompt": "Expand into: 1) Delete backup files and fix scripts, 2) Consolidate dev-server.ts and simple-dev.ts, 3) Update package.json references, 4) Run ts-unused-exports to find orphaned code, 5) Clean up unused imports and verify build",
+			"reasoning": "Involves file deletion, consolidation, and dependency checking. Risk of breaking imports requires careful verification."
 		},
 		{
 			"taskId": 5,
-			"taskTitle": "Implement Job Management System",
-			"complexityScore": 6,
-			"recommendedSubtasks": 5,
-			"expansionPrompt": "Divide into: 1) Job model with custom questions JSON schema, 2) JobRepository with filtering and search, 3) Job management commands with pagination, 4) Custom application questions system, 5) Automatic role cleanup automation",
-			"reasoning": "Moderate-high complexity due to dynamic question system, pagination logic, and automated role management, but follows established CRUD patterns."
+			"taskTitle": "Create Unified Validation Service with Strategy Pattern",
+			"complexityScore": 7,
+			"recommendedSubtasks": 8,
+			"expansionPrompt": "Break down into: 1) Design ValidationStrategy interface and result types, 2) Create UnifiedValidationService with strategy management, 3) Implement BusinessRuleValidationStrategy, 4) Implement CommandValidationStrategy, 5) Implement CrossEntityValidationStrategy, 6) Create validation context object, 7) Migrate existing validation logic, 8) Update all service dependencies",
+			"reasoning": "Complex architectural change requiring strategy pattern implementation, migration of logic from three services, and updating all dependent code. High risk of breaking existing functionality."
 		},
 		{
 			"taskId": 6,
-			"taskTitle": "Implement Application System with Roblox Integration",
-			"complexityScore": 9,
-			"recommendedSubtasks": 8,
-			"expansionPrompt": "Split into: 1) Application model and repository, 2) Noblox.js integration and Roblox API wrapper, 3) Dynamic job selection dropdown, 4) Modal generation based on job questions, 5) Application review workflow, 6) Accept/decline button interactions, 7) DM notification system, 8) Duplicate prevention and validation logic",
-			"reasoning": "Very high complexity due to external API integration, dynamic UI generation, complex workflow management, and multiple interaction patterns with error handling."
+			"taskTitle": "Implement Unified Role Management Service",
+			"complexityScore": 8,
+			"recommendedSubtasks": 10,
+			"expansionPrompt": "Expand into: 1) Design UnifiedRoleService architecture, 2) Implement Discord role change tracking, 3) Implement database synchronization logic, 4) Enforce 2-role maximum business rule, 5) Implement hiring workflow, 6) Implement firing workflow, 7) Implement promotion/demotion logic, 8) Integrate channel permissions, 9) Handle role conflicts and precedence, 10) Migrate from three existing services",
+			"reasoning": "Most complex consolidation involving real-time Discord integration, business rule enforcement, and migration from three services. Multiple workflows and edge cases to handle."
 		},
 		{
 			"taskId": 7,
-			"taskTitle": "Implement Retainer Agreement System",
-			"complexityScore": 7,
-			"recommendedSubtasks": 6,
-			"expansionPrompt": "Break into: 1) Retainer model and database schema, 2) RetainerRepository implementation, 3) DM-based signature workflow, 4) Discord modal forms for agreements, 5) Automatic client role assignment, 6) Agreement archival and formatting system",
-			"reasoning": "High complexity due to DM workflow management, legal document handling, and automated role assignment requiring careful state management."
+			"taskTitle": "Implement Global Error Handling Middleware",
+			"complexityScore": 6,
+			"recommendedSubtasks": 7,
+			"expansionPrompt": "Break down into: 1) Create error handler middleware architecture, 2) Implement Discord command error interception, 3) Create consistent error embed formatting, 4) Update existing try-catch blocks to use custom errors, 5) Implement error context preservation, 6) Integrate with Winston logger, 7) Test with all command categories",
+			"reasoning": "Requires middleware implementation for Discord.js, updating all 77+ commands, and ensuring consistent user experience. Integration with existing logging infrastructure adds complexity."
 		},
 		{
 			"taskId": 8,
-			"taskTitle": "Implement Case Management System",
-			"complexityScore": 9,
+			"taskTitle": "Create Audit Logging Middleware with Decorator Pattern",
+			"complexityScore": 7,
 			"recommendedSubtasks": 8,
-			"expansionPrompt": "Divide into: 1) Case model with sequential ID generation, 2) CaseRepository with advanced filtering, 3) Automatic channel creation and management, 4) Lawyer assignment and reassignment logic, 5) Case lifecycle status management, 6) Interactive buttons and UI components, 7) Channel permissions and archival, 8) Tabbed information display system",
-			"reasoning": "Very high complexity due to automated channel management, complex case lifecycle, interactive UI components, and Discord permission system integration."
+			"expansionPrompt": "Expand into: 1) Create @AuditLog decorator implementation, 2) Design audit context capture system, 3) Standardize audit log format, 4) Apply decorator to admin commands, 5) Apply decorator to staff and case commands, 6) Apply decorator to remaining command categories, 7) Remove redundant audit code from services, 8) Integrate with AuditLogRepository",
+			"reasoning": "Decorator pattern implementation with TypeScript, applying to 77+ commands across 11 command files. Requires careful context capture and integration with existing repository."
 		},
 		{
 			"taskId": 9,
-			"taskTitle": "Implement Feedback & Reminder Systems",
-			"complexityScore": 6,
-			"recommendedSubtasks": 5,
-			"expansionPrompt": "Split into: 1) Feedback model with star rating system, 2) FeedbackRepository with search capabilities, 3) Staff performance metrics aggregation, 4) Reminder system with time parsing, 5) Reminder delivery and timeout management",
-			"reasoning": "Moderate-high complexity due to time parsing logic, performance metrics calculation, and timeout management requiring careful memory and error handling."
+			"taskTitle": "Implement Lightweight Unit of Work Pattern",
+			"complexityScore": 7,
+			"recommendedSubtasks": 8,
+			"expansionPrompt": "Break down into: 1) Design UnitOfWork interface for MongoDB, 2) Implement transaction coordination logic, 3) Integrate with BaseMongoRepository, 4) Implement rollback capability, 5) Update staff management operations, 6) Update case creation operations, 7) Handle transaction error scenarios, 8) Test transaction isolation",
+			"reasoning": "Complex pattern implementation with MongoDB transactions, requiring updates to multiple complex operations. Transaction management and rollback scenarios add significant complexity."
 		},
 		{
 			"taskId": 10,
-			"taskTitle": "Implement System Utilities & Maintenance",
-			"complexityScore": 8,
+			"taskTitle": "Final Integration Testing and Documentation Update",
+			"complexityScore": 6,
 			"recommendedSubtasks": 7,
-			"expansionPrompt": "Break into: 1) Database repair and synchronization routines, 2) Discord-database sync logic, 3) Metrics aggregation and calculation, 4) Dynamic help system with API introspection, 5) Debug commands with safety confirmations, 6) Health monitoring and system status, 7) Dry-run mode implementation",
-			"reasoning": "High complexity due to multiple repair routines, system introspection requirements, metrics calculation across multiple data sources, and safety mechanisms for destructive operations."
+			"expansionPrompt": "Expand into: 1) Run full regression tests on all Discord commands, 2) Conduct performance testing and metrics collection, 3) Update CLAUDE.md documentation, 4) Create developer migration guide, 5) Prepare staging deployment, 6) Conduct user acceptance testing, 7) Create rollback procedures and deployment plan",
+			"reasoning": "Comprehensive testing across entire refactored system, documentation updates, and deployment preparation. Requires coordination and validation of all previous work."
 		}
 	]
 }

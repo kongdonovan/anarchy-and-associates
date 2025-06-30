@@ -1,8 +1,8 @@
 import { Guild, Role } from 'discord.js';
 import { JobRepository } from '../../infrastructure/repositories/job-repository';
 import { AuditLogRepository } from '../../infrastructure/repositories/audit-log-repository';
-import { AuditAction } from '../../domain/entities/audit-log';
 import { logger } from '../../infrastructure/logger';
+import { AuditAction } from '../../domain/entities/audit-log';
 
 export interface CleanupResult {
   success: boolean;
@@ -33,7 +33,7 @@ export class JobCleanupService {
       const jobs = await this.jobRepository.findJobsNeedingRoleCleanup(guildId);
       
       return jobs.map(job => ({
-        id: job._id?.toHexString() || 'unknown',
+        id: job._id || 'unknown',
         title: job.title,
         roleId: job.roleId,
         closedAt: job.closedAt,
@@ -184,7 +184,7 @@ export class JobCleanupService {
       const allJobs = await this.jobRepository.findByGuildId(guildId);
       const otherJobsUsingRole = allJobs.filter(job => 
         job.roleId === roleId && 
-        job._id?.toHexString() !== excludeJobId &&
+        job._id !== excludeJobId &&
         job.isOpen
       );
 
@@ -264,7 +264,7 @@ export class JobCleanupService {
             // Close the expired job
             const updatedJob = await this.jobRepository.closeJob(
               guildId,
-              job._id?.toHexString() || '',
+              job._id || '',
               'system'
             );
 
@@ -277,7 +277,7 @@ export class JobCleanupService {
                   before: { status: 'open' },
                   after: { status: 'closed' },
                   metadata: {
-                    jobId: job._id?.toHexString(),
+                    jobId: job._id,
                     title: job.title,
                     reason: 'expired',
                     daysOpen: Math.floor((Date.now() - job.createdAt!.getTime()) / (1000 * 60 * 60 * 24)),

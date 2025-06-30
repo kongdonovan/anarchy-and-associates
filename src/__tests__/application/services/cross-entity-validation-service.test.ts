@@ -1,4 +1,5 @@
-import { CrossEntityValidationService, ValidationIssue, ValidationContext } from '../../../application/services/cross-entity-validation-service';
+import { CrossEntityValidationService } from '../../../application/services/cross-entity-validation-service';
+import type { ValidationIssue, ValidationContext } from '../../../application/services/cross-entity-validation-service';
 import { StaffRepository } from '../../../infrastructure/repositories/staff-repository';
 import { CaseRepository } from '../../../infrastructure/repositories/case-repository';
 import { ApplicationRepository } from '../../../infrastructure/repositories/application-repository';
@@ -8,17 +9,12 @@ import { FeedbackRepository } from '../../../infrastructure/repositories/feedbac
 import { ReminderRepository } from '../../../infrastructure/repositories/reminder-repository';
 import { AuditLogRepository } from '../../../infrastructure/repositories/audit-log-repository';
 // import { BusinessRuleValidationService } from '../../../application/services/business-rule-validation-service';
-import { Staff } from '../../../domain/entities/staff';
-import { Case } from '../../../domain/entities/case';
-import { Application } from '../../../domain/entities/application';
-import { Job } from '../../../domain/entities/job';
-import { Retainer, RetainerStatus } from '../../../domain/entities/retainer';
-import { Feedback } from '../../../domain/entities/feedback';
-import { Reminder } from '../../../domain/entities/reminder';
-import { StaffRole } from '../../../domain/entities/staff-role';
-import { logger } from '../../../infrastructure/logger';
+import { Staff, Case, Application, Job, Retainer, Feedback, Reminder } from '../../../validation';
+import { TestUtils } from '../../helpers/test-utils';
 import { ObjectId } from 'mongodb';
-import { CaseStatus, CasePriority } from '../../../domain/entities/case';
+// Remove StaffRole import - we'll use string literals
+import { logger } from '../../../infrastructure/logger';
+// Remove CaseStatus and CasePriority imports - we'll use string literals
 
 // Mock all dependencies
 jest.mock('../../../infrastructure/repositories/staff-repository');
@@ -78,15 +74,15 @@ describe('CrossEntityValidationService', () => {
 
   // Helper function to create valid Case objects
   const createMockCase = (overrides: Partial<Case> = {}): Case => ({
-    _id: new ObjectId(),
-    guildId: 'guild1',
-    caseNumber: 'AA-2024-001-testclient',
-    clientId: 'client1',
+    _id: TestUtils.generateObjectId().toString(),
+    guildId: '123456789012345678',
+    caseNumber: 'AA-2024-0001-testclient',
+    clientId: '123456789012345678',
     clientUsername: 'testclient',
     title: 'Test Case',
     description: 'Test case description',
-    status: CaseStatus.IN_PROGRESS,
-    priority: CasePriority.MEDIUM,
+    status: 'in-progress',
+    priority: 'medium',
     assignedLawyerIds: [],
     documents: [],
     notes: [],
@@ -97,19 +93,13 @@ describe('CrossEntityValidationService', () => {
 
   describe('Staff Validation Rules', () => {
     it('should detect invalid staff status', async () => {
-      const invalidStaff: Staff = {
-        _id: new ObjectId(),
-        userId: 'user1',
-        guildId: 'guild1',
+      const invalidStaff: Staff = TestUtils.generateMockStaff({
+        userId: '123456789012345678',
+        guildId: '123456789012345678',
         robloxUsername: 'user1',
-        role: StaffRole.SENIOR_PARTNER,
-        hiredAt: new Date(),
-        hiredBy: 'admin',
-        promotionHistory: [],
-        status: 'invalid_status' as any,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
+        role: 'Senior Partner',
+        status: 'invalid_status' as any
+      });
 
       const issues = await service.validateBeforeOperation(invalidStaff, 'staff', 'update');
 
@@ -120,26 +110,20 @@ describe('CrossEntityValidationService', () => {
     });
 
     it('should validate staff role consistency with case assignments', async () => {
-      const paralegalStaff: Staff = {
-        _id: new ObjectId(),
-        userId: 'user1',
-        guildId: 'guild1',
+      const paralegalStaff: Staff = TestUtils.generateMockStaff({
+        userId: '234567890123456789',
+        guildId: '123456789012345678',
         robloxUsername: 'user1',
-        role: StaffRole.PARALEGAL,
-        hiredAt: new Date(),
-        hiredBy: 'admin',
-        promotionHistory: [],
-        status: 'active',
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
+        role: 'Paralegal',
+        status: 'active'
+      });
 
       // Mock paralegal as lead attorney on cases (invalid)
       mockCaseRepo.findByFilters.mockImplementation(async (filters: any) => {
-        if (filters.leadAttorneyId === 'user1') {
+        if (filters.leadAttorneyId === '234567890123456789') {
           return [createMockCase({
-            leadAttorneyId: 'user1',
-            assignedLawyerIds: ['user1']
+            leadAttorneyId: '234567890123456789',
+            assignedLawyerIds: ['234567890123456789']
           })];
         }
         return [];
@@ -154,24 +138,18 @@ describe('CrossEntityValidationService', () => {
     });
 
     it('should detect excessive case workload', async () => {
-      const juniorAssociate: Staff = {
-        _id: new ObjectId(),
-        userId: 'user1',
-        guildId: 'guild1',
+      const juniorAssociate: Staff = TestUtils.generateMockStaff({
+        userId: '345678901234567890',
+        guildId: '123456789012345678',
         robloxUsername: 'user1',
-        role: StaffRole.JUNIOR_ASSOCIATE,
-        hiredAt: new Date(),
-        hiredBy: 'admin',
-        promotionHistory: [],
-        status: 'active',
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
+        role: 'Junior Associate',
+        status: 'active'
+      });
 
       // Mock 10 active cases (exceeds limit of 8 for junior associate)
-      const mockCases = Array.from({ length: 10 }, (_, i) => createMockCase({
-        _id: `case${i}` as any,
-        assignedLawyerIds: ['user1']
+      const mockCases = Array.from({ length: 10 }, () => createMockCase({
+        _id: TestUtils.generateObjectId().toString(),
+        assignedLawyerIds: ['345678901234567890']
       }));
 
       mockCaseRepo.findByFilters.mockResolvedValue(mockCases);
@@ -187,28 +165,23 @@ describe('CrossEntityValidationService', () => {
     });
 
     it('should detect circular references in promotion history', async () => {
-      const staff: Staff = {
-        _id: new ObjectId(),
-        userId: 'user1',
-        guildId: 'guild1',
+      const staff: Staff = TestUtils.generateMockStaff({
+        userId: '456789012345678901',
+        guildId: '123456789012345678',
         robloxUsername: 'user1',
-        role: StaffRole.SENIOR_PARTNER,
-        hiredAt: new Date(),
-        hiredBy: 'admin',
+        role: 'Senior Partner',
         promotionHistory: [
           {
-            fromRole: StaffRole.JUNIOR_ASSOCIATE,
-            toRole: StaffRole.SENIOR_ASSOCIATE,
-            promotedBy: 'user1', // Self-promotion!
+            fromRole: 'Junior Associate',
+            toRole: 'Senior Associate',
+            promotedBy: '456789012345678901', // Self-promotion!
             promotedAt: new Date(),
             reason: 'test',
             actionType: 'promotion' as const
           }
         ],
-        status: 'active',
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
+        status: 'active'
+      });
 
       const issues = await service.validateBeforeOperation(staff, 'staff', 'update');
 
@@ -221,8 +194,8 @@ describe('CrossEntityValidationService', () => {
   describe('Case Validation Rules', () => {
     it('should detect non-existent lead attorney', async () => {
       const caseEntity = createMockCase({
-        leadAttorneyId: 'nonexistent',
-        assignedLawyerIds: ['lawyer1']
+        leadAttorneyId: '999999999999999999',
+        assignedLawyerIds: ['567890123456789012']
       });
 
       mockStaffRepo.findByUserId.mockResolvedValue(null);
@@ -238,7 +211,7 @@ describe('CrossEntityValidationService', () => {
 
     it('should detect inactive assigned lawyers', async () => {
       const caseEntity = createMockCase({
-        assignedLawyerIds: ['lawyer1', 'lawyer2']
+        assignedLawyerIds: ['678901234567890123', '789012345678901234']
       });
 
       // Clear any previous mocks
@@ -246,23 +219,19 @@ describe('CrossEntityValidationService', () => {
       
       // Set up mocks for each lawyer
       mockStaffRepo.findByUserId
-        .mockImplementation((userId: string) => {
-          if (userId === 'lawyer1') {
-            return Promise.resolve({
-              _id: new ObjectId(),
-              userId: 'lawyer1',
-              status: 'active',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            } as Staff);
-          } else if (userId === 'lawyer2') {
-            return Promise.resolve({
-              _id: new ObjectId(),
-              userId: 'lawyer2',
-              status: 'terminated',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            } as Staff);
+        .mockImplementation((_guildId: unknown, userId: unknown) => {
+          if (userId === '678901234567890123') {
+            return Promise.resolve(TestUtils.generateMockStaff({
+              _id: TestUtils.generateObjectId().toString(),
+              userId: '678901234567890123',
+              status: 'active'
+            }));
+          } else if (userId === '789012345678901234') {
+            return Promise.resolve(TestUtils.generateMockStaff({
+              _id: TestUtils.generateObjectId().toString(),
+              userId: '789012345678901234',
+              status: 'terminated'
+            }));
           }
           return Promise.resolve(null);
         });
@@ -280,16 +249,16 @@ describe('CrossEntityValidationService', () => {
       const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
 
       const caseEntity = createMockCase({
-        assignedLawyerIds: ['lawyer1'],
-        status: CaseStatus.CLOSED,
+        assignedLawyerIds: ['890123456789012345'],
+        status: 'closed',
         createdAt: now,
         closedAt: yesterday, // Closed before created!
         updatedAt: now
       });
 
       mockStaffRepo.findByUserId.mockResolvedValue({
-        _id: new ObjectId(),
-        userId: 'lawyer1',
+        _id: TestUtils.generateObjectId().toString(),
+        userId: '890123456789012345',
         hiredAt: tomorrow, // Hired after case created!
         status: 'active',
         createdAt: new Date(),
@@ -313,7 +282,7 @@ describe('CrossEntityValidationService', () => {
 
     it('should validate case channel existence', async () => {
       const caseEntity = createMockCase({
-        channelId: 'channel1',
+        channelId: '901234567890123456',
         assignedLawyerIds: []
       });
 
@@ -328,7 +297,7 @@ describe('CrossEntityValidationService', () => {
       };
 
       const context: ValidationContext = {
-        guildId: 'guild1',
+        guildId: '123456789012345678',
         client: mockClient as any,
         validationLevel: 'strict'
       };
@@ -346,10 +315,10 @@ describe('CrossEntityValidationService', () => {
   describe('Application Validation Rules', () => {
     it('should detect missing job reference', async () => {
       const application: Application = {
-        _id: new ObjectId(),
-        guildId: 'guild1',
-        jobId: 'nonexistent',
-        applicantId: 'user1',
+        _id: TestUtils.generateObjectId().toString(),
+        guildId: '123456789012345678',
+        jobId: '999999999999999999',
+        applicantId: '012345678901234567',
         robloxUsername: 'user1',
         status: 'pending',
         answers: [],
@@ -370,10 +339,10 @@ describe('CrossEntityValidationService', () => {
 
     it('should detect pending applications for closed jobs', async () => {
       const application: Application = {
-        _id: new ObjectId(),
-        guildId: 'guild1',
-        jobId: 'job1',
-        applicantId: 'user1',
+        _id: TestUtils.generateObjectId().toString(),
+        guildId: '123456789012345678',
+        jobId: '111111111111111111',
+        applicantId: '222222222222222222',
         robloxUsername: 'user1',
         status: 'pending',
         answers: [],
@@ -382,7 +351,7 @@ describe('CrossEntityValidationService', () => {
       };
 
       mockJobRepo.findById.mockResolvedValue({
-        _id: new ObjectId(),
+        _id: TestUtils.generateObjectId().toString(),
         isOpen: false, // Job is closed
         createdAt: new Date(),
         updatedAt: new Date()
@@ -402,10 +371,10 @@ describe('CrossEntityValidationService', () => {
       const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
       const application: Application = {
-        _id: new ObjectId(),
-        guildId: 'guild1',
-        jobId: 'job1',
-        applicantId: 'user1',
+        _id: TestUtils.generateObjectId().toString(),
+        guildId: '123456789012345678',
+        jobId: '111111111111111111',
+        applicantId: '222222222222222222',
         robloxUsername: 'user1',
         status: 'accepted',
         answers: [],
@@ -416,7 +385,7 @@ describe('CrossEntityValidationService', () => {
       };
 
       mockJobRepo.findById.mockResolvedValue({
-        _id: new ObjectId(),
+        _id: TestUtils.generateObjectId().toString(),
         isOpen: true,
         createdAt: new Date(),
         updatedAt: new Date()
@@ -438,13 +407,13 @@ describe('CrossEntityValidationService', () => {
   describe('Retainer Validation Rules', () => {
     it('should detect non-existent lawyer in retainer', async () => {
       const retainer: Retainer = {
-        _id: new ObjectId(),
-        guildId: 'guild1',
-        clientId: 'client1',
-        lawyerId: 'nonexistent',
+        _id: TestUtils.generateObjectId().toString(),
+        guildId: '123456789012345678',
+        clientId: '333333333333333333',
+        lawyerId: '999999999999999999',
         
         agreementTemplate: 'test',
-        status: RetainerStatus.SIGNED,
+        status: 'signed',
         createdAt: new Date(),
         updatedAt: new Date()
       };
@@ -461,20 +430,20 @@ describe('CrossEntityValidationService', () => {
 
     it('should detect inactive lawyer in retainer', async () => {
       const retainer: Retainer = {
-        _id: new ObjectId(),
-        guildId: 'guild1',
-        clientId: 'client1',
-        lawyerId: 'lawyer1',
+        _id: TestUtils.generateObjectId().toString(),
+        guildId: '123456789012345678',
+        clientId: '444444444444444444',
+        lawyerId: '555555555555555555',
         
         agreementTemplate: 'test',
-        status: RetainerStatus.SIGNED,
+        status: 'signed',
         createdAt: new Date(),
         updatedAt: new Date()
       };
 
       mockStaffRepo.findByUserId.mockResolvedValue({
-        _id: new ObjectId(),
-        userId: 'lawyer1',
+        _id: TestUtils.generateObjectId().toString(),
+        userId: '555555555555555555',
         status: 'terminated',
         createdAt: new Date(),
         updatedAt: new Date()
@@ -491,11 +460,11 @@ describe('CrossEntityValidationService', () => {
   describe('Feedback Validation Rules', () => {
     it('should detect non-existent target staff', async () => {
       const feedback: Feedback = {
-        _id: new ObjectId(),
-        guildId: 'guild1',
-        submitterId: 'client1',
+        _id: TestUtils.generateObjectId().toString(),
+        guildId: '123456789012345678',
+        submitterId: '666666666666666666',
         submitterUsername: 'client1',
-        targetStaffId: 'nonexistent',
+        targetStaffId: '999999999999999999',
         targetStaffUsername: 'staff',
         isForFirm: false,
         rating: 5,
@@ -517,18 +486,15 @@ describe('CrossEntityValidationService', () => {
 
   describe('Reminder Validation Rules', () => {
     it('should detect non-existent case reference', async () => {
-      const reminder: Reminder = {
-        _id: new ObjectId(),
-        guildId: 'guild1',
-        userId: 'user1',
+      const reminder: Reminder = TestUtils.generateMockReminder({
+        guildId: '123456789012345678',
+        userId: '777777777777777777',
         username: 'user1',
-        caseId: 'nonexistent',
+        caseId: '999999999999999999',
         message: 'Test reminder',
         scheduledFor: new Date(),
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
+        isActive: true
+      });
 
       mockCaseRepo.findById.mockResolvedValue(null);
 
@@ -541,18 +507,15 @@ describe('CrossEntityValidationService', () => {
     });
 
     it('should validate reminder channel existence', async () => {
-      const reminder: Reminder = {
-        _id: new ObjectId(),
-        guildId: 'guild1',
-        userId: 'user1',
+      const reminder: Reminder = TestUtils.generateMockReminder({
+        guildId: '123456789012345678',
+        userId: '888888888888888888',
         username: 'user1',
-        channelId: 'channel1',
+        channelId: '901234567890123456',
         message: 'Test reminder',
         scheduledFor: new Date(),
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
+        isActive: true
+      });
 
       const mockClient = {
         guilds: {
@@ -565,7 +528,7 @@ describe('CrossEntityValidationService', () => {
       };
 
       const context: ValidationContext = {
-        guildId: 'guild1',
+        guildId: '123456789012345678',
         client: mockClient as any,
         validationLevel: 'strict'
       };
@@ -598,7 +561,7 @@ describe('CrossEntityValidationService', () => {
       mockStaffRepo.findByGuildId.mockResolvedValue([]);
       mockCaseRepo.findByFilters.mockResolvedValue([
         createMockCase({
-          clientId: 'nonexistent',
+          clientId: '999999999999999999',
           assignedLawyerIds: []
         })
       ]);
@@ -627,11 +590,11 @@ describe('CrossEntityValidationService', () => {
       
       // Set up mocks for scanForIntegrityIssues
       mockStaffRepo.findByGuildId.mockResolvedValue([{
-        _id: new ObjectId(),
-        userId: 'user1',
-        guildId: 'guild1',
-        hiredBy: 'user1', // Self-hired!
-        role: StaffRole.SENIOR_PARTNER,
+        _id: TestUtils.generateObjectId().toString(),
+        userId: '101010101010101010',
+        guildId: '123456789012345678',
+        hiredBy: '101010101010101010', // Self-hired!
+        role: 'Senior Partner',
         status: 'active',
         createdAt: new Date(),
         updatedAt: new Date()
@@ -643,7 +606,7 @@ describe('CrossEntityValidationService', () => {
       mockFeedbackRepo.findByFilters.mockResolvedValue([]);
       mockReminderRepo.findByFilters.mockResolvedValue([]);
 
-      const report = await service.scanForIntegrityIssues('guild1');
+      const report = await service.scanForIntegrityIssues('123456789012345678');
 
       const selfHiredIssue = report.issues.find(i => 
         i.message.includes('Staff member hired by themselves')
@@ -657,33 +620,33 @@ describe('CrossEntityValidationService', () => {
     it('should perform comprehensive integrity scan', async () => {
       // Mock data for all entity types
       mockStaffRepo.findByGuildId.mockResolvedValue([{
-        _id: new ObjectId(),
-        userId: 'user1',
-        guildId: 'guild1',
+        _id: TestUtils.generateObjectId().toString(),
+        userId: '111111111111111111',
+        guildId: '123456789012345678',
         status: 'active',
-        role: StaffRole.SENIOR_PARTNER,
+        role: 'Senior Partner',
         createdAt: new Date(),
         updatedAt: new Date()
       }] as Staff[]);
 
       mockCaseRepo.findByFilters.mockResolvedValue([
         createMockCase({
-          assignedLawyerIds: ['user1', 'nonexistent'] // One valid, one invalid
+          assignedLawyerIds: ['111111111111111111', '999999999999999999'] // One valid, one invalid
         })
       ]);
 
       mockApplicationRepo.findByGuild.mockResolvedValue([{
-        _id: new ObjectId(),
-        guildId: 'guild1',
-        jobId: 'job1',
+        _id: TestUtils.generateObjectId().toString(),
+        guildId: '123456789012345678',
+        jobId: '212121212121212121',
         status: 'pending',
         createdAt: new Date(),
         updatedAt: new Date()
       }] as Application[]);
 
       mockJobRepo.findByGuildId.mockResolvedValue([{
-        _id: new ObjectId(),
-        guildId: 'guild1',
+        _id: TestUtils.generateObjectId().toString(),
+        guildId: '123456789012345678',
         isOpen: true,
         createdAt: new Date(),
         updatedAt: new Date()
@@ -699,24 +662,24 @@ describe('CrossEntityValidationService', () => {
         .mockResolvedValueOnce(null); // nonexistent
 
       mockJobRepo.findById.mockResolvedValue({
-        _id: new ObjectId(),
-        guildId: 'guild1',
+        _id: TestUtils.generateObjectId().toString(),
+        guildId: '123456789012345678',
         title: 'Test Job',
         description: 'Test',
         staffRole: 'test',
-        roleId: 'role1',
+        roleId: '313131313131313131',
         isOpen: true,
         questions: [],
-        postedBy: 'user1',
+        postedBy: '111111111111111111',
         applicationCount: 0,
         hiredCount: 0,
         createdAt: new Date(),
         updatedAt: new Date()
       } as Job);
 
-      const report = await service.scanForIntegrityIssues('guild1');
+      const report = await service.scanForIntegrityIssues('123456789012345678');
 
-      expect(report.guildId).toBe('guild1');
+      expect(report.guildId).toBe('123456789012345678');
       expect(report.totalEntitiesScanned).toBeGreaterThan(0);
       expect(report.issues.length).toBeGreaterThan(0);
       
@@ -731,34 +694,34 @@ describe('CrossEntityValidationService', () => {
     it('should perform deep integrity check with additional validations', async () => {
       // Setup mock data
       mockStaffRepo.findByGuildId.mockResolvedValue([{
-        _id: new ObjectId(),
-        userId: 'user1',
-        guildId: 'guild1',
+        _id: TestUtils.generateObjectId().toString(),
+        userId: '414141414141414141',
+        guildId: '123456789012345678',
         status: 'active',
-        role: StaffRole.SENIOR_PARTNER,
+        role: 'Senior Partner',
         createdAt: new Date(),
         updatedAt: new Date()
       }] as Staff[]);
 
       mockCaseRepo.findByFilters.mockResolvedValue([
         createMockCase({
-          leadAttorneyId: 'user1',
-          assignedLawyerIds: ['user2'] // Lead attorney not in assigned list!
+          leadAttorneyId: '414141414141414141',
+          assignedLawyerIds: ['515151515151515151'] // Lead attorney not in assigned list!
         })
       ]);
 
       mockFeedbackRepo.findByFilters.mockResolvedValue([{
-        _id: new ObjectId(),
-        guildId: 'guild1',
-        targetStaffId: 'nonexistent', // References non-existent staff
+        _id: TestUtils.generateObjectId().toString(),
+        guildId: '123456789012345678',
+        targetStaffId: '999999999999999999', // References non-existent staff
         createdAt: new Date(),
         updatedAt: new Date()
       }] as Feedback[]);
 
       mockReminderRepo.findByFilters.mockResolvedValue([{
-        _id: new ObjectId(),
-        guildId: 'guild1',
-        caseId: 'nonexistent', // References non-existent case
+        _id: TestUtils.generateObjectId().toString(),
+        guildId: '123456789012345678',
+        caseId: '999999999999999999', // References non-existent case
         createdAt: new Date(),
         updatedAt: new Date()
       }] as Reminder[]);
@@ -767,7 +730,7 @@ describe('CrossEntityValidationService', () => {
       mockJobRepo.findByGuildId.mockResolvedValue([]);
       mockRetainerRepo.findByGuild.mockResolvedValue([]);
 
-      const report = await service.performDeepIntegrityCheck('guild1');
+      const report = await service.performDeepIntegrityCheck('123456789012345678');
 
       // Should have additional issues from deep check
       const leadAttorneyIssue = report.issues.find(i => 
@@ -794,7 +757,7 @@ describe('CrossEntityValidationService', () => {
         {
           severity: 'critical',
           entityType: 'staff',
-          entityId: 'staff1',
+          entityId: '616161616161616161',
           field: 'status',
           message: 'Invalid status',
           canAutoRepair: true,
@@ -803,7 +766,7 @@ describe('CrossEntityValidationService', () => {
         {
           severity: 'warning',
           entityType: 'case',
-          entityId: 'case1',
+          entityId: '717171717171717171',
           field: 'leadAttorneyId',
           message: 'Invalid lead attorney',
           canAutoRepair: true,
@@ -812,7 +775,7 @@ describe('CrossEntityValidationService', () => {
         {
           severity: 'critical',
           entityType: 'case',
-          entityId: 'case2',
+          entityId: '818181818181818181',
           field: 'status',
           message: 'Cannot repair this',
           canAutoRepair: false
@@ -844,7 +807,7 @@ describe('CrossEntityValidationService', () => {
         {
           severity: 'critical',
           entityType: 'staff',
-          entityId: 'staff1',
+          entityId: '616161616161616161',
           field: 'status',
           message: 'Invalid status',
           canAutoRepair: true,
@@ -866,7 +829,7 @@ describe('CrossEntityValidationService', () => {
         {
           severity: 'critical',
           entityType: 'staff',
-          entityId: 'staff1',
+          entityId: '616161616161616161',
           field: 'status',
           message: 'Invalid status',
           canAutoRepair: true,
@@ -895,7 +858,7 @@ describe('CrossEntityValidationService', () => {
         {
           severity: 'critical',
           entityType: 'staff',
-          entityId: 'staff1',
+          entityId: '616161616161616161',
           field: 'status',
           message: 'Invalid status',
           canAutoRepair: true,
@@ -932,44 +895,36 @@ describe('CrossEntityValidationService', () => {
       const appId = new ObjectId();
       
       const entities = [
-        { entity: { 
-          _id: staffId1, 
+        { entity: TestUtils.generateMockStaff({ 
+          _id: staffId1.toString(), 
           guildId: 'guild1', 
           userId: 'user1',
-          status: 'active',
-          createdAt: new Date(),
-          updatedAt: new Date() 
-        } as Partial<Staff>, type: 'staff' },
-        { entity: { 
-          _id: staffId2, 
+          status: 'active'
+        }), type: 'staff' },
+        { entity: TestUtils.generateMockStaff({ 
+          _id: staffId2.toString(), 
           guildId: 'guild1', 
           userId: 'user2',
-          status: 'invalid' as any, // Invalid status to trigger validation
-          createdAt: new Date(),
-          updatedAt: new Date() 
-        } as Partial<Staff>, type: 'staff' },
-        { entity: { 
-          _id: caseId, 
+          status: 'invalid' as any // Invalid status to trigger validation
+        }), type: 'staff' },
+        { entity: TestUtils.generateMockCase({ 
+          _id: caseId.toString(), 
           guildId: 'guild1', 
-          assignedLawyerIds: [],
-          createdAt: new Date(),
-          updatedAt: new Date() 
-        } as Partial<Case>, type: 'case' },
-        { entity: { 
-          _id: appId, 
+          assignedLawyerIds: []
+        }), type: 'case' },
+        { entity: TestUtils.generateMockApplication({ 
+          _id: appId.toString(), 
           guildId: 'guild1', 
-          jobId: 'job1',
-          createdAt: new Date(),
-          updatedAt: new Date() 
-        } as Partial<Application>, type: 'application' }
+          jobId: 'job1'
+        }), type: 'application' }
       ];
 
       mockStaffRepo.update.mockResolvedValue({
-        _id: new ObjectId(),
-        guildId: 'guild1',
-        userId: 'user1',
-        hiredBy: 'admin1',
-        role: StaffRole.PARALEGAL,
+        _id: TestUtils.generateObjectId().toString(),
+        guildId: '123456789012345678',
+        userId: '919191919191919191',
+        hiredBy: '020202020202020202',
+        role: 'Paralegal',
         robloxUsername: 'TestUser',
         status: 'active',
         hiredAt: new Date(),
@@ -978,15 +933,15 @@ describe('CrossEntityValidationService', () => {
         updatedAt: new Date()
       } as Staff);
       mockJobRepo.findById.mockResolvedValue({
-        _id: new ObjectId(),
-        guildId: 'guild1',
+        _id: TestUtils.generateObjectId().toString(),
+        guildId: '123456789012345678',
         title: 'Test Job',
         description: 'Test',
         staffRole: 'test',
-        roleId: 'role1',
+        roleId: '313131313131313131',
         isOpen: true,
         questions: [],
-        postedBy: 'user1',
+        postedBy: '111111111111111111',
         applicationCount: 0,
         hiredCount: 0,
         createdAt: new Date(),
@@ -1005,33 +960,33 @@ describe('CrossEntityValidationService', () => {
       // Create 50 entities across different types
       for (let i = 0; i < 20; i++) {
         entities.push({ 
-          entity: { _id: `staff${i}`, guildId: 'guild1', status: 'active', createdAt: new Date(), updatedAt: new Date() }, 
+          entity: { _id: new ObjectId(), guildId: '123456789012345678', status: 'active', createdAt: new Date(), updatedAt: new Date() }, 
           type: 'staff' 
         });
       }
       for (let i = 0; i < 20; i++) {
         entities.push({ 
-          entity: { _id: `case${i}`, guildId: 'guild1', assignedLawyerIds: [] }, 
+          entity: { _id: new ObjectId(), guildId: '123456789012345678', assignedLawyerIds: [] }, 
           type: 'case' 
         });
       }
       for (let i = 0; i < 10; i++) {
         entities.push({ 
-          entity: { _id: `app${i}`, guildId: 'guild1', jobId: 'job1', createdAt: new Date(), updatedAt: new Date() }, 
+          entity: { _id: new ObjectId(), guildId: '123456789012345678', jobId: '212121212121212121', createdAt: new Date(), updatedAt: new Date() }, 
           type: 'application' 
         });
       }
 
       mockJobRepo.findById.mockResolvedValue({
-        _id: new ObjectId(),
-        guildId: 'guild1',
+        _id: TestUtils.generateObjectId().toString(),
+        guildId: '123456789012345678',
         title: 'Test Job',
         description: 'Test',
         staffRole: 'test',
-        roleId: 'role1',
+        roleId: '313131313131313131',
         isOpen: true,
         questions: [],
-        postedBy: 'user1',
+        postedBy: '111111111111111111',
         applicationCount: 0,
         hiredCount: 0,
         createdAt: new Date(),
@@ -1050,15 +1005,12 @@ describe('CrossEntityValidationService', () => {
 
   describe('Caching and Performance', () => {
     it('should cache validation results', async () => {
-      const staff: Staff = {
-        _id: new ObjectId(),
-        userId: 'user1',
-        guildId: 'guild1',
+      const staff: Staff = TestUtils.generateMockStaff({
+        userId: '131313131313131313',
+        guildId: '123456789012345678',
         status: 'active',
-        role: StaffRole.SENIOR_PARTNER,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      } as Staff;
+        role: 'Senior Partner'
+      });
 
       // First call
       await service.validateBeforeOperation(staff, 'staff', 'update');
@@ -1076,7 +1028,7 @@ describe('CrossEntityValidationService', () => {
       const issues: ValidationIssue[] = [{
         severity: 'critical',
         entityType: 'staff',
-        entityId: 'staff1',
+        entityId: '141414141414141414',
         message: 'Test issue',
         canAutoRepair: true,
         repairAction: jest.fn().mockResolvedValue(undefined)
@@ -1103,7 +1055,7 @@ describe('CrossEntityValidationService', () => {
       const customValidation = jest.fn().mockResolvedValue([{
         severity: 'warning',
         entityType: 'staff',
-        entityId: 'staff1',
+        entityId: '141414141414141414',
         message: 'Custom validation failed',
         canAutoRepair: false
       }]);
@@ -1148,22 +1100,19 @@ describe('CrossEntityValidationService', () => {
     it('should handle repository errors gracefully', async () => {
       mockStaffRepo.findByGuildId.mockRejectedValue(new Error('Database error'));
       
-      const report = await service.scanForIntegrityIssues('guild1');
+      const report = await service.scanForIntegrityIssues('123456789012345678');
       
       expect(report.totalEntitiesScanned).toBe(0);
       expect(logger.error).toHaveBeenCalledWith('Error during integrity scan:', expect.any(Error));
     });
 
     it('should continue validation when individual rules fail', async () => {
-      const staff: Staff = {
-        _id: new ObjectId(),
-        userId: 'user1',
-        guildId: 'guild1',
+      const staff: Staff = TestUtils.generateMockStaff({
+        userId: '151515151515151515',
+        guildId: '123456789012345678',
         status: 'active',
-        role: StaffRole.SENIOR_PARTNER,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      } as Staff;
+        role: 'Senior Partner'
+      });
 
       // Make one validation throw an error
       mockCaseRepo.findByFilters.mockRejectedValueOnce(new Error('Query failed'));

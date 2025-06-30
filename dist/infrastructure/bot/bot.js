@@ -9,6 +9,10 @@ const role_tracking_service_1 = require("../../application/services/role-trackin
 const reminder_repository_1 = require("../repositories/reminder-repository");
 const case_repository_1 = require("../repositories/case-repository");
 const staff_repository_1 = require("../repositories/staff-repository");
+const information_channel_repository_1 = require("../repositories/information-channel-repository");
+const information_channel_service_1 = require("../../application/services/information-channel-service");
+const rules_channel_repository_1 = require("../repositories/rules-channel-repository");
+const rules_channel_service_1 = require("../../application/services/rules-channel-service");
 const logger_1 = require("../logger");
 const importer_1 = require("@discordx/importer");
 class Bot {
@@ -192,7 +196,25 @@ class Bot {
         const staffRepository = new staff_repository_1.StaffRepository();
         this.reminderService = new reminder_service_1.ReminderService(reminderRepository, caseRepository, staffRepository);
         this.roleTrackingService = new role_tracking_service_1.RoleTrackingService();
+        // Initialize information channel service
+        const informationChannelRepository = new information_channel_repository_1.InformationChannelRepository();
+        Bot.informationChannelService = new information_channel_service_1.InformationChannelService(informationChannelRepository, this.client);
+        // Initialize rules channel service
+        const rulesChannelRepository = new rules_channel_repository_1.RulesChannelRepository();
+        Bot.rulesChannelService = new rules_channel_service_1.RulesChannelService(rulesChannelRepository, this.client);
         logger_1.logger.info('Services initialized successfully');
+    }
+    static getInformationChannelService() {
+        if (!Bot.informationChannelService) {
+            throw new Error('InformationChannelService not initialized');
+        }
+        return Bot.informationChannelService;
+    }
+    static getRulesChannelService() {
+        if (!Bot.rulesChannelService) {
+            throw new Error('RulesChannelService not initialized');
+        }
+        return Bot.rulesChannelService;
     }
     async stop() {
         try {
@@ -224,4 +246,6 @@ class Bot {
     }
 }
 exports.Bot = Bot;
+Bot.informationChannelService = null;
+Bot.rulesChannelService = null;
 //# sourceMappingURL=bot.js.map

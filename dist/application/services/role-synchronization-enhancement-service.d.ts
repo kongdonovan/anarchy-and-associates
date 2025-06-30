@@ -1,5 +1,5 @@
 import { GuildMember, Guild } from 'discord.js';
-import { StaffRole } from '../../domain/entities/staff-role';
+import { StaffRole } from '../../validation';
 export declare enum ConflictSeverity {
     LOW = "low",
     MEDIUM = "medium",

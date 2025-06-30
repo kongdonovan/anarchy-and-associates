@@ -28,7 +28,7 @@ export declare enum AuditAction {
     CHANNEL_CLEANUP_SCAN = "channel_cleanup_scan",
     CHANNEL_CLEANUP_PERFORMED = "channel_cleanup_performed",
     ORPHANED_CHANNEL_DELETED = "orphaned_channel_deleted",
-    SystemRepair = "system_repair"
+    SYSTEM_REPAIR = "system_repair"
 }
 export interface AuditLog extends BaseEntity {
     guildId: string;

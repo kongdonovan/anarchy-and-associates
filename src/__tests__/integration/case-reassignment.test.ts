@@ -4,7 +4,9 @@ import { CaseCounterRepository } from '../../infrastructure/repositories/case-co
 import { GuildConfigRepository } from '../../infrastructure/repositories/guild-config-repository';
 import { StaffRepository } from '../../infrastructure/repositories/staff-repository';
 import { PermissionService, PermissionContext } from '../../application/services/permission-service';
-import { BusinessRuleValidationService } from '../../application/services/business-rule-validation-service';
+import { UnifiedValidationService } from '../../application/validation/unified-validation-service';
+import { BusinessRuleValidationStrategy } from '../../application/validation/strategies/business-rule-validation-strategy';
+import { ValidationSeverity } from '../../application/validation/types';
 import { CasePriority } from '../../domain/entities/case';
 import { TestUtils } from '../helpers/test-utils';
 import { DatabaseTestHelpers } from '../helpers/database-helpers';
@@ -22,7 +24,7 @@ describe('Case Reassignment Integration Tests', () => {
   let guildConfigRepository: GuildConfigRepository;
   let staffRepository: StaffRepository;
   let permissionService: PermissionService;
-  let businessRuleValidationService: BusinessRuleValidationService;
+  let unifiedValidationService: UnifiedValidationService;
   let context: PermissionContext;
 
   const testGuildId = 'test-guild-reassign';
@@ -44,13 +46,18 @@ describe('Case Reassignment Integration Tests', () => {
     
     // Initialize services
     permissionService = new PermissionService(guildConfigRepository);
-    businessRuleValidationService = new BusinessRuleValidationService(
-      guildConfigRepository,
+    unifiedValidationService = new UnifiedValidationService();
+    
+    // Register validation strategies
+    const businessRuleStrategy = new BusinessRuleValidationStrategy(
       staffRepository,
       caseRepository,
+      guildConfigRepository,
       permissionService
     );
-    caseService = new CaseService(caseRepository, caseCounterRepository, guildConfigRepository, permissionService, businessRuleValidationService);
+    unifiedValidationService.registerStrategy(businessRuleStrategy);
+    
+    caseService = new CaseService(caseRepository, caseCounterRepository, guildConfigRepository, permissionService, unifiedValidationService);
     
     // Create test context
     context = {
@@ -119,29 +126,41 @@ describe('Case Reassignment Integration Tests', () => {
       promotionHistory: []
     });
     
-    // Mock the validateLawyerPermissions method to always return valid for our test lawyers
-    jest.spyOn(businessRuleValidationService, 'validatePermission').mockImplementation(async (context, permission) => {
+    // Mock the validate method to always return valid for our test lawyers
+    jest.spyOn(unifiedValidationService, 'validate').mockImplementation(async (context, _options) => {
       const lawyerIds = [lawyer1Id, lawyer2Id, lawyer3Id];
-      if (permission === 'lawyer' && lawyerIds.includes(context.userId)) {
-        return {
-          valid: true,
-          errors: [],
-          warnings: [],
-          bypassAvailable: false,
-          hasPermission: true,
-          requiredPermission: permission,
-          grantedPermissions: [permission]
-        };
+      // Check if the validation context is for a permission check
+      if (context.entityType === 'permission' && context.metadata?.requiredPermission === 'lawyer') {
+        const userId = context.data?.userId || context.metadata?.userId;
+        if (lawyerIds.includes(userId)) {
+          return {
+            valid: true,
+            issues: [],
+            metadata: {
+              hasPermission: true,
+              requiredPermission: 'lawyer',
+              grantedPermissions: ['lawyer']
+            },
+            strategyResults: new Map()
+          };
+        }
       }
-      // Default return for other cases
+      // Default return for failed validation
       return {
         valid: false,
-        errors: [`Missing required permission: ${permission}`],
-        warnings: [],
-        bypassAvailable: false,
-        hasPermission: false,
-        requiredPermission: permission,
-        grantedPermissions: []
+        issues: [{
+          severity: ValidationSeverity.ERROR,
+          code: 'MISSING_PERMISSION',
+          message: 'Missing required permission',
+          field: 'permission',
+          context: {}
+        }],
+        metadata: {
+          hasPermission: false,
+          requiredPermission: context.metadata?.requiredPermission || 'unknown',
+          grantedPermissions: []
+        },
+        strategyResults: new Map()
       };
     });
   });

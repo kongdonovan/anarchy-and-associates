@@ -1,8 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ReminderService = void 0;
-const reminder_1 = require("../../domain/entities/reminder");
 const logger_1 = require("../../infrastructure/logger");
+const validation_1 = require("../../validation");
 class ReminderService {
     constructor(reminderRepository, caseRepository, staffRepository) {
         this.reminderRepository = reminderRepository;
@@ -17,33 +17,30 @@ class ReminderService {
         this.initializeActiveReminders();
     }
     async createReminder(request) {
+        // Validate input using Zod schema
+        const validatedRequest = validation_1.ValidationHelpers.validateOrThrow(validation_1.ReminderCreationRequestSchema, request, 'Reminder creation request');
         logger_1.logger.info('Creating reminder', {
-            userId: request.userId,
-            timeString: request.timeString,
-            message: request.message
+            userId: validatedRequest.userId,
+            scheduledFor: validatedRequest.scheduledFor,
+            message: validatedRequest.message
         });
-        // Validate the request
-        const validationErrors = (0, reminder_1.validateReminderCreation)(request);
-        if (validationErrors.length > 0) {
-            throw new Error(`Validation failed: ${validationErrors.join(', ')}`);
-        }
         // Verify user is staff
-        const staffList = await this.staffRepository.findByFilters({ userId: request.userId });
-        if (staffList.length === 0) {
+        const staff = await this.staffRepository.findByUserId(validatedRequest.guildId, validatedRequest.userId);
+        if (!staff || staff.status !== 'active') {
             throw new Error('Only staff members can set reminders');
         }
-        // Calculate scheduled time
-        const scheduledFor = (0, reminder_1.calculateScheduledTime)(request.timeString);
+        // Use provided scheduled time
+        const scheduledFor = validatedRequest.scheduledFor;
         if (!scheduledFor) {
             throw new Error('Invalid time format');
         }
         // If channelId is provided, validate it exists and optionally check for case
-        let caseId = request.caseId;
-        if (request.channelId && !caseId) {
+        let caseId = validatedRequest.caseId;
+        if (validatedRequest.channelId && !caseId) {
             // Try to find a case associated with this channel
             const cases = await this.caseRepository.searchCases({
-                guildId: request.guildId,
-                channelId: request.channelId
+                guildId: validatedRequest.guildId,
+                channelId: validatedRequest.channelId
             });
             if (cases.length > 0 && cases[0]?._id) {
                 caseId = cases[0]._id.toString();
@@ -51,13 +48,14 @@ class ReminderService {
         }
         // Create reminder data
         const reminderData = {
-            guildId: request.guildId,
-            userId: request.userId,
-            username: request.username,
-            message: request.message.trim(),
+            guildId: validatedRequest.guildId,
+            userId: validatedRequest.userId,
+            username: validatedRequest.username,
+            message: validatedRequest.message,
             scheduledFor,
-            channelId: request.channelId,
-            caseId,
+            channelId: validatedRequest.channelId,
+            type: validatedRequest.type || 'custom',
+            caseId: caseId ? String(caseId) : undefined,
             isActive: true
         };
         const createdReminder = await this.reminderRepository.add(reminderData);
@@ -65,7 +63,7 @@ class ReminderService {
         this.scheduleReminder(createdReminder);
         logger_1.logger.info('Reminder created successfully', {
             reminderId: createdReminder._id,
-            userId: request.userId,
+            userId: validatedRequest.userId,
             scheduledFor
         });
         return createdReminder;
